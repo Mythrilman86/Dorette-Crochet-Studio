@@ -24,6 +24,8 @@ let pendingConversion = null, cropPreviewRect = null, cropGesture = null, compar
 const view = {scale:1, x:0, y:0}, pointers = new Map();
 let gesture = {dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
 let drawingPending = false;
+const EDIT_TOOLS = ['select','paint','erase','pick','pan'];
+let editorTool = 'select', paintStroke = null;
 const canvas = $('chartCanvas'), ctx = canvas.getContext('2d', {alpha:false});
 
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2); }
@@ -163,6 +165,42 @@ function updateProgress(){
   $('progressText').textContent=`${format(done)} / ${format(total)} stitches`;
   $('progressPercent').textContent=pct+'%';$('progressBar').style.width=pct+'%';
 }
+function updateToolUI(){
+  const preview = !!pendingConversion;
+  for(const tool of EDIT_TOOLS){
+    const button=$('tool'+tool[0].toUpperCase()+tool.slice(1));
+    button.classList.toggle('active',editorTool===tool);
+    button.setAttribute('aria-pressed',String(editorTool===tool));
+    button.disabled=preview;
+  }
+  const hints={
+    select:'Select a stitch to highlight its row and column. Drag to move the chart.',
+    paint:'Tap or drag over stitches to paint with the selected yarn color. One Undo reverses the entire stroke.',
+    erase:'Tap or drag to restore the first yarn color (background). One Undo reverses the entire stroke.',
+    pick:'Tap a stitch to sample its color, then paint with that color.',
+    pan:'Drag to move the chart; pinch or use +/- to zoom.'
+  };
+  $('editorHint').textContent=preview?'Preview only — apply or discard the conversion before editing individual stitches.':hints[editorTool];
+  canvas.style.cursor=editorTool==='pan'?'grab':editorTool==='pick'?'copy':'crosshair';
+  const chosen=Number($('paintColor').value);
+  for(const chip of $('quickPalette').querySelectorAll('button')){
+    chip.setAttribute('aria-pressed',String(editorTool==='paint'&&Number(chip.dataset.index)===chosen));
+    chip.classList.toggle('chosen',editorTool==='paint'&&Number(chip.dataset.index)===chosen);
+    chip.disabled=preview;
+  }
+}
+function setTool(tool){
+  if(!EDIT_TOOLS.includes(tool))return;
+  if(pendingConversion){toast('Apply or discard the preview before editing stitches.');return;}
+  editorTool=tool;
+  updateToolUI();
+}
+function selectPaintColor(index,activate=true){
+  if(!active||pendingConversion||!Number.isInteger(index)||index<0||index>=active.palette.length)return;
+  $('paintColor').value=String(index);
+  if(activate)editorTool='paint';
+  updateToolUI();
+}
 function updateLegend(){
   if(!active)return;
   const preview=pendingConversion?.projectId===active.id?pendingConversion:null;
@@ -175,7 +213,18 @@ function updateLegend(){
   palette.forEach((c,i)=>{const o=document.createElement('option');o.value=i;o.textContent=c.symbol+' · '+c.name+' ('+c.hex+')';colorSelect.append(o);});
   colorSelect.value=String(current>=0&&current<palette.length?current:0);
   $('addYarnColor').disabled=!!preview||active.palette.length>=12;
-  $('paintMode').disabled=!!preview;
+  const quickPalette=$('quickPalette');quickPalette.replaceChildren();
+  palette.forEach((color,index)=>{
+    const chip=document.createElement('button');chip.type='button';chip.className='yarn-chip';
+    chip.dataset.index=String(index);chip.style.setProperty('--yarn',color.hex);
+    const rgb=[1,3,5].map(pos=>parseInt(color.hex.slice(pos,pos+2),16));
+    const lightness=rgb[0]*.299+rgb[1]*.587+rgb[2]*.114;
+    if(lightness>156){chip.style.color='#362b44';chip.style.textShadow='none';}
+    chip.title=`${color.symbol}: ${color.name} (${color.hex}) — ${format(counts[index])} stitches`;
+    chip.setAttribute('aria-label',`Paint with ${color.name}, color ${color.symbol}`);
+    chip.textContent=color.symbol;chip.addEventListener('click',()=>selectPaintColor(index));
+    quickPalette.append(chip);
+  });
   const legend=$('legend');legend.replaceChildren();
   palette.forEach((c,i)=>{
     const item=document.createElement('div');item.className='legend-row';
@@ -185,6 +234,7 @@ function updateLegend(){
     const count=document.createElement('strong');count.className='legend-count';count.textContent=format(counts[i]);
     item.append(sw,symbol,name,count);legend.append(item);
   });
+  updateToolUI();
 }
 function markStitch(){
   if(pendingConversion||!selected||!active)return;
@@ -206,9 +256,37 @@ function paintStitch(){
   if(pendingConversion||!selected||!active)return;
   const color=Number($('paintColor').value),i=indexFor(selected.col,selected.row);
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return;
-  if(active.cells[i]===color&&active.converted)return;
+  if(active.cells[i]===color)return;
   snapshot();active.cells[i]=color;active.converted=true;
   scheduleSave();updateLegend();requestDraw();
+}
+function applyBrushCell(cell,stroke){
+  if(!cell||!stroke||!active||pendingConversion)return false;
+  const color=stroke.tool==='erase'?0:stroke.color;
+  if(!Number.isInteger(color)||color<0||color>=active.palette.length)return false;
+  const i=indexFor(cell.col,cell.row);
+  if(active.cells[i]===color)return false;
+  if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
+  active.cells[i]=color;
+  active.converted=true;
+  stroke.changed=true;
+  return true;
+}
+function brushSegment(from,to,stroke){
+  if(!from||!to||!stroke)return;
+  // Grid-space Bresenham traversal prevents gaps during fast finger/stylus movement.
+  let x=from.col,y=from.row;const x1=to.col,y1=to.row;
+  const dx=Math.abs(x1-x),dy=Math.abs(y1-y),sx=x<x1?1:-1,sy=y<y1?1:-1;
+  let error=dx-dy,changed=false;
+  while(true){changed=applyBrushCell({col:x,row:y},stroke)||changed;
+    if(x===x1&&y===y1)break;
+    const e2=2*error;
+    if(e2>-dy){error-=dy;x+=sx;}
+    if(e2<dx){error+=dx;y+=sy;}
+  }
+  selected=to;
+  if(changed){scheduleSave();updateLegend();}
+  updateSelection();requestDraw();
 }
 function addYarnColor(){
   if(pendingConversion)return;
@@ -421,9 +499,20 @@ function draw(){
 
 canvas.addEventListener('pointerdown',ev=>{
   if(ev.button!==0&&ev.pointerType==='mouse')return;
-  canvas.setPointerCapture(ev.pointerId);pointers.set(ev.pointerId,{x:ev.offsetX,y:ev.offsetY});
-  if(pointers.size===1)gesture={dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
-  if(pointers.size===2){const ps=[...pointers.values()];gesture.wasMulti=true;gesture.lastDist=Math.hypot(ps[0].x-ps[1].x,ps[0].y-ps[1].y);}
+  canvas.setPointerCapture(ev.pointerId);
+  pointers.set(ev.pointerId,{x:ev.offsetX,y:ev.offsetY});
+  if(pointers.size===1){
+    gesture={dragged:false,wasMulti:false,lastDist:0,lastMid:null,totalTravel:0};
+    const cell=screenToStitch(ev.offsetX,ev.offsetY);
+    paintStroke=cell&&(editorTool==='paint'||editorTool==='erase')&&!pendingConversion
+      ?{pointerId:ev.pointerId,tool:editorTool,color:Number($('paintColor').value),first:cell,last:cell,snapshotted:false,changed:false}:null;
+  }
+  if(pointers.size===2){
+    paintStroke=null; // two-finger pan/zoom must never leave accidental paint
+    const ps=[...pointers.values()];gesture.wasMulti=true;
+    gesture.lastDist=Math.hypot(ps[0].x-ps[1].x,ps[0].y-ps[1].y);
+    gesture.lastMid={x:(ps[0].x+ps[1].x)/2,y:(ps[0].y+ps[1].y)/2};
+  }
 });
 canvas.addEventListener('pointermove',ev=>{
   const prev=pointers.get(ev.pointerId);if(!prev)return;
@@ -431,26 +520,50 @@ canvas.addEventListener('pointermove',ev=>{
   if(pointers.size>=2){
     const ps=[...pointers.values()],dist=Math.hypot(ps[0].x-ps[1].x,ps[0].y-ps[1].y);
     const midX=(ps[0].x+ps[1].x)/2,midY=(ps[0].y+ps[1].y)/2;
+    if(gesture.lastMid){view.x+=midX-gesture.lastMid.x;view.y+=midY-gesture.lastMid.y;}
     if(gesture.lastDist>2)setZoom(view.scale*dist/gesture.lastDist,midX,midY);
-    gesture.lastDist=dist;gesture.wasMulti=true;gesture.dragged=true;
-  } else {
-    const dx=ev.offsetX-prev.x,dy=ev.offsetY-prev.y;
-    gesture.totalTravel+=(Math.abs(dx)+Math.abs(dy));
-    if(gesture.totalTravel>5&&ev.buttons!==0){gesture.dragged=true;view.x+=dx;view.y+=dy;requestDraw();}
+    else requestDraw();
+    gesture.lastMid={x:midX,y:midY};gesture.lastDist=dist;
+    gesture.wasMulti=true;gesture.dragged=true;return;
+  }
+  const dx=ev.offsetX-prev.x,dy=ev.offsetY-prev.y;
+  gesture.totalTravel+=Math.hypot(dx,dy);
+  if(paintStroke&&paintStroke.pointerId===ev.pointerId&&!gesture.wasMulti){
+    if(gesture.totalTravel>5){
+      gesture.dragged=true;
+      const cell=screenToStitch(ev.offsetX,ev.offsetY);
+      if(cell){brushSegment(paintStroke.last,cell,paintStroke);paintStroke.last=cell;}
+    }
+  }else if(gesture.totalTravel>5&&!gesture.wasMulti){
+    gesture.dragged=true;view.x+=dx;view.y+=dy;requestDraw();
   }
 });
 function endPointer(ev){
   if(!pointers.has(ev.pointerId))return;
-  if(pointers.size===1&&!gesture.dragged&&!gesture.wasMulti){
+  if(pointers.size===1&&!gesture.wasMulti){
     const cell=screenToStitch(ev.offsetX,ev.offsetY);
-    if(cell){selected=cell;updateSelection();requestDraw();if($('paintMode').checked&&!pendingConversion)paintStitch();}
+    if(paintStroke&&paintStroke.pointerId===ev.pointerId){
+      if(!gesture.dragged)brushSegment(paintStroke.first,paintStroke.first,paintStroke);
+      else if(cell)brushSegment(paintStroke.last,cell,paintStroke);
+    }else if(!gesture.dragged&&cell){
+      if(editorTool==='pick'&&!pendingConversion){
+        selected=cell;
+        const color=active.cells[indexFor(cell.col,cell.row)];
+        selectPaintColor(color,true);
+        toast('Picked color '+active.palette[color].symbol+'; ready to paint.');
+      }else if(editorTool==='select')selected=cell;
+      updateSelection();requestDraw();
+    }
   }
-  pointers.delete(ev.pointerId);if(pointers.size===0)gesture.lastDist=0;
+  paintStroke=null;
+  pointers.delete(ev.pointerId);
+  if(pointers.size===0){gesture.lastDist=0;gesture.lastMid=null;}
 }
-canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',ev=>pointers.delete(ev.pointerId));
+canvas.addEventListener('pointerup',endPointer);
+canvas.addEventListener('pointercancel',ev=>{paintStroke=null;pointers.delete(ev.pointerId);});
 canvas.addEventListener('wheel',ev=>{ev.preventDefault();const rect=canvas.getBoundingClientRect();setZoom(view.scale*(ev.deltaY<0?1.13:.885),ev.clientX-rect.left,ev.clientY-rect.top);},{passive:false});
 canvas.addEventListener('keydown',ev=>{
-  if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();undo();return;}
+  if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();ev.stopPropagation();undo();return;}
   if(!active)return;
   if(ev.key===' '&&selected){ev.preventDefault();markStitch();return;}
   const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};
@@ -478,6 +591,10 @@ async function importImage(file){
   try{
     status('Processing image…');const data=await normalizeImage(file);
     if(!projects.has(id)||active.id!==id){toast('Project changed; image import canceled.');return;}
+    if((active.converted||active.cells.some(v=>v!==0)) && !confirm('This image will replace the current yarn-color chart in this project. Your existing color edits will be lost unless you make a backup first. Continue?')){
+      status(memoryOnly?'Storage blocked — export backups':'✓ Saved on this device',memoryOnly);
+      toast('Import canceled; existing stitch colors preserved.');return;
+    }
     snapshot();discardPreview(false);active.referenceImage=data;active.converted=false;
     active.photoCrop={...FULL_CROP};active.imagePlacement='contain';
     active.palette=DEFAULT_COLORS.map(c=>({...c}));active.cells.fill(0);
@@ -735,6 +852,8 @@ function hookEvents(){
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
   $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);
   $('markStitch').addEventListener('click',markStitch);$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
+  for(const tool of EDIT_TOOLS){$('tool'+tool[0].toUpperCase()+tool.slice(1)).addEventListener('click',()=>setTool(tool));}
+  $('paintColor').addEventListener('change',()=>selectPaintColor(Number($('paintColor').value)));
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
   $('imageFile').addEventListener('change',ev=>{importImage(ev.target.files[0]);ev.target.value='';});
   for(const [id,edge,fromTrim] of [['cropLeft','left',false],['cropRight','right',true],['cropTop','top',false],['cropBottom','bottom',true]]){

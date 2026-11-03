@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.3.0">
+  <link rel="stylesheet" href="./styles.css?v=0.4.0">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -39,17 +39,28 @@
         <div class="toolbar-divider"></div>
         <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button>
         <button id="resetView" class="button ghost">⌖ Center</button>
-        <span class="toolbar-hint">Tap: select · Drag: pan · Wheel/pinch: zoom</span>
+        <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
+      </div>
+      <div class="stitch-editor" aria-label="Manual stitch color editor">
+        <div class="editor-tools" role="group" aria-label="Stitch editing tool">
+          <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
+          <button id="toolPaint" class="edit-tool" type="button" aria-pressed="false">✎ Paint</button>
+          <button id="toolErase" class="edit-tool" type="button" aria-pressed="false">⌫ Erase</button>
+          <button id="toolPick" class="edit-tool" type="button" aria-pressed="false">◉ Pick</button>
+          <button id="toolPan" class="edit-tool" type="button" aria-pressed="false">✥ Pan</button>
+        </div>
+        <div class="editor-palette"><span class="editor-label">Yarn color</span><div id="quickPalette" class="quick-palette" aria-label="Choose a yarn color"></div></div>
+        <p id="editorHint" class="editor-hint" aria-live="polite">Select to inspect stitches. Choose Paint or a color to draw; Erase restores the background. Pinch to zoom.</p>
       </div>
       <div class="canvas-wrap" id="canvasWrap">
         <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
-        <div class="canvas-note">Grid lines extend into the numbered edges · Select a stitch to highlight its row & column</div>
+        <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
       </div>
       <div class="selection-bar">
         <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
         <div class="selection-actions"><button id="markStitch" class="button primary" disabled>✓ Mark stitch</button><button id="markRow" class="button secondary" disabled>✓ Mark row</button></div>
       </div>
-      <p id="helpMessage" class="hint-line">Tip: Tap a square to highlight it; then mark the stitch or its entire row. Press Space to toggle the selected stitch.</p>
+      <p id="helpMessage" class="hint-line">Tip: Select a yarn color and drag to paint stitches. Erase restores the background. Use Pan to move the chart; Undo reverses an entire stroke.</p>
     </section>
 
     <aside class="inspector" aria-label="Project settings">
@@ -120,7 +131,7 @@
       <div class="inspector-section"><div class="section-title"><span class="eyebrow">YARN COLOR LEGEND</span><span id="totalColors" class="count">1</span></div><div id="legend" class="legend"></div>
         <label class="field">Color for editing<select id="paintColor"></select></label>
         <button id="paintStitch" class="button secondary block" disabled>◈ Paint selected stitch</button>
-        <label class="toggle"><input id="paintMode" type="checkbox"> Paint squares when tapped</label>
+        <p class="muted">For touch editing, choose <strong>Paint</strong> above the chart, tap or drag to color stitches, or choose <strong>Erase</strong> to restore the background. <strong>Pick</strong> samples a color already on the chart.</p>
         <div class="pair"><label class="field">New color<input id="newHex" type="color" value="#4d8eaf" class="color-picker"></label><button id="addYarnColor" class="button ghost">＋ Add color</button></div>
       </div>
       <div class="section-divider"></div>
@@ -139,6 +150,6 @@
   </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js?v=0.3.0" defer></script>
+  <script src="./app.js?v=0.4.0" defer></script>
 </body>
 </html>

@@ -50,3 +50,19 @@
 .compare-choice .button{white-space:normal}
 .compare-footnote{padding-top:13px}
 @media(max-width:720px){.compare-grid{grid-template-columns:1fr}.compare-choice canvas{max-height:42vh}.compare-dialog{padding:12px}.enhance-control{grid-template-columns:minmax(80px,1fr) minmax(0,1fr) 50px}}
+
+/* v0.4.0 — touch-first individual stitch color editor */
+.stitch-editor{display:flex;flex-direction:column;gap:9px;background:#fff;border:1px solid #e6dced;border-radius:12px;padding:10px 12px}
+.editor-tools{display:flex;gap:6px;flex-wrap:wrap}
+.edit-tool{font:inherit;font-size:.74rem;font-weight:750;padding:7px 11px;min-height:38px;border:1px solid #ded4e8;border-radius:9px;background:#faf8fc;color:#5c4a73;cursor:pointer}
+.edit-tool.active,.edit-tool[aria-pressed=true]{background:#6b53aa;color:white;border-color:#6b53aa}
+.edit-tool:disabled{opacity:.45;cursor:not-allowed}
+.editor-palette{display:flex;align-items:center;gap:9px;min-width:0;flex-wrap:wrap}
+.editor-label{white-space:nowrap;font-size:.71rem;color:#6f5a85;font-weight:800}
+.quick-palette{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.yarn-chip{--yarn:#fff;display:grid;place-items:center;width:32px;height:32px;border-radius:8px;border:2px solid #b7a9c5;background:var(--yarn);color:#fff;cursor:pointer;font-size:.76rem;font-weight:900;text-shadow:0 1px 2px #0009;position:relative}
+.yarn-chip.chosen{outline:3px solid #835ed0;outline-offset:2px}
+.yarn-chip:disabled{opacity:.55;cursor:not-allowed}
+.yarn-chip:focus-visible,.edit-tool:focus-visible{outline:3px solid #b58ce6;outline-offset:2px}
+.editor-hint{font-size:.7rem;color:#87778f;line-height:1.35}
+@media(max-width:640px){.stitch-editor{padding:8px}.editor-tools{gap:4px}.edit-tool{flex:1 0 auto;min-height:36px;padding:6px;font-size:.68rem}.yarn-chip{width:33px;height:33px}.editor-hint{font-size:.65rem}}
