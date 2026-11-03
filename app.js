@@ -525,7 +525,7 @@ function previewTextConfig(){
   return {
     text:($('textInput').value||'').slice(0,40),
     orientation:$('textOrientation').value==='vertical'?'vertical':'horizontal',
-    scale:clamp(Number($('textScale').value)||2,1,5),
+    height:$('textScale').valueAsNumber,
     col:clamp(Number($('textCol').value)||1,1,active?.cols||1),
     row:clamp(Number($('textRow').value)||1,1,active?.rows||1),
     color:clamp(Number($('textColor').value)||0,0,Math.max(0,(active?.palette.length||1)-1))
@@ -578,32 +578,51 @@ function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
   if(!text)return null;
   const letters=Array.from(text.toUpperCase());
-  if(letters.every(letter=>Object.hasOwn(stitchGlyphs,letter))){
-    const vertical=config.orientation==='vertical';
-    const widths=letters.map(letter=>letter==="O"?4:3);
-    const width=vertical?Math.max(...widths):widths.reduce((sum,w)=>sum+w+1,0)-1;
-    const height=vertical?letters.length*6-1:5;
-    const scale=Math.min(config.scale,Math.floor((active.cols-config.col+1)/width),Math.floor(config.row/height));
-    if(scale<1)return {width,height,occupied:[],tooLarge:true};
+  const vertical=config.orientation==='vertical';
+  const glyphs=letters.map(letter=>{
+    const bits=stitchGlyphs[letter];
+    if(!bits)return rasterizeSymbol(letter);
+    const width=letter==='O'?4:3;
     const occupied=[];
-    let offset=0;
-    letters.forEach((letter,index)=>{
-      stitchGlyphs[letter].forEach((bits,row)=>{
-        for(let col=0;col<widths[index];col++){
-          if(!(bits & (1 << (widths[index]-1-col))))continue;
-          const x=(col+(vertical?0:offset))*scale;
-          const y=(row+(vertical?index*6:0))*scale;
-          for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++)occupied.push({x:x+dx,y:y+dy});
-        }
-      });
-      offset+=widths[index]+1;
+    bits.forEach((row,y)=>{
+      for(let x=0;x<width;x++)if(row & (1 << (width-1-x)))occupied.push({x,y});
     });
-    return {width:width*scale,height:height*scale,occupied,scaledDown:scale<config.scale};
-  }
-  const cellPx=8, fontSize=12+config.scale*6, pad=4+config.scale*2;
+    return {width,height:5,occupied};
+  });
+  const gap=Math.round(config.height/5);
+  const widths=glyphs.map(glyph=>Math.max(1,Math.round(glyph.width*config.height/glyph.height)));
+  const width=vertical?Math.max(...widths):widths.reduce((sum,w)=>sum+w,0)+gap*(glyphs.length-1);
+  const height=vertical?glyphs.length*(config.height+gap)-gap:config.height;
+  if(width>active.cols-config.col+1||height>config.row)return {width,height,tooLarge:true};
+  const occupied=[];
+  let offset=0;
+  glyphs.forEach((glyph,index)=>{
+    const width=widths[index];
+    const source=new Set(glyph.occupied.map(({x,y})=>y*glyph.width+x));
+    if(glyph.height>config.height){
+      for(let row=0;row<config.height;row++)for(let col=0;col<width;col++){
+        const x=Math.floor((col+.5)*glyph.width/width),y=Math.floor((row+.5)*glyph.height/config.height);
+        if(source.has(y*glyph.width+x))occupied.push({x:col+(vertical?0:offset),y:row+(vertical?index*(config.height+gap):0)});
+      }
+      offset+=width+gap;
+      return;
+    }
+    for(const {x,y} of glyph.occupied){
+      const left=Math.round(x*width/glyph.width),right=Math.round((x+1)*width/glyph.width);
+      const top=Math.round(y*config.height/glyph.height),bottom=Math.round((y+1)*config.height/glyph.height);
+      for(let row=top;row<bottom;row++)for(let col=left;col<right;col++){
+        occupied.push({x:col+(vertical?0:offset),y:row+(vertical?index*(config.height+gap):0)});
+      }
+    }
+    offset+=width+gap;
+  });
+  return {width,height,occupied};
+}
+function rasterizeSymbol(text){
+  const cellPx=1, fontSize=40, pad=8;
   const off=document.createElement('canvas'),g=off.getContext('2d');
   g.font=`900 ${fontSize}px system-ui, sans-serif`;
-  const lines=config.orientation==='vertical'?text.split('').map(ch=>ch||' '):[text];
+  const lines=[text];
   const widths=lines.map(line=>Math.ceil(g.measureText(line).width));
   off.width=Math.max(8,Math.max(...widths)+pad*2);
   off.height=Math.max(8,lines.length*(fontSize+pad)+pad);
@@ -621,21 +640,31 @@ function rasterizeTextPattern(config){
     }
     if(count&&alpha/(count*255)>.18)occupied.push({x:c,y:r});
   }
-  return {width:cols,height:rows,occupied};
+  if(!occupied.length)return {width:3,height:5,occupied:[]};
+  const left=Math.min(...occupied.map(p=>p.x)),top=Math.min(...occupied.map(p=>p.y));
+  const right=Math.max(...occupied.map(p=>p.x)),bottom=Math.max(...occupied.map(p=>p.y));
+  return {width:right-left+1,height:bottom-top+1,occupied:occupied.map(p=>({x:p.x-left,y:p.y-top}))};
 }
 function buildTextPreview(){
   if(!active)return null;
   const feedback=$('textFitStatus');
   feedback.textContent='';
-  const config=previewTextConfig(),mask=rasterizeTextPattern(config);
-  if(!mask){textPreview=null;requestDraw();return null;}
-  if(mask.tooLarge||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
-    feedback.textContent='Text does not fit here. Move it, shorten it, or choose a larger chart.';
+  const config=previewTextConfig();
+  if(!Number.isInteger(config.height)||config.height<5||config.height>100){
+    feedback.textContent='Enter a whole letter height from 5 to 100 stitches.';
     textPreview={...config,cells:[]};
     requestDraw();
     return textPreview;
   }
-  if(mask.scaledDown)feedback.textContent='Text was reduced to fit the available stitches.';
+  const mask=rasterizeTextPattern(config);
+  if(!mask){textPreview=null;requestDraw();return null;}
+  if(mask.tooLarge||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
+    feedback.textContent=`Text needs ${mask.width} × ${mask.height} stitches. Only ${active.cols-config.col+1} × ${config.row} are available here. Reduce the height, move the text, or use a larger chart.`;
+    textPreview={...config,cells:[]};
+    requestDraw();
+    return textPreview;
+  }
+  feedback.textContent=`Text size: ${mask.width} × ${mask.height} stitches.`;
   const cells=[];
   for(const pt of mask.occupied){
     const col=config.col+pt.x,row=config.row-pt.y;
