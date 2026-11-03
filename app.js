@@ -37,12 +37,15 @@ function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now(
 function blankProject(name, cols, rows) {
   return {id:uid(),name:name.trim()||'Untitled Chart', cols,rows, cells:Array(cols*rows).fill(0),
     done:Array(cols*rows).fill(0), rowDone:Array(rows).fill(0), palette:DEFAULT_COLORS.map(c=>({...c})),
-    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],layers:[],ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
 function indexFor(col,row) { return (active.rows-row)*active.cols+(col-1); }
 function format(n) {return n.toLocaleString('en-US');}
+function composedCells(project=active){return window.DoretteAdvanced.compose(project);}
+function compositeProject(project=active){return (project?.layers?.length)?{...project,cells:composedCells(project)}:project;}
+
 function currentCrop(p=active){
   const c=p?.photoCrop;
   if(!c||!Number.isFinite(c.left)||!Number.isFinite(c.top)||!Number.isFinite(c.right)||!Number.isFinite(c.bottom)||c.right-c.left<.08-1e-9||c.bottom-c.top<.08-1e-9)return {...FULL_CROP};
@@ -133,13 +136,12 @@ function refreshProjectList(){
   });
 }
 function selectProject(id) {
-  lastProgress=null;
-  $("undoProgress").disabled=true;
+  clearProgressHistory();
   clearMotifPreview();
   flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
-  syncImage();refreshProjectList();refreshInspector();fitChart();
+  selectedLayerId=null;editingLayerId=null;pendingCleanup=null;syncImage();refreshProjectList();refreshInspector();fitChart();
 }
 function updateReferenceActions(){
   if(!active)return;
@@ -171,19 +173,20 @@ function refreshInspector(){
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
   updateReferenceActions();
   updateCropControls();updateConversionControls();
-  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();updatePdfEstimate();refreshPatternPanels();requestDraw();
+  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();renderLayers();updatePdfEstimate();refreshPatternPanels();requestDraw();
 }
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
-    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),ui:{...uiSettings(active)}};
+    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),ui:{...uiSettings(active)}};
 }
-let lastProgress=null,motifPreview=null;
+const progressHistory=[];
+const PROGRESS_HISTORY_LIMIT=30;
+let motifPreview=null;
 let progressBrush=null, overviewStroke=null;
-let lastText=null, editingText=null, placingText=false;
-function snapshot(){
-  lastProgress=null;
-  $("undoProgress").disabled=true;
+let lastText=null, editingText=null, placingText=false, editingLayerId=null, selectedLayerId=null, pendingCleanup=null, studioMode='edit';
+function snapshot({keepProgress=false}={}){
+  if(!keepProgress)clearProgressHistory();
   if(editingText)clearTextPreview();
   lastText=null;
   $("editLastText").disabled=true;
@@ -192,12 +195,11 @@ function snapshot(){
   redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
 }
 function restoreUndoState(state){
-  lastProgress=null;
-  $("undoProgress").disabled=true;
+  clearProgressHistory();
   clearMotifPreview();
   lastText=null;
   $("editLastText").disabled=true;
-  discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
+  pendingCleanup=null;selectedLayerId=null;editingLayerId=null;discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
 }
@@ -212,6 +214,7 @@ function redo(){
   $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;toast('Change redone.');
 }
 function updateSelection(){
+  updateProgressUndo();
   $("markRow").setAttribute("aria-pressed",String(progressBrush==="row"));
   $("markRow").textContent=progressBrush==="row"?"✓ Mark row mode on":"✓ Mark row";
   $("markStitch").setAttribute("aria-pressed",String(progressBrush==="mark"));
@@ -328,7 +331,7 @@ function selectPaintColor(index,activate=true){
 function updateLegend(){
   if(!active)return;
   const preview=pendingConversion?.projectId===active.id?pendingConversion:null;
-  const palette=preview?.palette||active.palette, cells=preview?.cells||active.cells;
+  const palette=preview?.palette||active.palette, cells=preview?.cells||composedCells(active);
   const counts=palette.map(()=>0);
   cells.forEach(i=>{if(Number.isInteger(i)&&i>=0&&i<counts.length)counts[i]++;});
   $('totalColors').textContent=palette.length;
@@ -359,17 +362,34 @@ function updateLegend(){
     item.append(sw,symbol,name,count);legend.append(item);
   });
   updateToolUI();
+  for(const id of ['replaceFrom','replaceTo']){
+    const select=$(id),was=select.value;select.replaceChildren();
+    active.palette.forEach((p,i)=>select.add(new Option(`${p.symbol} · ${p.name}`,String(i))));
+    if(active.palette[Number(was)])select.value=was;
+  }
+  renderLayers();
+}
+function updateProgressUndo(){
+  const count=progressHistory.length,button=$('undoProgress');
+  button.disabled=count===0||!!pendingConversion;
+  button.textContent=count?`Undo progress (${count})`:'Undo progress';
+}
+function clearProgressHistory(){
+  progressHistory.length=0;
+  updateProgressUndo();
 }
 function progressSnapshot(){
-  snapshot();
-  lastProgress={id:active.id,done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide}};
-  $('undoProgress').disabled=false;
+  snapshot({keepProgress:true});
+  progressHistory.push({done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide}});
+  if(progressHistory.length>PROGRESS_HISTORY_LIMIT)progressHistory.shift();
+  updateProgressUndo();
 }
 function undoProgress(){
-  if(!active||pendingConversion||lastProgress?.id!==active.id)return;
-  const {done,rowDone,guide}=lastProgress;
-  snapshot();
+  if(!active||pendingConversion||!progressHistory.length)return;
+  const {done,rowDone,guide}=progressHistory.pop();
+  snapshot({keepProgress:true});
   Object.assign(active,{done,rowDone,guide});
+  updateProgressUndo();
   scheduleSave();updateProgress();focusGuideCell();
 }
 function markStitch(){
@@ -388,14 +408,21 @@ function markRow(){
   snapshot();active.rowDone[selected.row-1]=active.rowDone[selected.row-1]?0:1;
   scheduleSave();updateSelection();updateProgress();requestDraw();
 }
-function paintStitch(){
-  if(pendingConversion||!selected||!active||editBlocked('paint stitches'))return;
-  const color=Number($('paintColor').value),i=indexFor(selected.col,selected.row);
-  if(!Number.isInteger(color)||color<0||color>=active.palette.length)return;
-  if(active.cells[i]===color)return;
-  snapshot();active.cells[i]=color;active.converted=true;
-  scheduleSave();updateLegend();requestDraw();
+function symmetricIndexes(col,row){
+ const mode=$('symmetryMode')?.value||'off',pts=[[col,row]];
+ if(mode==='h'||mode==='hv')pts.push([active.cols+1-col,row]);
+ if(mode==='v'||mode==='hv')pts.push([col,active.rows+1-row]);
+ if(mode==='hv')pts.push([active.cols+1-col,active.rows+1-row]);
+ return [...new Set(pts.map(([c,r])=>indexFor(c,r)))];
 }
+function paintStitch(){
+ if(pendingConversion||!selected||!active||editBlocked('paint stitches'))return;
+ const color=Number($('paintColor').value);if(color<0||color>=active.palette.length)return;
+ const indexes=symmetricIndexes(selected.col,selected.row);
+ if(indexes.every(i=>active.cells[i]===color))return;
+ snapshot();for(const i of indexes)active.cells[i]=color;active.converted=true;scheduleSave();updateLegend();requestDraw();
+}
+
 function applyBrushCell(cell,stroke){
   if(!cell||!stroke||!active||pendingConversion)return false;
   if(stroke.tool==='row'){
@@ -423,13 +450,11 @@ function applyBrushCell(cell,stroke){
   if(isPatternLocked())return false;
   const color=stroke.tool==='erase'?0:stroke.color;
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return false;
-  const i=indexFor(cell.col,cell.row);
-  if(active.cells[i]===color)return false;
+  const indexes=symmetricIndexes(cell.col,cell.row);
+  if(indexes.every(i=>active.cells[i]===color))return false;
   if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
-  active.cells[i]=color;
-  active.converted=true;
-  stroke.changed=true;
-  return true;
+  for(const i of indexes)active.cells[i]=color;
+  active.converted=true;stroke.changed=true;return true;
 }
 function brushSegment(from,to,stroke){
   if(!from||!to||!stroke)return;
@@ -469,6 +494,9 @@ function mirrorChart(){
       }
     }
   }
+  for(const layer of active.layers||[])layer.entries=layer.entries.map(([i,color])=>{
+    const x=i%cols,y=Math.floor(i/cols);return [y*cols+(cols-1-x),color];
+  });
   active.referenceMirrored=!active.referenceMirrored;
   if(selected)selected={...selected,col:cols+1-selected.col};
   active.guide.position=cols-1-active.guide.position;
@@ -492,7 +520,11 @@ function editDimensions(){
       newCells[newI]=old.cells[oldI];newDone[newI]=old.done[oldI];
     }
   }
-  Object.assign(active,{cols,rows,cells:newCells,done:newDone,rowDone:newRows});
+  const remappedLayers=(active.layers||[]).map(l=>({...l,entries:l.entries.flatMap(([i,color])=>{
+    const col=i%old.cols+1,row=old.rows-Math.floor(i/old.cols);
+    return col<=cols&&row<=rows?[[(rows-row)*cols+col-1,color]]:[];
+  })}));
+  Object.assign(active,{cols,rows,cells:newCells,done:newDone,rowDone:newRows,layers:remappedLayers});
   if(selected&&(selected.col>cols||selected.row>rows))selected=null;
   window.DorettePattern.ensure(active);active.guide.row=clamp(active.guide.row,1,rows);active.guide.position=clamp(active.guide.position,0,cols-1);
   discardPreview(false);scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
@@ -614,7 +646,8 @@ function previewTextConfig(){
     height:$('textScale').valueAsNumber,
     col:clamp(Number($('textCol').value)||1,1,active?.cols||1),
     row:clamp(Number($('textRow').value)||1,1,active?.rows||1),
-    color:clamp(Number($('textColor').value)||0,0,Math.max(0,(active?.palette.length||1)-1))
+    color:clamp(Number($('textColor').value)||0,0,Math.max(0,(active?.palette.length||1)-1)),
+    style:$('textStyle').value,letterSpacing:Number($('letterSpacing').value)||1,layout:$('textLayout').value,wrap:Number($('textWrap').value)||0
   };
 }
 const stitchGlyphs={
@@ -663,6 +696,35 @@ const stitchGlyphs={
 function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
   if(!text)return null;
+  if(config.wrap>0&&text.length>config.wrap){
+    const chunks=[],words=text.split(/\s+/);let line='';
+    for(const word of words){
+      if(!line){line=word;continue;}
+      if((line+' '+word).length<=config.wrap)line+=' '+word;
+      else{chunks.push(line);line=word;}
+    }
+    if(line)chunks.push(line);
+    const lines=chunks.flatMap(chunk=>chunk.length>config.wrap?chunk.match(new RegExp('.{1,'+config.wrap+'}','g')):[chunk]);
+    if(lines.length>1){
+      const glyphLines=lines.map(t=>rasterizeTextPattern({...config,text:t,wrap:0,angle:0,flip:false,layout:'straight'}));
+      const w=Math.max(...glyphLines.map(g=>g.width)),gap=Math.max(1,Math.round(config.height*.4));
+      const h=glyphLines.reduce((sum,g)=>sum+g.height,0)+gap*(glyphLines.length-1);
+      const raw=[];let offset=0;
+      for(const g of glyphLines){for(const cell of g.occupied)raw.push({x:cell.x,y:cell.y+offset});offset+=g.height+gap;}
+      const angle=Number(config.angle)||0,sideways=angle===90||angle===270;
+      const width=sideways?h:w,height=sideways?w:h;
+      const rotated=raw.map(cell=>{
+        let x=cell.x,y=cell.y;
+        if(angle===90){[x,y]=[h-1-y,x];}
+        if(angle===180){[x,y]=[w-1-x,h-1-y];}
+        if(angle===270){[x,y]=[y,w-1-x];}
+        if(config.flip)x=width-1-x;
+        return {x,y};
+      });
+      return advancedLetterPreviewTransform({width,height,occupied:rotated,tooLarge:width>active.cols-config.col+1||height>config.row},config);
+    }
+  }
+
   const letters=Array.from(text.toUpperCase());
   const glyphs=letters.map(letter=>{
     const bits=stitchGlyphs[letter];
@@ -672,9 +734,18 @@ function rasterizeTextPattern(config){
     bits.forEach((row,y)=>{
       for(let x=0;x<width;x++)if(row & (1 << (width-1-x)))occupied.push({x,y});
     });
+    if(config.style==='bold'){
+      const added=[];for(const p of occupied){added.push(p);if(p.x+1<width)added.push({x:p.x+1,y:p.y});}
+      return {width,height:5,occupied:added};
+    }
+    if(config.style==='outline'){
+      const keys=new Set(occupied.map(p=>p.x+','+p.y));
+      const outline=occupied.filter(p=>!(keys.has((p.x-1)+','+p.y)&&keys.has((p.x+1)+','+p.y)&&keys.has(p.x+','+(p.y-1))&&keys.has(p.x+','+(p.y+1))));
+      return {width,height:5,occupied:outline};
+    }
     return {width,height:5,occupied};
   });
-  const gap=Math.round(config.height/5);
+  const gap=Math.max(0,Math.round(config.height/5)*(Number(config.letterSpacing)||1));
   let sourceWidth=0;
   const spans=glyphs.map(glyph=>{
     const width=Math.max(1,Math.round(glyph.width*config.height/glyph.height));
@@ -708,7 +779,7 @@ function rasterizeTextPattern(config){
       :Math.floor((sy+.5)*glyph.height/config.height);
     if(span.pixels.has(gy*glyph.width+gx))occupied.push({x,y});
   }
-  return {width,height,occupied,tooLarge:width>availableWidth||height>availableHeight};
+  return advancedLetterPreviewTransform({width,height,occupied,tooLarge:width>availableWidth||height>availableHeight},config);
 }
 
 function rasterizeSymbol(text){
@@ -751,7 +822,7 @@ function buildTextPreview(){
   }
   const mask=rasterizeTextPattern(config);
   if(!mask){textPreview=null;requestDraw();return null;}
-  if(mask.tooLarge||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
+  if(mask.tooLarge||mask.width>active.cols-config.col+1||mask.height>config.row||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
     feedback.textContent=`Text needs ${mask.width} × ${mask.height} stitches. Only ${active.cols-config.col+1} × ${config.row} are available here. Reduce the height, move the text, or use a larger chart.`;
   }else feedback.textContent=`Text size: ${mask.width} × ${mask.height} stitches.`;
   const cells=[];
@@ -759,7 +830,7 @@ function buildTextPreview(){
     const col=config.col+pt.x,row=config.row-pt.y;
     if(col>=1&&col<=active.cols&&row>=1&&row<=active.rows)cells.push({col,row});
   }
-  textPreview={...config,width:mask.width,height:mask.height,cells,tooLarge:mask.tooLarge};
+  textPreview={...config,width:mask.width,height:mask.height,cells,tooLarge:mask.tooLarge||mask.width>active.cols-config.col+1||mask.height>config.row};
   requestDraw();
   return textPreview;
 }
@@ -776,14 +847,12 @@ function placeTextAt(cell){
   buildTextPreview();
 }
 function editLastText(){
-  if(!active||!lastText||pendingConversion||editBlocked('edit lettering'))return;
-  editingText=lastText;
-  const {config}=editingText;
-  for(const [id,value] of Object.entries({textInput:config.text,textAngle:config.angle,textScale:config.height,textCol:config.col,textRow:config.row,textColor:config.color}))$(id).value=value;
-  $('flipText').checked=!!config.flip;
-  $('applyText').textContent='Apply lettering changes';
-  buildTextPreview();
+  if(!active||pendingConversion||editBlocked('edit lettering'))return;
+  const l=chosenLayer()||[...(active.layers||[])].reverse().find(l=>l.type==='text');
+  if(!l){toast('There is no editable text layer yet.');return;}
+  selectedLayerId=l.id;renderLayers();$('layerEdit').click();
 }
+
 function drawTextPreviewOverlay(ctx,preview,cols,rows){
   const color=active.palette[preview.color]||active.palette[0]||DEFAULT_COLORS[0];
   ctx.save();
@@ -803,29 +872,9 @@ function drawTextPreviewOverlay(ctx,preview,cols,rows){
   ctx.restore();
 }
 function applyTextPreview(){
-  if(!active||pendingConversion||editBlocked('apply text to the chart'))return;
-  const preview=buildTextPreview();
-  if(!preview||preview.tooLarge||!preview.cells.length)return toast($('textFitStatus').textContent||'Enter some text first.');
-  const changes=new Map();
-  if(editingText){
-    for(const [index,original] of editingText.original)changes.set(index,original);
-  }
-  const original=new Map();
-  for(const cell of preview.cells){
-    const index=indexFor(cell.col,cell.row);
-    const under=changes.get(index)??active.cells[index];
-    if(under!==preview.color)original.set(index,under);
-    changes.set(index,preview.color);
-  }
-  const changed=[...changes].filter(([index,color])=>active.cells[index]!==color);
-  if(!changed.length)return toast('That text preview would not change any stitches.');
-  snapshot();
-  for(const [index,color] of changed)active.cells[index]=color;
-  lastText={config:preview,original};
-  $('editLastText').disabled=false;
-  clearTextPreview();
-  active.converted=true; scheduleSave(); updateLegend(); updateSelection(); requestDraw(); toast(`Updated ${changed.length} stitches to the chart.`);
+  putTextOnLayer();
 }
+
 function nudgeText(dx,dy){
   $('textCol').value=String(clamp((Number($('textCol').value)||1)+dx,1,active.cols));
   $('textRow').value=String(clamp((Number($('textRow').value)||1)+dy,1,active.rows));
@@ -845,8 +894,9 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     ctx.save();ctx.globalAlpha=active.opacity;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
   }
   const displayedConversion=pendingConversion?.projectId===active.id?pendingConversion:null;
-  if(active.converted||displayedConversion){
-    const colorCells=displayedConversion?.cells||active.cells,colors=displayedConversion?.palette||active.palette;
+  const composedColors=displayedConversion?.cells||composedCells(active);
+  if(active.converted||displayedConversion||active.layers?.length){
+    const colorCells=composedColors,colors=displayedConversion?.palette||active.palette;
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c, color=colors[colorCells[i]]||DEFAULT_COLORS[0];
       ctx.fillStyle=color.hex;ctx.fillRect(M+c*CELL,M+r*CELL,CELL,CELL);
@@ -868,7 +918,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   }
   if(document.body.classList.contains('crochet-view')&&!pendingConversion&&!active.guide.finished){
     const {row,position}=active.guide;
-    const run=Pattern.runForPosition(active,row,position);
+    const run=Pattern.runForPosition(compositeProject(active),row,position);
     const col=Pattern.colAt(active,row,position),end=Pattern.colAt(active,row,run.lastStep);
     const y=M+(rows-row)*CELL,x=M+(col-1)*CELL;
     ctx.fillStyle='#7251b233';
@@ -893,6 +943,15 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
       if(CELL*s>=14){ctx.font='bold 13px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#176544';ctx.fillText('✓',cx+CELL/2,cy+CELL/2);}
     }
   }
+  if($('spotlightMode')?.checked&&!displayedConversion){
+    const focus=active.guide?.row||selected?.row||1,ry=rows-focus;
+    ctx.fillStyle='rgba(29,18,43,.32)';
+    if(ry>0)ctx.fillRect(M,M,bw,ry*CELL);
+    if(ry<rows-1)ctx.fillRect(M,M+(ry+1)*CELL,bw,(rows-ry-1)*CELL);
+  }
+  if(pendingCleanup&&!displayedConversion){
+    ctx.fillStyle='rgba(255,154,34,.42)';for(const [i] of pendingCleanup){const col=i%cols,row=Math.floor(i/cols);ctx.fillRect(M+col*CELL,M+row*CELL,CELL,CELL);}
+  }
   // Every grid boundary continues through the row/column-number margins.
   ctx.strokeStyle='#9c8ea7';ctx.lineWidth=0.75/s;ctx.beginPath();
   for(let c=minCol;c<=maxCol;c++){
@@ -903,12 +962,12 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   }
   ctx.stroke();
   ctx.strokeStyle='#6d578e';ctx.lineWidth=1.8/s;ctx.strokeRect(M,M,bw,bh);
-  if((active.converted||displayedConversion) && CELL*s>=16){
+  if((active.converted||displayedConversion||active.layers?.length) && CELL*s>=16){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
       if(showProgressOverlay&&!displayedConversion&&(active.done[i]||active.rowDone[rowNum-1]))continue;
-      const color=(displayedConversion?.palette||active.palette)[(displayedConversion?.cells||active.cells)[i]]||DEFAULT_COLORS[0];
+      const color=(displayedConversion?.palette||active.palette)[composedColors[i]]||DEFAULT_COLORS[0];
       const rHex=parseInt(color.hex.slice(1,3),16),gHex=parseInt(color.hex.slice(3,5),16),bHex=parseInt(color.hex.slice(5,7),16);
       ctx.fillStyle=(rHex*.299+gHex*.587+bHex*.114)>145?'#312b3d':'#fff';
       ctx.fillText(color.symbol,M+(c+.5)*CELL,M+(r+.5)*CELL);
@@ -1147,11 +1206,12 @@ function updateConversionControls(){
   const paletteSize=$('paletteSize');
   if(!paletteSize.disabled)paletteSize.dataset.natural=paletteSize.value;
   paletteSize.disabled=s.mode!=='auto';
-  paletteSize.value=s.mode==='print'?'4':s.mode==='grayscale'?'3':paletteSize.dataset.natural||'6';
+  paletteSize.value=s.mode==='print'?'4':s.mode==='grayscale'?$('grayCount').value:paletteSize.dataset.natural||'6';
+  $('grayCount').disabled=s.mode!=='grayscale';
   $('paletteHelp').textContent=s.mode==='print'
     ? 'Print cleanup uses 4 yarn colors: dark, off-white, red and blue. Choose Natural image palette to adjust the number.'
     : s.mode==='grayscale'
-      ? 'Grayscale mode reduces the image to 3 yarn colors: black, gray and white. Choose Natural image palette to adjust the number.'
+      ? `Grayscale mode reduces the image to ${$('grayCount').value} shades between black and white.`
       : 'Natural palette mode uses your selected number of colors.';
 }
 function adjustRGB(r,g,b,s){
@@ -1248,7 +1308,7 @@ function buildConversion(cols,rows){
   const data=s.mode==='print'
     ?{palette:PRINT_PALETTE.map(c=>({...c})),cells:cleanPrintCells(raster.printCells,cols,rows,s)}
     :s.mode==='grayscale'
-      ?grayscaleQuantize(raster.values)
+      ?window.DoretteAdvanced.grayscale(raster.values,Number($('grayCount').value)||3)
       :autoQuantize(raster.values,Number($('paletteSize').value));
   return {...data,cols,rows,projectId:active.id};
 }
@@ -1341,7 +1401,7 @@ function pdfSettings(){
 function updatePdfEstimate(){
   if(!active||!window.DorettePdf)return;
   try{
-    const info=window.DorettePdf.plan(active,pdfSettings());
+    const info=window.DorettePdf.plan(compositeProject(active),pdfSettings());
     $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered sections (${info.across} across × ${info.down} down). ${info.overlap?`Up to ${info.overlap} repeated stitches on shared edges, outside purple outline (reference only). May increase pages.`:'No repeated stitches.'}`;
   }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
 }
@@ -1355,7 +1415,7 @@ function exportPdf(){
   setTimeout(()=>{
     try{
       // Always export the SAVED project, never a temporary photo preview.
-      const {bytes,pages}=window.DorettePdf.build(active,pdfSettings());
+      const {bytes,pages}=window.DorettePdf.build(compositeProject(active),pdfSettings());
       download(new Blob([bytes],{type:'application/pdf'}),`${slug(active.name)}-Crochet-Chart.pdf`);
       toast(`${pages}-page PDF downloaded. Open it from Downloads.`);
     }catch(e){toast('PDF export failed: '+e.message);console.error(e);}
@@ -1433,7 +1493,7 @@ function refreshPatternPanels(){
 function renderRowSequence(){
   if(!active)return;
   Pattern.ensure(active);
-  const row=clamp(Math.round(Number($('instructionRow').value)||1),1,active.rows),runs=Pattern.runs(active,row);
+  const row=clamp(Math.round(Number($('instructionRow').value)||1),1,active.rows),runs=Pattern.runs(compositeProject(active),row);
   const dir=Pattern.direction(active,row)==='rtl'?'Right to left':'Left to right';
   $('rowRunSummary').textContent=`Row ${row} / ${active.rows} • ${dir} • ${active.cols} stitches • ${runs.length} color blocks${active.rowDone[row-1]?' • Complete':''}.`;
   const chips=$('rowRunChips');chips.replaceChildren();
@@ -1450,7 +1510,7 @@ function renderRowSequence(){
   } else if(active.guide?.row===row){
     step=active.guide.position||0;
   }
-  const currentRun=Pattern.runForPosition(active,row,clamp(step,0,active.cols-1));
+  const currentRun=Pattern.runForPosition(compositeProject(active),row,clamp(step,0,active.cols-1));
   const next=runs.find(r=>currentRun&&r.firstStep>currentRun.lastStep);
   focus.textContent=currentRun
     ? `At stitch ${clamp(step,0,active.cols-1)+1}, work ${currentRun.count-(clamp(step,0,active.cols-1)-currentRun.firstStep)} more stitch${currentRun.count-(clamp(step,0,active.cols-1)-currentRun.firstStep)===1?'':'es'} in ${active.palette[currentRun.color].symbol} (${active.palette[currentRun.color].name})${next?`, then change to ${next.count} × ${active.palette[next.color].symbol} (${active.palette[next.color].name}).`:'. No more color changes in this row.'}`
@@ -1491,7 +1551,7 @@ function renderYarnInventory(){
 }
 function renderInventoryEstimates(){
   if(!active)return;
-  const results=Pattern.estimate(active),valid=Number(active.gauge.swatchYards)>0&&Number(active.gauge.swatchStitches)>0;
+  const results=Pattern.estimate(compositeProject(active)),valid=Number(active.gauge.swatchYards)>0&&Number(active.gauge.swatchStitches)>0;
   results.forEach((r,i)=>{
     const div=$(`yarnEstimate${i}`);if(!div)return;
     div.textContent=valid?`${format(r.count)} stitches • approx. ${r.neededYards.toFixed(1)} yd with allowance${r.totalSkeins!==null?` • ${r.totalSkeins} total skeins • ${r.additional} more to buy`: ' • Enter yards per skein to calculate skeins'}`:`${format(r.count)} stitches • Yardage unavailable until you enter measured sample usage.`;
@@ -1527,7 +1587,7 @@ function renderGuide(){
   if(!active||($('guideDialog').hidden&&!document.body.classList.contains('crochet-view')))return;
   Pattern.ensure(active);
   const {guide:g}=active,row=g.row,pos=g.position;
-  const dir=Pattern.direction(active,row),runs=Pattern.runs(active,row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(active,row,pos);
+  const dir=Pattern.direction(active,row),runs=Pattern.runs(compositeProject(active),row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(compositeProject(active),row,pos);
   const completed=!!active.done[idx]||!!active.rowDone[row-1];
   $('guideTitle').textContent=`Row ${row} of ${active.rows} — ${dir==='rtl'?'Right to left':'Left to right'}`;
   $('guideStatus').textContent=`Stitch ${pos+1} / ${active.cols} • Column ${col} • ${completed?'Already completed':'Not yet completed'}${g.finished?' • CHART FINISHED':''}`;
@@ -1558,7 +1618,7 @@ function focusGuideCell(){
 function guideNext(wholeRun=false){
   if(!active||pendingConversion)return;
   const g=active.guide;if(g.finished)return;
-  const end=wholeRun?Pattern.runForPosition(active,g.row,g.position).lastStep:g.position;
+  const end=wholeRun?Pattern.runForPosition(compositeProject(active),g.row,g.position).lastStep:g.position;
   progressSnapshot();
   for(let step=g.position;step<=end;step++){
     active.done[Pattern.physicalIndex(active,Pattern.colAt(active,g.row,step),g.row)]=1;
@@ -1583,7 +1643,7 @@ function exportWrittenPdf(){
   const btn=$('exportWrittenPdf');btn.disabled=true;btn.textContent='Building written instructions…';
   setTimeout(()=>{
     try{
-      const {bytes,pages}=window.DorettePdf.buildWritten(active,pdfSettings());
+      const {bytes,pages}=window.DorettePdf.buildWritten(compositeProject(active),pdfSettings());
       download(new Blob([bytes],{type:'application/pdf'}),`${slug(active.name)}-Written-Rows.pdf`);
       toast(`${pages}-page row-by-row PDF downloaded. Saved chart is unchanged.`);
     }catch(e){toast('Written export failed: '+e.message);console.error(e);}
@@ -1615,7 +1675,7 @@ function validatePatternExtras(p){
   const safe={workDirection:{first:direction.first==='ltr'?'ltr':'rtl',alternate:direction.alternate!==false},
     guide:{row:clamp(Math.round(Number(guide.row)||1),1,p.rows),position:clamp(Math.round(Number(guide.position)||0),0,p.cols-1),finished:!!guide.finished},
     gauge:{swatchStitches:Math.max(1,Number(gauge.swatchStitches)||100),swatchYards:Math.max(0,Number(gauge.swatchYards)||0),overage:clamp(Number(gauge.overage)||0,0,100)},
-    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
+    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
   return safe;
 }
 function setCrochetView(enabled){
@@ -1724,7 +1784,7 @@ function hookPatternEvents(){
   $('cancelMotif').addEventListener('click',clearMotifPreview);
   $('applyMotif').addEventListener('click',()=>{
     if(!motifPreview||pendingConversion||editBlocked('apply a motif'))return;
-    if(pasteClipboard(motifPreview,{...motifPreview.clip,isMotif:true}))clearMotifPreview();
+    applyMotifLayer();
   });
   $('crochetView').addEventListener('click',()=>setCrochetView(!document.body.classList.contains('crochet-view')));
   $('resumeCrochet').addEventListener('click',()=>setCrochetView(true));
@@ -1735,7 +1795,7 @@ function hookPatternEvents(){
     if(!name)return;
     const {start,end}=areaSelection;
     const id=uid();
-    saveMotifs([...motifs,{id,name,clip:Pattern.copyArea(active,start.col,start.row,end.col,end.row)}]);
+    saveMotifs([...motifs,{id,name,clip:Pattern.copyArea(compositeProject(active),start.col,start.row,end.col,end.row)}]);
     $('motifChoice').value=id;
   });
   $('loadMotif').addEventListener('click',()=>placeMotif());
@@ -1765,7 +1825,7 @@ function hookPatternEvents(){
   }
   $('copyArea').addEventListener('click',()=>{
     if(!areaSelection)return toast('Use Select area to drag across the desired stitches first.');
-    const {start,end}=areaSelection;stitchClipboard=Pattern.copyArea(active,start.col,start.row,end.col,end.row);
+    const {start,end}=areaSelection;stitchClipboard=Pattern.copyArea(compositeProject(active),start.col,start.row,end.col,end.row);
     toast(`Copied ${stitchClipboard.width} × ${stitchClipboard.height} stitches. Choose Paste, then tap the destination's top-left stitch.`);
   });
   $('fillArea').addEventListener('click',applyAreaFill);
@@ -1778,9 +1838,182 @@ function hookPatternEvents(){
     if(!active||editBlocked('restore a snapshot'))return;
     const cp=active.checkpoints.find(c=>c.id===$('checkpointChoice').value);if(!cp)return;
     if(!confirm(`Restore “${cp.name}”? Current changes will be kept in Undo history. Save a ZIP backup too.`))return;
-    snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),converted:true,referenceMirrored:cp.referenceMirrored===true});
+    snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),layers:structuredClone(cp.layers||[]),converted:true,referenceMirrored:cp.referenceMirrored===true});
     Pattern.ensure(active);areaSelection=null;selected=null;scheduleSave();refreshInspector();fitChart();toast('Snapshot restored; Undo is available.');
   });
+}
+
+// 1.4.0 new creative tools; all local and included in portable project ZIPs.
+function validateLayers(p){
+ const ls=Array.isArray(p.layers)?p.layers:[];
+ if(ls.length>80)throw Error('Too many editable layers in project');
+ for(const l of ls){if(!l||typeof l.name!=='string'||l.name.length>80||!Array.isArray(l.entries)||l.entries.length>p.cols*p.rows||
+   l.entries.some(e=>!Array.isArray(e)||e.length!==2||!Number.isInteger(e[0])||e[0]<0||e[0]>=p.cols*p.rows||!Number.isInteger(e[1])||e[1]<0||e[1]>=p.palette.length))throw Error('Invalid editable layer in backup');}
+ return ls.map(l=>({id:String(l.id||uid()).slice(0,85),name:l.name.slice(0,80),type:l.type==='text'?'text':'motif',visible:l.visible!==false,locked:!!l.locked,entries:l.entries.map(e=>e.slice()),source:l.source&&typeof l.source==='object'?structuredClone(l.source):null}));
+}
+function setLayerAndRefresh(layer,index=null){
+ if(isPatternLocked()||pendingConversion)return toast('Unlock the chart and finish the preview before editing layers.');
+ snapshot();if(!Array.isArray(active.layers))active.layers=[];
+ if(index!==null)active.layers[index]=layer;else active.layers.push(layer);
+ selectedLayerId=layer.id;active.converted=true;pendingCleanup=null;scheduleSave();refreshInspector();requestDraw();
+}
+function chosenLayer(){return active?.layers?.find(l=>l.id===selectedLayerId)||null;}
+function renderLayers(){
+ const box=$('layerList');if(!box||!active)return;box.replaceChildren();
+ const list=active.layers||[];
+ if(!list.length){const p=document.createElement('p');p.className='muted';p.textContent='No editable layers yet. Apply text or a reusable motif to create one.';box.append(p);}
+ for(let i=list.length-1;i>=0;i--){
+  const l=list[i],line=document.createElement('div');line.className='layer-line'+(l.id===selectedLayerId?' selected':'');
+  const choose=document.createElement('button');choose.type='button';choose.textContent=l.id===selectedLayerId?'●':'○';choose.title='Select layer';choose.setAttribute('aria-label','Select '+l.name);
+  choose.onclick=()=>{selectedLayerId=l.id;renderLayers();};
+  const label=document.createElement('div');label.innerHTML='';const strong=document.createElement('strong');strong.textContent=l.name;
+  const small=document.createElement('small');small.textContent=`${l.type} · ${l.entries.length} stitches`;label.append(strong,small);
+  const visible=document.createElement('button');visible.type='button';visible.textContent=l.visible===false?'◯':'◉';visible.title=l.visible===false?'Show layer':'Hide layer';visible.setAttribute('aria-label',visible.title);
+  visible.onclick=()=>{if(editBlocked('change layer visibility'))return;snapshot();l.visible=l.visible===false?true:false;scheduleSave();renderLayers();updateLegend();requestDraw();};
+  const locked=document.createElement('button');locked.type='button';locked.textContent=l.locked?'🔒':'🔓';locked.title=l.locked?'Unlock layer':'Lock layer';locked.setAttribute('aria-label',locked.title);
+  locked.onclick=()=>{if(editBlocked('lock a layer'))return;snapshot();l.locked=!l.locked;scheduleSave();renderLayers();};
+  line.append(choose,label,visible,locked);box.append(line);
+ }
+ const l=chosenLayer();$('layerInfo').textContent=l?`${l.name} (${l.type}): ${l.visible===false?'hidden':'visible'}, ${l.locked?'locked':'editable'}.`:'Select a layer to modify it.';
+ for(const id of ['layerUp','layerDown','layerEdit','layerDuplicate','layerFlatten','layerDelete','layerMoveUp','layerMoveLeft','layerMoveRight','layerMoveDown'])$(id).disabled=!l||isPatternLocked();
+}
+function shiftLayer(l,dx,dy){
+ const map=[];for(const [i,c] of l.entries){const x=i%active.cols,y=Math.floor(i/active.cols),nx=x+dx,ny=y-dy;
+  if(nx>=0&&nx<active.cols&&ny>=0&&ny<active.rows)map.push([ny*active.cols+nx,c]);}
+ l.entries=map;
+ if(l.source&&typeof l.source.col==='number'){l.source.col=clamp(l.source.col+dx,1,active.cols);l.source.row=clamp(l.source.row+dy,1,active.rows);}
+}
+function putTextOnLayer(){
+ if(!active||pendingConversion||editBlocked('apply text'))return;
+ const preview=buildTextPreview();if(!preview||preview.tooLarge||!preview.cells.length)return toast($('textFitStatus').textContent||'Preview text before applying.');
+ const replace=editingLayerId?(active.layers||[]).findIndex(l=>l.id===editingLayerId):-1;
+ const entries=preview.cells.map(cell=>[indexFor(cell.col,cell.row),preview.color]);
+ const layer={id:replace>=0?active.layers[replace].id:uid(),name:'Text: '+preview.text.slice(0,40),type:'text',visible:true,locked:false,entries,source:{...previewTextConfig()}};
+ setLayerAndRefresh(layer,replace>=0?replace:null);
+ editingLayerId=null;lastText={config:{...previewTextConfig()},original:new Map()};$('editLastText').disabled=false;
+ clearTextPreview();toast('Text saved as a separate editable layer.');
+}
+function applyMotifLayer(){
+ if(!active||!motifPreview||pendingConversion||editBlocked('apply motif'))return;
+ const {clip,col,row}=motifPreview;
+ if(col+clip.width-1>active.cols||row-clip.height+1<1)return toast('Motif does not fit. Move it inside the chart.');
+ const missing=[...new Set(clip.colors.map(i=>clip.palette?.[i]))].filter(hex=>hex&&!active.palette.some(p=>p.hex.toLowerCase()===hex.toLowerCase()));
+ if(active.palette.length+missing.length>12)return toast('This motif needs more than the available 12 yarn colors.');
+ snapshot();for(const hex of missing)active.palette.push({hex,name:'Motif yarn '+(active.palette.length+1),symbol:SYMBOLS[active.palette.length]});
+ const entries=[];for(let dy=0;dy<clip.height;dy++)for(let dx=0;dx<clip.width;dx++){
+  const hex=clip.palette?.[clip.colors[dy*clip.width+dx]],index=active.palette.findIndex(p=>p.hex.toLowerCase()===String(hex).toLowerCase());
+  if(index>=0)entries.push([indexFor(col+dx,row-dy),index]);
+ }
+ const l={id:uid(),name:'Motif: '+(chosenMotif()?.name||'Saved motif'),type:'motif',visible:true,locked:false,entries,source:null};
+ active.layers.push(l);selectedLayerId=l.id;active.converted=true;clearMotifPreview();scheduleSave();refreshInspector();toast('Motif saved as editable layer.');
+}
+function advancedLetterPreviewTransform(mask,config){
+ if(!mask||!['diagonal','curve'].includes(config.layout))return mask;
+ const height=mask.height,amp=Math.max(1,Math.round(config.height*.3)),width=mask.width;
+ const mapped=mask.occupied.map(p=>({x:p.x,y:p.y+Math.round(config.layout==='diagonal'?((p.x/Math.max(1,width-1))*amp):amp*(1-Math.pow(2*p.x/Math.max(1,width-1)-1,2)))}));
+ return {...mask,height:height+amp,occupied:mapped};
+}
+function setStudioMode(mode){
+ studioMode=mode;document.body.dataset.studioMode=mode;
+ const classify=(el,names)=>names.some(name=>el.querySelector(`[id="${name}"]`));
+ document.querySelectorAll('.inspector-section').forEach(el=>{
+  const txt=el.textContent.toLowerCase();el.classList.toggle('always-section',el.id==='sizePanel'||txt.includes('save & back up'));
+  el.classList.toggle('create-section',el.id==='yarnLibraryPanel'||el.id==='layerPanel'||txt.includes('image to chart')||txt.includes('crochet mode')||txt.includes('text to chart')||txt.includes('yarn color legend'));
+  el.classList.toggle('edit-section',el.id==='patternHealth'||el.id==='layerPanel'||txt.includes('yarn color legend')||txt.includes('text to chart')||txt.includes('yarn inventory')||txt.includes('printable pdf')||txt.includes('stitch progress')||txt.includes('crochet mode')||txt.includes('project dashboard'));
+  el.classList.toggle('crochet-section',txt.includes('stitch progress')||txt.includes('crochet mode')||txt.includes('printable pdf')||txt.includes('yarn inventory'));
+ });
+ for(const [m,id] of [['create','modeCreate'],['edit','modeEdit'],['crochet','modeCrochet']])$(id).setAttribute('aria-pressed',String(mode===m));
+ setCrochetView(mode==='crochet');requestAnimationFrame(resizeCanvas);
+}
+let yarnLibrary=[];try{yarnLibrary=JSON.parse(localStorage.getItem('dorette-yarn-library-v1')||'[]');if(!Array.isArray(yarnLibrary))yarnLibrary=[];}catch{}
+function renderYarnLibrary(){const choice=$('yarnLibrarySelect');choice.replaceChildren();for(const c of yarnLibrary){const option=new Option(`${c.name} · ${c.hex}`,c.id);choice.add(option);} }
+function saveYarnLibrary(){try{localStorage.setItem('dorette-yarn-library-v1',JSON.stringify(yarnLibrary));}catch(e){toast('Could not store yarn library locally.');}renderYarnLibrary();}
+function showSize(){if(!active)return;const values=['sizeSwatchCols','sizeSwatchRows','sizeSwatchWidth','sizeSwatchHeight'].map(id=>Number($(id).value));const g=window.DoretteAdvanced.gauge(active.cols,active.rows,...values);$('sizeResult').textContent=g?`Estimated finished size: ${g.width.toFixed(1)} × ${g.height.toFixed(1)} ${$('sizeUnit').value}`:'Enter positive swatch dimensions to calculate the result.';}
+function protectedCleanupCells(){if(!$('protectArea').checked||!areaSelection)return [];const out=[],a=areaSelection;for(let r=Math.min(a.start.row,a.end.row);r<=Math.max(a.start.row,a.end.row);r++)for(let c=Math.min(a.start.col,a.end.col);c<=Math.max(a.start.col,a.end.col);c++)out.push(indexFor(c,r));return out;}
+function qualityCheck(){if(!active)return;const r=window.DoretteAdvanced.audit(active),el=$('qualityResults');el.replaceChildren();
+ const notices=[`${r.singles} isolated single-stitch color islands.`,`${r.blocks} small color islands (3 stitches or fewer).`,`${r.transitions} horizontal yarn changes across the chart.`,`${r.emptyRows} rows contain only background color.`,`${r.edges} outer-edge cells use a different yarn from the background.`,`${r.usedColors} yarn colors are actually used.`];
+ for(const msg of notices){const p=document.createElement('p');p.textContent=msg;el.append(p);}
+ const clipped=(active.layers||[]).filter(l=>!l.entries.length);if(clipped.length){const p=document.createElement('p');p.textContent=`Review ${clipped.length} empty or clipped layers.`;el.append(p);}
+}
+const tutorialSteps=[
+ ['Choose a workspace','Create for importing photos, text and motifs. Edit for colors, layers and quality checks. Crochet for guided progress.','CREATE  →  EDIT  →  CROCHET'],
+ ['Photo to crochet chart','Import a picture, crop it, choose Natural or grayscale colors, preview the stitches, and apply only when satisfied.','PHOTO  →  PREVIEW  →  YARN GRID'],
+ ['Layers and lettering','Type text, adjust font style and spacing, then apply to a new layer. Select a layer to reorder, hide, duplicate or flatten it.','TEXT  +  MOTIF  =  LAYERS'],
+ ['Smart cleanup','Select any artwork needing protection, preview the small-area fixes, and apply only after checking the orange highlights.','PREVIEW FIRST  ✓'],
+ ['Crochet with confidence','Use Guided Mode, Row Spotlight and the progress brush. Pattern lock prevents accidental recoloring.','ROW 1  •  STITCH 1  ✓'],
+ ['Share safely','Download a project ZIP using Back up all, and keep private backups. The program ZIP is not the project backup.','BACK UP  →  GOOGLE DRIVE']
+];
+let tutorialIndex=0;
+function renderTutorial(){const [title,desc,visual]=tutorialSteps[tutorialIndex],el=$('tutorialContent');el.replaceChildren();
+ const head=document.createElement('h3');head.textContent=`${tutorialIndex+1}/${tutorialSteps.length} · ${title}`;
+ const p=document.createElement('p');p.textContent=desc;
+ const v=document.createElement('div');v.className='tour-visual';v.textContent=visual;
+ el.append(head,p,v);$('tutorialPrev').disabled=tutorialIndex===0;$('tutorialNext').textContent=tutorialIndex===tutorialSteps.length-1?'Finish':'Next →';}
+function hookAdvanced(){
+ for(const [mode,id] of [['create','modeCreate'],['edit','modeEdit'],['crochet','modeCrochet']])$(id).addEventListener('click',()=>setStudioMode(mode));
+ $('spotlightMode').addEventListener('change',()=>requestDraw());
+ $('grayCount').addEventListener('change',()=>{if(pendingConversion)discardPreview();updateConversionControls();});
+ $('compareGrays').addEventListener('click',()=>{
+  if(!active?.referenceImage||!referenceImg)return toast('Import a photo first.');
+  const [cols,rows]=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],s=conversionSettings(),raster=rasterizeToCells(referenceImg,cols,rows,s);
+  comparisonResults={small:{...window.DoretteAdvanced.grayscale(raster.values,2),cols,rows,projectId:active.id},large:{...window.DoretteAdvanced.grayscale(raster.values,4),cols,rows,projectId:active.id}};
+  renderComparison($('compareSmallCanvas'),comparisonResults.small);renderComparison($('compareLargeCanvas'),comparisonResults.large);
+  $('compareSmallLabel').textContent='2 grayscale yarn colors';$('compareLargeLabel').textContent='4 grayscale yarn colors';
+  $('compareDialog').showModal();
+ });
+ $('replaceEverywhere').addEventListener('click',()=>{
+  if(!active||editBlocked('replace yarn colors')||pendingConversion)return;
+  const from=Number($('replaceFrom').value),to=Number($('replaceTo').value);if(from===to)return toast('Choose two different yarn colors.');
+  snapshot();let n=0;active.cells=active.cells.map(v=>{if(v===from){n++;return to;}return v;});
+  for(const l of active.layers||[])l.entries=l.entries.map(([i,c])=>{if(c===from){n++;return [i,to];}return [i,c];});
+  scheduleSave();updateLegend();requestDraw();toast(`Replaced ${n} color assignments. Undo is available.`);
+ });
+ for(const id of ['sizeSwatchCols','sizeSwatchRows','sizeSwatchWidth','sizeSwatchHeight','sizeUnit'])$(id).addEventListener('input',showSize);
+ $('previewCleanup').addEventListener('click',()=>{
+  if(pendingConversion)return toast('Finish the image preview before cleanup.');
+  pendingCleanup=window.DoretteAdvanced.cleanup(active.cells,active.cols,active.rows,Number($('cleanupThreshold').value),protectedCleanupCells());
+  $('cleanupInfo').textContent=`Proposed fixes: ${pendingCleanup.length} base-grid stitches. Orange areas show changes, protected area is left alone.`;
+  $('applyCleanup').disabled=pendingCleanup.length===0;requestDraw();
+ });
+ $('applyCleanup').addEventListener('click',()=>{if(!pendingCleanup||editBlocked('clean up the pattern'))return;
+  snapshot();for(const [i,c] of pendingCleanup)active.cells[i]=c;toast(`Cleaned ${pendingCleanup.length} stitches. Undo remains available.`);
+  pendingCleanup=null;$('applyCleanup').disabled=true;scheduleSave();updateLegend();requestDraw();
+ });
+ $('runQualityCheck').addEventListener('click',qualityCheck);
+ $('repeatSelection').addEventListener('click',()=>{
+  if(!active||!areaSelection||editBlocked('repeat stitches'))return toast('Select an area first.');
+  const {start,end}=areaSelection,clip=Pattern.copyArea(compositeProject(active),start.col,start.row,end.col,end.row);
+  const n=clamp(Number($('repeatCount').value)||2,1,12),horizontal=$('repeatDirection').value==='horizontal';
+  const x=Math.min(start.col,end.col),top=Math.max(start.row,end.row);snapshot();let count=0;
+  for(let copy=1;copy<=n;copy++){const col=x+(horizontal?copy*clip.width:0),row=top-(horizontal?0:copy*clip.height);count+=Pattern.paste(active,clip,col,row);}
+  active.converted=true;scheduleSave();updateLegend();requestDraw();toast(`Repeated the selection ${n} times; ${count} stitches changed.`);
+ });
+ $('saveLibraryYarn').addEventListener('click',()=>{const i=Number($('paintColor').value),c=active.palette[i];if(!c)return;
+  if(yarnLibrary.length>=120)return toast('Your yarn library is full.');const id=uid();yarnLibrary.push({...c,id,info:structuredClone(active.yarnInfo?.[i]||{}),swatch:structuredClone(active.gauge||{})});saveYarnLibrary();$('yarnLibrarySelect').value=id;toast('Yarn saved for reuse in this browser.');});
+ $('useLibraryYarn').addEventListener('click',()=>{if(editBlocked('use yarn library'))return;const c=yarnLibrary.find(c=>c.id===$('yarnLibrarySelect').value);if(!c)return;
+  const existing=active.palette.findIndex(p=>p.hex===c.hex);if(existing>=0){selectPaintColor(existing,true);return toast('Existing yarn selected.');}
+  if(active.palette.length>=12)return toast('This chart already uses 12 yarn colors.');snapshot();active.palette.push({hex:c.hex,name:c.name,symbol:SYMBOLS[active.palette.length]});active.yarnInfo??=[];active.yarnInfo[active.palette.length-1]=structuredClone(c.info||{});scheduleSave();updateLegend();toast('Saved yarn added to this chart.');});
+ $('removeLibraryYarn').addEventListener('click',()=>{yarnLibrary=yarnLibrary.filter(c=>c.id!==$('yarnLibrarySelect').value);saveYarnLibrary();});
+ for(const [id,delta] of [['layerUp',1],['layerDown',-1]])$(id).addEventListener('click',()=>{const a=active.layers||[],i=a.findIndex(l=>l.id===selectedLayerId),j=i+delta;if(i<0||j<0||j>=a.length||editBlocked('reorder layers'))return;snapshot();[a[i],a[j]]=[a[j],a[i]];scheduleSave();renderLayers();requestDraw();});
+ $('layerDuplicate').addEventListener('click',()=>{const l=chosenLayer();if(!l||editBlocked('duplicate layers'))return;const copy=structuredClone(l);copy.id=uid();copy.name=l.name+' copy';shiftLayer(copy,1,-1);setLayerAndRefresh(copy);});
+ $('layerDelete').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('delete layers'))return;snapshot();active.layers=active.layers.filter(x=>x!==l);selectedLayerId=null;scheduleSave();renderLayers();updateLegend();requestDraw();});
+ $('layerFlatten').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('flatten a layer'))return;snapshot();for(const [i,c] of l.entries)active.cells[i]=c;active.layers=active.layers.filter(x=>x!==l);selectedLayerId=null;active.converted=true;scheduleSave();refreshInspector();toast('Layer flattened into the base chart.');});
+ $('layerEdit').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('edit a layer'))return;
+  if(l.type!=='text')return toast('Move motif layers with the arrows; duplicate or flatten them as needed.');
+  editingLayerId=l.id;for(const [key,id] of [['text','textInput'],['angle','textAngle'],['height','textScale'],['col','textCol'],['row','textRow'],['color','textColor'],['style','textStyle'],['letterSpacing','letterSpacing'],['layout','textLayout'],['wrap','textWrap']])if(l.source?.[key]!==undefined)$(id).value=l.source[key];
+  $('flipText').checked=!!l.source?.flip;$('applyText').textContent='Update selected text layer';buildTextPreview();
+ });
+ for(const id of ['textStyle','letterSpacing','textLayout','textWrap'])$(id).addEventListener('change',()=>{if(textPreview)buildTextPreview();});
+ $('centerText').addEventListener('click',()=>{const cfg=previewTextConfig(),mask=rasterizeTextPattern(cfg);if(!mask)return;$('textCol').value=clamp(Math.floor((active.cols-mask.width)/2)+1,1,active.cols);$('textRow').value=clamp(Math.floor((active.rows+mask.height)/2),1,active.rows);buildTextPreview();});
+ $('autoFitText').addEventListener('click',()=>{if(!areaSelection)return toast('Select an area to fit text inside first.');const area=areaSelection,left=Math.min(area.start.col,area.end.col),top=Math.max(area.start.row,area.end.row),width=Math.abs(area.start.col-area.end.col)+1,height=Math.abs(area.start.row-area.end.row)+1;
+  $('textCol').value=left;$('textRow').value=top;
+  let ok=false;for(let h=Math.min(100,height);h>=5;h--){$('textScale').value=h;const mask=rasterizeTextPattern(previewTextConfig());if(mask&&!mask.tooLarge&&mask.width<=width&&mask.height<=height){ok=true;break;}}
+  buildTextPreview();toast(ok?'Text fitted inside the selected area.':'The selected area is too small for this lettering.');});
+ $('quickTutorial').addEventListener('click',()=>{tutorialIndex=0;renderTutorial();$('tutorialDialog').showModal();});
+ $('tutorialPrev').addEventListener('click',()=>{tutorialIndex=Math.max(0,tutorialIndex-1);renderTutorial();});
+ $('tutorialNext').addEventListener('click',()=>{if(tutorialIndex===tutorialSteps.length-1)$('tutorialDialog').close();else {tutorialIndex++;renderTutorial();}});
+ $('closeTutorial').addEventListener('click',()=>$('tutorialDialog').close());
+ renderYarnLibrary();setStudioMode('edit');
 }
 
 function hookEvents(){
@@ -1885,6 +2118,7 @@ function hookEvents(){
   $('applyConversion').addEventListener('click',()=>{
     if(!active||pendingConversion?.projectId!==active.id||editBlocked("apply a photo conversion"))return;
     const result=pendingConversion;
+    if(active.layers?.length&&!confirm('Replacing the photo palette will remove editable layers in this project. Continue? Make a project backup first.'))return;
     if(result.cols!==active.cols||result.rows!==active.rows){
       const fresh=blankProject(`${active.name} — ${result.cols}x${result.rows}`,result.cols,result.rows);
       fresh.referenceImage=active.referenceImage;fresh.referenceMirrored=!!active.referenceMirrored;fresh.photoCrop={...currentCrop()};
@@ -1893,7 +2127,7 @@ function hookEvents(){
       projects.set(fresh.id,fresh);queueWrite(fresh);selectProject(fresh.id);
       toast(`Created ${result.cols} × ${result.rows} chart as a NEW project. The original is untouched.`);
     }else{
-      snapshot();active.palette=result.palette.map(c=>({...c}));active.cells=result.cells.slice();active.yarnInfo=[];active.converted=true;active.opacity=0;
+      snapshot();active.palette=result.palette.map(c=>({...c}));active.cells=result.cells.slice();active.layers=[];selectedLayerId=null;active.yarnInfo=[];active.converted=true;active.opacity=0;
       discardPreview(false);scheduleSave();refreshInspector();toast('Converted chart applied and saved. Review fine text and colors.');
     }
   });
@@ -1975,7 +2209,7 @@ function hookEvents(){
   $('textRight').addEventListener('click',()=>nudgeText(1,0));
   $('textUp').addEventListener('click',()=>nudgeText(0,1));
   $('textDown').addEventListener('click',()=>nudgeText(0,-1));
-  hookPatternEvents();
+  hookPatternEvents();hookAdvanced();
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());
