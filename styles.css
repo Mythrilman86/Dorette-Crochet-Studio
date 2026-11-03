@@ -150,3 +150,5 @@ body.large-touch .chart-layout-switch button{min-height:50px}
 
 #textUp{grid-area:1 / 2}#textLeft{grid-area:2 / 1}#textRight{grid-area:2 / 3}#textDown{grid-area:3 / 2}
 #markStitch[aria-pressed=true]{outline:2px solid #6955a5;outline-offset:2px}
+
+.motif-tools,.crochet-view-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.motif-tools select{width:auto;max-width:100%}.crochet-view .sidebar,.crochet-view .inspector,.crochet-view .stitch-editor,.crochet-view .motif-tools,.crochet-view #resumeCrochet,.crochet-view #mirrorChart,.crochet-view #undoButton,.crochet-view #redoButton{display:none}.crochet-view .layout{grid-template-columns:minmax(0,1fr)}#markRow[aria-pressed=true]{outline:2px solid #6955a5;outline-offset:2px}
