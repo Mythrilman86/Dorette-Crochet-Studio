@@ -424,7 +424,10 @@ function setCropEdge(edge,value){
 }
 function requestDraw(){if(!drawingPending){drawingPending=true;requestAnimationFrame(()=>{drawingPending=false;draw();});}}
 function resizeCanvas(){
-  const rect=$('canvasWrap').getBoundingClientRect();canvasWidth=Math.max(100,rect.width);canvasHeight=Math.max(100,rect.height);
+  const rect=$('canvasWrap').getBoundingClientRect(),oldWidth=canvasWidth,oldHeight=canvasHeight;
+  canvasWidth=Math.max(100,rect.width);canvasHeight=Math.max(100,rect.height);
+  // Preserve the stitch under the viewport center when layout or orientation changes.
+  if(active){view.x+=(canvasWidth-oldWidth)/2;view.y+=(canvasHeight-oldHeight)/2;}
   const dpr=Math.min(devicePixelRatio||1,2),w=Math.round(canvasWidth*dpr),h=Math.round(canvasHeight*dpr);
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
   requestDraw();
@@ -550,8 +553,19 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
 // Two projections of the same active project; no duplicate cells or progress.
 const overviewCanvas = $('overviewCanvas');
 let overviewView = {scale:1,x:0,y:0};
+function setChartLayout(mode,remember=true){
+  const single=mode==='single';
+  $('chartViews').classList.toggle('single-chart',single);
+  $('overviewPane').hidden=single;
+  $('singleChart').setAttribute('aria-pressed',String(single));
+  $('dualChart').setAttribute('aria-pressed',String(!single));
+  if(remember){try{localStorage.setItem('dorette-chart-layout',single?'single':'dual');}catch{}}
+  // ResizeObserver updates the existing working canvas; neither project nor zoom is reset.
+  requestDraw();
+}
 function draw(){
   drawScene(ctx,canvasWidth,canvasHeight,view);
+  if(!active||$('overviewPane').hidden)return;
   const rect=overviewCanvas.getBoundingClientRect(), w=Math.max(1,rect.width),h=Math.max(1,rect.height);
   const dpr=Math.min(devicePixelRatio||1,2);
   overviewCanvas.width=Math.round(w*dpr);overviewCanvas.height=Math.round(h*dpr);
@@ -1343,6 +1357,10 @@ function hookEvents(){
 }
 async function initialize(){
   hookEvents();
+  $('singleChart').addEventListener('click',()=>setChartLayout('single'));
+  $('dualChart').addEventListener('click',()=>setChartLayout('dual'));
+  let chartLayout='dual';try{chartLayout=localStorage.getItem('dorette-chart-layout')||'dual';}catch{}
+  setChartLayout(chartLayout,false);
   try {db=await openDatabase();const items=await loadProjects();items.forEach(p=>projects.set(p.id,p));}
   catch(e){memoryOnly=true;status('Browser storage blocked — backups only',true);toast('Local saving is unavailable. Keep backups and use a normal browser window.');}
   if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);await queueWrite(sample);}

@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.1.0">
+  <link rel="stylesheet" href="./styles.css?v=1.1.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -30,7 +30,7 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.1.0 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.1.1 · Local workspace</span></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomValue" class="zoom-value">100%</span>
@@ -64,7 +64,8 @@
         </div>
         <p id="editorHint" class="editor-hint" aria-live="polite">Select to inspect stitches. Choose Paint or a color to draw; Erase restores the background. Pinch to zoom.</p>
       </div>
-      <div class="dual-charts"><section class="chart-pane"><h2>Overview <small>Tap to locate · dashed orange box = working view</small></h2><div class="overview-wrap"><canvas id="overviewCanvas" tabindex="0" aria-label="Full chart overview. Tap to select and center the working chart. Arrow keys move selection."></canvas></div></section><section class="chart-pane"><h2>Working chart <small>Zoom, select and edit here</small></h2><div class="canvas-wrap" id="canvasWrap">
+      <div class="chart-layout-controls"><span id="chartLayoutLabel">Chart view</span><div class="chart-layout-switch" role="group" aria-labelledby="chartLayoutLabel"><button id="singleChart" type="button" aria-pressed="false" aria-controls="chartViews">Single chart</button><button id="dualChart" type="button" aria-pressed="true" aria-controls="chartViews">Dual charts</button></div><span class="muted">Your view choice is remembered on this device.</span></div>
+      <div class="dual-charts" id="chartViews"><section class="chart-pane" id="overviewPane"><h2>Overview <small>Tap to locate · dashed orange box = working view</small></h2><div class="overview-wrap"><canvas id="overviewCanvas" tabindex="0" aria-label="Full chart overview. Tap to select and center the working chart. Arrow keys move selection."></canvas></div></section><section class="chart-pane"><h2>Working chart <small>Zoom, select and edit here</small></h2><div class="canvas-wrap" id="canvasWrap">
         <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
         <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
       </div>
@@ -221,9 +222,9 @@
 
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./pattern-tools.js?v=1.1.0" defer></script>
-  <script src="./pdf-export.js?v=1.1.0" defer></script>
-  <script src="./app.js?v=1.1.0" defer></script>
-  <script src="./help.js?v=1.1.0" defer></script>
+  <script src="./pattern-tools.js?v=1.1.1" defer></script>
+  <script src="./pdf-export.js?v=1.1.1" defer></script>
+  <script src="./app.js?v=1.1.1" defer></script>
+  <script src="./help.js?v=1.1.1" defer></script>
 </body>
 </html>

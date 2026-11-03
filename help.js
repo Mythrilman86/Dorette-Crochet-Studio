@@ -1,6 +1,7 @@
 /* Local, non-blocking section help. No project data is read or written. */
 (() => {
   const topics=[
+    ['.chart-layout-controls','Single or dual charts','Single chart hides the overview and expands the working chart across the available width. Dual charts shows both views again (stacked on compact screens). Switching keeps your zoom, viewing center, selection, edits and crochet progress. Your view choice is remembered in this browser on this device, separately from project backups.'],
     ['.panel-heading','Projects','Choose a saved project or create one with a name, columns and rows. Projects save in this browser on this device. Renaming is in Chart settings. Back up important work as ZIP files.'],
     ['.toolbar','Chart navigation','The left overview always fits the whole chart. Tap or drag there to select a stitch and center the right chart. The orange dashed box shows the visible working area. Zoom with +/−, a wheel or a two-finger pinch. Choose Pan to move the working chart. Fit chart resets its zoom; Center recenters it.'],
     ['.stitch-editor','Editing tools','Select inspects a stitch. Paint draws the chosen yarn; Erase uses the first yarn color; Pick samples an existing color. Rectangle fills a dragged box; Fill bucket recolors a connected region. Select area then Copy area or Fill area. Paste uses the tapped stitch as the top-left anchor. Undo and Redo reverse edits; Save snapshot keeps up to three recovery points.'],
