@@ -133,6 +133,9 @@ function refreshProjectList(){
   });
 }
 function selectProject(id) {
+  lastProgress=null;
+  $("undoProgress").disabled=true;
+  clearMotifPreview();
   flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
@@ -175,9 +178,12 @@ function undoState(){
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
     workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),ui:{...uiSettings(active)}};
 }
+let lastProgress=null,motifPreview=null;
 let progressBrush=null, overviewStroke=null;
 let lastText=null, editingText=null, placingText=false;
 function snapshot(){
+  lastProgress=null;
+  $("undoProgress").disabled=true;
   if(editingText)clearTextPreview();
   lastText=null;
   $("editLastText").disabled=true;
@@ -186,6 +192,9 @@ function snapshot(){
   redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
 }
 function restoreUndoState(state){
+  lastProgress=null;
+  $("undoProgress").disabled=true;
+  clearMotifPreview();
   lastText=null;
   $("editLastText").disabled=true;
   discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
@@ -210,6 +219,7 @@ function updateSelection(){
   if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
   if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
   const i=indexFor(selected.col,selected.row),d=!!active.done[i]||!!active.rowDone[selected.row-1];
+  $('jumpRow').value=selected.row;$('jumpCol').value=selected.col;
   $('selectedCell').textContent=`Row ${selected.row} · Column ${selected.col} ${d?'· Complete':''}`;
   $('instructionRow').value=selected.row;queuePatternRender();
   $('markStitch').disabled=false;$('markRow').disabled=false;$('paintStitch').disabled=false;
@@ -300,6 +310,7 @@ function updateToolUI(){
   $('applyText').disabled=locked||preview;
 }
 function setTool(tool){
+  if(motifPreview)clearMotifPreview();
   if(textPreview&&tool!=="select"&&tool!=="pan")clearTextPreview();
   if(!EDIT_TOOLS.includes(tool))return;
   if(pendingConversion){toast('Apply or discard the preview before editing stitches.');return;}
@@ -349,9 +360,21 @@ function updateLegend(){
   });
   updateToolUI();
 }
+function progressSnapshot(){
+  snapshot();
+  lastProgress={id:active.id,done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide}};
+  $('undoProgress').disabled=false;
+}
+function undoProgress(){
+  if(!active||pendingConversion||lastProgress?.id!==active.id)return;
+  const {done,rowDone,guide}=lastProgress;
+  snapshot();
+  Object.assign(active,{done,rowDone,guide});
+  scheduleSave();updateProgress();focusGuideCell();
+}
 function markStitch(){
   if(pendingConversion||!selected||!active)return;
-  const i=indexFor(selected.col,selected.row);snapshot();
+  const i=indexFor(selected.col,selected.row);progressSnapshot();
   if(active.rowDone[selected.row-1]){
     // Expand the completed row into individual stitch flags, then unmark the selected stitch.
     const topRow=active.rows-selected.row;
@@ -379,7 +402,7 @@ function applyBrushCell(cell,stroke){
     const start=(active.rows-cell.row)*active.cols,end=start+active.cols;
     const complete=!!active.rowDone[cell.row-1]||active.done.slice(start,end).every(Boolean);
     if(stroke.color?complete:!active.rowDone[cell.row-1]&&!active.done.slice(start,end).some(Boolean))return false;
-    if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
+    if(!stroke.snapshotted){progressSnapshot();stroke.snapshotted=true;}
     active.rowDone[cell.row-1]=stroke.color;
     active.done.fill(stroke.color,start,end);
     return true;
@@ -387,7 +410,7 @@ function applyBrushCell(cell,stroke){
   if(stroke.tool==='mark'){
     const index=indexFor(cell.col,cell.row),rowIndex=cell.row-1;
     if(Boolean(active.done[index]||active.rowDone[rowIndex])===Boolean(stroke.color))return false;
-    if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
+    if(!stroke.snapshotted){progressSnapshot();stroke.snapshotted=true;}
     if(active.rowDone[rowIndex]){
       const start=(active.rows-cell.row)*active.cols;
       active.done.fill(1,start,start+active.cols);
@@ -832,6 +855,26 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
       ctx.save();ctx.globalAlpha=active.opacity*.2;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
     }
   }
+  if(motifPreview&&!pendingConversion){
+    const {clip,col,row}=motifPreview;
+    ctx.save();ctx.globalAlpha=.55;
+    for(let y=0;y<clip.height&&row-y>=1;y++)for(let x=0;x<clip.width&&col+x<=cols;x++){
+      ctx.fillStyle=clip.palette[clip.colors[y*clip.width+x]];
+      ctx.fillRect(M+(col+x-1)*CELL+1,M+(rows-row+y)*CELL+1,CELL-2,CELL-2);
+    }
+    ctx.restore();
+    ctx.strokeStyle='#6133c8';ctx.lineWidth=2/s;
+    ctx.strokeRect(M+(col-1)*CELL,M+(rows-row)*CELL,Math.min(clip.width,cols-col+1)*CELL,Math.min(clip.height,row)*CELL);
+  }
+  if(document.body.classList.contains('crochet-view')&&!pendingConversion&&!active.guide.finished){
+    const {row,position}=active.guide;
+    const run=Pattern.runForPosition(active,row,position);
+    const col=Pattern.colAt(active,row,position),end=Pattern.colAt(active,row,run.lastStep);
+    const y=M+(rows-row)*CELL,x=M+(col-1)*CELL;
+    ctx.fillStyle='#7251b233';
+    ctx.fillRect(M+(Math.min(col,end)-1)*CELL,y,(Math.abs(col-end)+1)*CELL,CELL);
+    ctx.strokeStyle='#3f2184';ctx.lineWidth=3/s;ctx.strokeRect(x,y,CELL,CELL);
+  }
   if(textPreview&&!pendingConversion){
     drawTextPreviewOverlay(ctx,textPreview,cols,rows);
   }
@@ -945,6 +988,7 @@ function navigateOverview(ev){
   const wx=(ev.clientX-r.left-v.x)/v.scale,wy=(ev.clientY-r.top-v.y)/v.scale;
   const col=Math.floor((wx-M)/CELL)+1,row=active.rows-Math.floor((wy-M)/CELL);
   if(col<1||col>active.cols||row<1||row>active.rows)return;
+  if(motifPreview){if(ev.type==='pointerdown')moveMotifPreview(col,row);return;}
   if(placingText){if(ev.type==="pointerdown")placeTextAt({col,row});return;}
   if(progressBrush){
     const cell={col,row};
@@ -967,9 +1011,9 @@ canvas.addEventListener('pointerdown',ev=>{
     areaStart=null;
     gesture={dragged:false,wasMulti:false,lastDist:0,lastMid:null,totalTravel:0};
     const cell=screenToStitch(ev.offsetX,ev.offsetY);
-    const touchSafe=placingText||(uiSettings().stylusOnly&&ev.pointerType!=='pen');
+    const touchSafe=!!motifPreview||placingText||(uiSettings().stylusOnly&&ev.pointerType!=='pen');
     if(cell&&(editorTool==='rect'||editorTool==='area')&&!pendingConversion&&!touchSafe&&!progressBrush)areaStart=cell;
-    paintStroke=cell&&(progressBrush||editorTool==='paint'||editorTool==='erase')&&!pendingConversion&&!placingText&&(progressBrush||!touchSafe)
+    paintStroke=cell&&(progressBrush||editorTool==='paint'||editorTool==='erase')&&!pendingConversion&&!placingText&&!motifPreview&&(progressBrush||!touchSafe)
       ?(progressBrush?makeMarkStroke(cell,ev.pointerId):{pointerId:ev.pointerId,tool:editorTool,color:Number($('paintColor').value),first:cell,last:cell,snapshotted:false,changed:false}):null;
   }
   if(pointers.size===2){
@@ -1016,7 +1060,9 @@ function endPointer(ev){
       const last=cell||areaStart;areaSelection={start:areaStart,end:last};
       if(editorTool==='rect')applyAreaFill();else {updateAreaStatus();requestDraw();}
     }else if(!gesture.dragged&&cell){
-      if(placingText||(textPreview&&editorTool==="select"&&!progressBrush&&!isPatternLocked())){
+      if(motifPreview){
+        moveMotifPreview(cell.col,cell.row);
+      }else if(placingText||(textPreview&&editorTool==="select"&&!progressBrush&&!isPatternLocked())){
         placeTextAt(cell);selected=cell;
       }else if(touchSafe){
         selected=cell;
@@ -1478,7 +1524,7 @@ function applyAreaFill(){
   active.converted=true;scheduleSave();updateLegend();requestDraw();toast(`${format(changed)} stitches filled as a rectangle.`);updateAreaStatus();
 }
 function renderGuide(){
-  if(!active||$('guideDialog').hidden)return;
+  if(!active||($('guideDialog').hidden&&!document.body.classList.contains('crochet-view')))return;
   Pattern.ensure(active);
   const {guide:g}=active,row=g.row,pos=g.position;
   const dir=Pattern.direction(active,row),runs=Pattern.runs(active,row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(active,row,pos);
@@ -1496,6 +1542,9 @@ function renderGuide(){
   $('guidePrev').disabled=row===1&&pos===0;
   $('guideNext').disabled=!!g.finished;
   $('guideRun').disabled=!!g.finished;
+  $('dockStitch').disabled=!!g.finished;
+  $('dockRun').disabled=!!g.finished;
+  $('dockStatus').textContent=g.finished?'Chart finished':`Row ${row} · ${active.palette[run.color].name} · ${run.lastStep-pos+1} left in run`;
   $('guideRun').textContent=g.finished?'Color run complete':`Complete color run (${run.lastStep-pos+1})`;
   $('guidePrevRow').disabled=row===1;$('guideNextRow').disabled=row===active.rows;
 }
@@ -1510,7 +1559,7 @@ function guideNext(wholeRun=false){
   if(!active||pendingConversion)return;
   const g=active.guide;if(g.finished)return;
   const end=wholeRun?Pattern.runForPosition(active,g.row,g.position).lastStep:g.position;
-  if(wholeRun)snapshot();
+  progressSnapshot();
   for(let step=g.position;step<=end;step++){
     active.done[Pattern.physicalIndex(active,Pattern.colAt(active,g.row,step),g.row)]=1;
   }
@@ -1594,6 +1643,18 @@ function saveMotifs(next){
   motifs=next;renderMotifs();
 }
 function chosenMotif(){return motifs.find(m=>m.id===$('motifChoice').value);}
+function clearMotifPreview(){
+  motifPreview=null;
+  $('motifPreviewTools').hidden=true;
+  requestDraw();
+}
+function moveMotifPreview(col,row){
+  if(!motifPreview||!active)return;
+  motifPreview.col=clamp(col,1,active.cols);motifPreview.row=clamp(row,1,active.rows);
+  const {clip}=motifPreview;
+  $('motifStatus').textContent=`Column ${motifPreview.col} · Row ${motifPreview.row} · ${clip.width} × ${clip.height} stitches`;
+  requestDraw();
+}
 function placeMotif(rotation=false,flip=false){
   const m=chosenMotif();
   if(!active||!m||pendingConversion||editBlocked('place a motif'))return;
@@ -1608,13 +1669,15 @@ function placeMotif(rotation=false,flip=false){
     saveMotifs(motifs.map(item=>item.id===m.id?{...m,clip:{...clip,width,height,colors}}:item));
     $('motifChoice').value=m.id;
   }
-  stitchClipboard=structuredClone(chosenMotif().clip);
-  stitchClipboard.isMotif=true;
-  setTool('paste');
-  toast('Tap the destination’s top-left square on the Working chart.');
+  const anchor=motifPreview||selected||{col:1,row:active.rows};
+  clearTextPreview();
+  setTool('select');
+  motifPreview={clip:structuredClone(chosenMotif().clip),col:anchor.col,row:anchor.row};
+  $('motifPreviewTools').hidden=false;
+  moveMotifPreview(anchor.col,anchor.row);
+  toast('Tap either chart to place the preview, then choose Apply motif.');
 }
-function pasteClipboard(cell){
-  const clip=stitchClipboard;
+function pasteClipboard(cell,clip=stitchClipboard){
   if(clip.isMotif){
     if(cell.col+clip.width-1>active.cols||cell.row-clip.height+1<1)return toast('The motif does not fit here.');
     const used=new Set(clip.colors.map(i=>clip.palette[i]));
@@ -1631,8 +1694,38 @@ function pasteClipboard(cell){
     active.converted=true;scheduleSave();refreshInspector();
     toast('Pasted '+format(changed)+' stitches.');
   }else toast('No matching colors or space at this position.');
+  return true;
 }
 function hookPatternEvents(){
+  $('startHere').addEventListener('click',()=>{
+    if(!active||!selected||pendingConversion)return toast('Select a stitch first.');
+    const {row,col}=selected;
+    active.guide={row,position:Pattern.direction(active,row)==='rtl'?active.cols-col:col-1,finished:false};
+    scheduleSave();setCrochetView(true);
+  });
+  $('dockStitch').addEventListener('click',()=>guideNext());
+  $('dockRun').addEventListener('click',()=>guideNext(true));
+  $('undoProgress').addEventListener('click',undoProgress);
+  $('goToCell').addEventListener('submit',ev=>{
+    ev.preventDefault();
+    if(!active||pendingConversion)return;
+    const row=Number($('jumpRow').value),col=Number($('jumpCol').value);
+    if(!Number.isInteger(row)||!Number.isInteger(col)||row<1||row>active.rows||col<1||col>active.cols){
+      return toast('Enter a row from 1 to '+active.rows+' and a column from 1 to '+active.cols+'.');
+    }
+    selected={row,col};
+    view.x=canvasWidth/2-(M+(col-.5)*CELL)*view.scale;
+    view.y=canvasHeight/2-(M+(active.rows-row+.5)*CELL)*view.scale;
+    updateSelection();requestDraw();
+  });
+  for(const [id,dx,dy] of [['motifUp',0,1],['motifDown',0,-1],['motifLeft',-1,0],['motifRight',1,0]]){
+    $(id).addEventListener('click',()=>{if(motifPreview)moveMotifPreview(motifPreview.col+dx,motifPreview.row+dy);});
+  }
+  $('cancelMotif').addEventListener('click',clearMotifPreview);
+  $('applyMotif').addEventListener('click',()=>{
+    if(!motifPreview||pendingConversion||editBlocked('apply a motif'))return;
+    if(pasteClipboard(motifPreview,{...motifPreview.clip,isMotif:true}))clearMotifPreview();
+  });
   $('crochetView').addEventListener('click',()=>setCrochetView(!document.body.classList.contains('crochet-view')));
   $('resumeCrochet').addEventListener('click',()=>setCrochetView(true));
   $('saveMotif').addEventListener('click',()=>{
@@ -1659,7 +1752,7 @@ function hookPatternEvents(){
   $('rowPrev').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)-1));
   $('rowNext').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)+1));
   $('rowMarkDone').addEventListener('click',()=>{
-    const row=Number($('instructionRow').value);snapshot();active.rowDone[row-1]=active.rowDone[row-1]?0:1;
+    const row=Number($('instructionRow').value);progressSnapshot();active.rowDone[row-1]=active.rowDone[row-1]?0:1;
     scheduleSave();updateSelection();updateProgress();renderRowSequence();requestDraw();
   });
   $('openGuide').addEventListener('click',()=>{if(pendingConversion)return toast('Apply or discard the current chart preview first.');

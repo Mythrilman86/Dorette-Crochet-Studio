@@ -1,5 +1,5 @@
-const CACHE = 'dorette-crochet-v1.2.9';
-const FILES = ['./','./index.html','./styles.css?v=1.2.9','./app.js?v=1.2.9','./pattern-tools.js?v=1.2.9','./pdf-export.js?v=1.2.9','./help.js?v=1.2.9','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
+const CACHE = 'dorette-crochet-v1.3.0';
+const FILES = ['./','./index.html','./styles.css?v=1.3.0','./app.js?v=1.3.0','./pattern-tools.js?v=1.3.0','./pdf-export.js?v=1.3.0','./help.js?v=1.3.0','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });
