@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=0.2.0">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -62,10 +62,34 @@
       <div class="section-divider"></div>
       <div class="inspector-section"><span class="eyebrow">IMAGE TO CHART</span>
         <label class="button secondary block upload-label" for="imageFile">▧ Import chart or photo</label><input id="imageFile" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
-        <p class="muted">Existing charts are placed under the grid as a guide. Specify the exact grid dimensions for accurate stitch counts.</p>
+        <p class="muted">For ordinary photos, crop away the surroundings before converting. For existing gridded charts, enter the known stitch dimensions.</p>
+        <div id="photoCropPanel" class="photo-crop-panel" hidden>
+          <div class="section-title"><strong>Crop the photograph</strong><button id="resetCrop" class="text-button" type="button">Reset</button></div>
+          <canvas id="cropPreview" width="300" height="390" role="img" aria-label="Photograph crop preview. Drag the purple corner handles to crop the picture."></canvas>
+          <p class="muted">Drag the purple corners to select just the artwork, or use the sliders. Nothing outside this crop will become stitches.</p>
+          <div class="crop-sliders">
+            <label class="field">Trim left <input id="cropLeft" type="range" min="0" max="90" value="0"><span class="range-value" id="cropLeftText">0%</span></label>
+            <label class="field">Trim right <input id="cropRight" type="range" min="0" max="90" value="0"><span class="range-value" id="cropRightText">0%</span></label>
+            <label class="field">Trim top <input id="cropTop" type="range" min="0" max="90" value="0"><span class="range-value" id="cropTopText">0%</span></label>
+            <label class="field">Trim bottom <input id="cropBottom" type="range" min="0" max="90" value="0"><span class="range-value" id="cropBottomText">0%</span></label>
+          </div>
+          <button id="shirtCropPreset" class="button ghost block" type="button">Try a T-shirt print starting crop</button>
+          <label class="field">Placement on stitch grid
+            <select id="imagePlacement">
+              <option value="contain">Keep original proportions (may leave margins)</option>
+              <option value="stretch">Fill all cells (may stretch artwork)</option>
+            </select>
+          </label>
+          <p class="muted" id="cropStats" aria-live="polite"></p>
+        </div>
         <label class="field">Reference image opacity<input id="imageOpacity" type="range" min="0" max="100" value="35"><span class="range-value" id="opacityText">35%</span></label>
-        <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" disabled>Convert to stitches</button></div>
-        <p class="muted">Conversion approximates colors by sampling the image into one color per stitch. Review and correct results before crocheting.</p>
+        <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" disabled>Preview stitches</button></div>
+        <div id="conversionPreview" class="conversion-preview" hidden>
+          <strong id="previewSummary">Conversion preview</strong>
+          <p class="muted">This is only a preview. Review the image at a useful zoom before applying it.</p>
+          <div class="pair"><button id="applyConversion" class="button primary" type="button">Apply chart</button><button id="cancelConversion" class="button ghost" type="button">Discard</button></div>
+        </div>
+        <p class="muted">Photo conversion reduces fine details to colored squares. Small lettering may require a larger grid and manual color corrections.</p>
         <button id="removeImage" class="text-button" disabled>Remove reference image</button>
       </div>
       <div class="section-divider"></div>
@@ -83,6 +107,6 @@
   </main>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js" defer></script>
+  <script src="./app.js?v=0.2.0" defer></script>
 </body>
 </html>

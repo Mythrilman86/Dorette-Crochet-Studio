@@ -8,10 +8,12 @@ const CELL = 23, M = 57, MAX_COLS = 200, MAX_ROWS = 300;
 const DB_NAME = 'dorette-crochet-studio', DB_VERSION = 1;
 const SYMBOLS = 'ABCDEFGHIJKL';
 const DEFAULT_COLORS = [{hex:'#fffdf9',name:'Background',symbol:'A'}];
+const FULL_CROP = Object.freeze({left:0,top:0,right:1,bottom:1});
 const refs = {};
 let db = null, memoryOnly = false, projects = new Map(), activeId = null, active = null;
 let selected = null, undoStack = [], saveTimer = null, writeChain = Promise.resolve();
 let toastTimer = null, referenceImg = null, referenceSrc = '', canvasWidth = 800, canvasHeight = 480;
+let pendingConversion = null, cropPreviewRect = null, cropGesture = null;
 const view = {scale:1, x:0, y:0}, pointers = new Map();
 let gesture = {dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
 let drawingPending = false;
@@ -21,12 +23,22 @@ function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now(
 function blankProject(name, cols, rows) {
   return {id:uid(),name:name.trim()||'Untitled Chart', cols,rows, cells:Array(cols*rows).fill(0),
     done:Array(cols*rows).fill(0), rowDone:Array(rows).fill(0), palette:DEFAULT_COLORS.map(c=>({...c})),
-    referenceImage:null,opacity:0.35,converted:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',converted:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
 function indexFor(col,row) { return (active.rows-row)*active.cols+(col-1); }
 function format(n) {return n.toLocaleString('en-US');}
+function currentCrop(p=active){
+  const c=p?.photoCrop;
+  if(!c||!Number.isFinite(c.left)||!Number.isFinite(c.top)||!Number.isFinite(c.right)||!Number.isFinite(c.bottom)||c.right-c.left<.08||c.bottom-c.top<.08)return {...FULL_CROP};
+  return {left:clamp(c.left,0,.92),top:clamp(c.top,0,.92),right:clamp(c.right,.08,1),bottom:clamp(c.bottom,.08,1)};
+}
+function discardPreview(redraw=true){
+  pendingConversion=null;
+  const box=$('conversionPreview');if(box)box.hidden=true;
+  if(redraw)requestDraw();
+}
 function toast(msg) {const t=$('toast'); t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3300);}
 function status(msg,error=false) {const el=$('saveStatus');el.textContent=msg;el.style.color=error?'#b35269':'#537e64';}
 
@@ -80,7 +92,7 @@ function refreshProjectList(){
   });
 }
 function selectProject(id) {
-  flushSave(); activeId=id;active=projects.get(id);selected=null;undoStack=[];
+  flushSave();discardPreview(false); activeId=id;active=projects.get(id);selected=null;undoStack=[];
   try {localStorage.setItem('dorette-active-project',id);}catch{}
   syncImage();refreshProjectList();refreshInspector();fitChart();
 }
@@ -91,19 +103,20 @@ function refreshInspector(){
   $('colsInput').value=active.cols;$('rowsInput').value=active.rows;
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
   $('convertPhoto').disabled=!active.referenceImage;$('removeImage').disabled=!active.referenceImage;
+  updateCropControls();
   updateSelection();updateProgress();updateLegend();requestDraw();
 }
 function snapshot() {
   if(!active)return;
   undoStack.push({name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),
     rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
-    opacity:active.opacity,converted:active.converted});
+    opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',converted:active.converted});
   if(undoStack.length>30)undoStack.shift();
   $('undoButton').disabled=false;
 }
 function undo(){
   const previous=undoStack.pop();if(!previous||!active)return;
-  Object.assign(active,previous);
+  discardPreview(false);Object.assign(active,previous);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   $('undoButton').disabled=undoStack.length===0;
   syncImage();scheduleSave();refreshInspector();toast('Last change undone');
@@ -195,19 +208,71 @@ function editDimensions(){
   }
   Object.assign(active,{cols,rows,cells:newCells,done:newDone,rowDone:newRows});
   if(selected&&(selected.col>cols||selected.row>rows))selected=null;
-  scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
+  discardPreview(false);scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
 }
 function syncImage(){
   const src=active?.referenceImage||'';
   if(src===referenceSrc)return;
   referenceSrc=src;referenceImg=null;
-  if(!src){requestDraw();return;}
-  const img=new Image();img.onload=()=>{if(referenceSrc===src){referenceImg=img;requestDraw();}};
+  if(!src){drawCropPreview();requestDraw();return;}
+  const img=new Image();img.onload=()=>{if(referenceSrc===src){referenceImg=img;drawCropPreview();updateCropStats();requestDraw();}};
   img.onerror=()=>toast('Unable to load the reference image');img.src=src;
 }
 function imageContainRect(img, bx,by,bw,bh){
   const ratio=Math.min(bw/img.width,bh/img.height),w=img.width*ratio,h=img.height*ratio;
   return {x:bx+(bw-w)/2,y:by+(bh-h)/2,w,h};
+}
+function renderCroppedImage(target,img,x,y,w,h){
+  const crop=currentCrop(),sx=crop.left*img.width,sy=crop.top*img.height;
+  const sw=(crop.right-crop.left)*img.width,sh=(crop.bottom-crop.top)*img.height;
+  let dest={x,y,w,h};
+  if(active?.imagePlacement!=='stretch')dest=imageContainRect({width:sw,height:sh},x,y,w,h);
+  target.drawImage(img,sx,sy,sw,sh,dest.x,dest.y,dest.w,dest.h);
+  return dest;
+}
+function updateCropControls(){
+  const panel=$('photoCropPanel');if(!panel||!active)return;
+  panel.hidden=!active.referenceImage;
+  const c=currentCrop();
+  for(const [id,value] of Object.entries({cropLeft:c.left,cropRight:1-c.right,cropTop:c.top,cropBottom:1-c.bottom})){
+    $(id).value=String(Math.round(value*100));$(id+'Text').textContent=Math.round(value*100)+'%';
+  }
+  $('imagePlacement').value=active.imagePlacement==='stretch'?'stretch':'contain';
+  updateCropStats();drawCropPreview();
+}
+function updateCropStats(){
+  if(!active||!referenceImg)return;
+  const c=currentCrop(),w=(c.right-c.left)*referenceImg.width,h=(c.bottom-c.top)*referenceImg.height;
+  const chartRatio=active.cols/active.rows,cropRatio=w/h;
+  const delta=Math.round(Math.abs(1-chartRatio/cropRatio)*100);
+  $('cropStats').textContent=active.imagePlacement==='stretch'
+    ? `The cropped artwork will fill all ${active.cols} × ${active.rows} cells. Its shape may be stretched (${delta}% approximate aspect-ratio difference).`
+    : `Artwork proportions preserved. The chart may have blank margins (${delta}% approximate aspect-ratio difference).`;
+}
+function drawCropPreview(){
+  const cv=$('cropPreview');if(!cv)return;
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height;
+  g.fillStyle='#f4f0f7';g.fillRect(0,0,W,H);cropPreviewRect=null;
+  if(!referenceImg||!active?.referenceImage)return;
+  const ir=imageContainRect(referenceImg,10,10,W-20,H-20);cropPreviewRect=ir;
+  g.drawImage(referenceImg,ir.x,ir.y,ir.w,ir.h);
+  const c=currentCrop(),x=ir.x+c.left*ir.w,y=ir.y+c.top*ir.h,w=(c.right-c.left)*ir.w,h=(c.bottom-c.top)*ir.h;
+  g.fillStyle='rgba(21,13,33,.57)';
+  g.fillRect(ir.x,ir.y,ir.w,y-ir.y);g.fillRect(ir.x,y,x-ir.x,h);
+  g.fillRect(x+w,y,(ir.x+ir.w)-(x+w),h);g.fillRect(ir.x,y+h,ir.w,(ir.y+ir.h)-(y+h));
+  g.strokeStyle='#fff';g.lineWidth=4;g.strokeRect(x,y,w,h);g.strokeStyle='#6c3ab0';g.lineWidth=2;g.strokeRect(x,y,w,h);
+  for(const [px,py] of [[x,y],[x+w,y],[x,y+h],[x+w,y+h]]){
+    g.fillStyle='#fff';g.fillRect(px-7,py-7,14,14);g.strokeStyle='#6c3ab0';g.lineWidth=2;g.strokeRect(px-7,py-7,14,14);
+  }
+}
+function setCropEdge(edge,value){
+  if(!active)return;
+  const c=currentCrop();const min=.08;
+  if(edge==='left')c.left=clamp(value,0,c.right-min);
+  if(edge==='right')c.right=clamp(value,c.left+min,1);
+  if(edge==='top')c.top=clamp(value,0,c.bottom-min);
+  if(edge==='bottom')c.bottom=clamp(value,c.top+min,1);
+  active.photoCrop=c;discardPreview(false);scheduleSave();updateCropControls();requestDraw();
 }
 function requestDraw(){if(!drawingPending){drawingPending=true;requestAnimationFrame(()=>{drawingPending=false;draw();});}}
 function resizeCanvas(){
@@ -251,15 +316,17 @@ function draw(){
   const minCol=clamp(Math.floor(((-view.x/s)-M)/CELL),0,cols),maxCol=clamp(Math.ceil(((canvasWidth-view.x)/s-M)/CELL),0,cols);
   const minRow=clamp(Math.floor(((-view.y/s)-M)/CELL),0,rows),maxRow=clamp(Math.ceil(((canvasHeight-view.y)/s-M)/CELL),0,rows);
   if(referenceImg&&active.opacity>0&&!active.converted){
-    const ir=imageContainRect(referenceImg,M,M,bw,bh);ctx.save();ctx.globalAlpha=active.opacity;ctx.drawImage(referenceImg,ir.x,ir.y,ir.w,ir.h);ctx.restore();
+    ctx.save();ctx.globalAlpha=active.opacity;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
   }
-  if(active.converted){
+  const displayedConversion=pendingConversion?.projectId===active.id?pendingConversion:null;
+  if(active.converted||displayedConversion){
+    const colorCells=displayedConversion?.cells||active.cells,colors=displayedConversion?.palette||active.palette;
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
-      const i=r*cols+c, color=active.palette[active.cells[i]]||DEFAULT_COLORS[0];
+      const i=r*cols+c, color=colors[colorCells[i]]||DEFAULT_COLORS[0];
       ctx.fillStyle=color.hex;ctx.fillRect(M+c*CELL,M+r*CELL,CELL,CELL);
     }
     if(referenceImg&&active.opacity>0){
-      const ir=imageContainRect(referenceImg,M,M,bw,bh);ctx.save();ctx.globalAlpha=active.opacity*.2;ctx.drawImage(referenceImg,ir.x,ir.y,ir.w,ir.h);ctx.restore();
+      ctx.save();ctx.globalAlpha=active.opacity*.2;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
     }
   }
   if(selected){
@@ -286,12 +353,12 @@ function draw(){
   }
   ctx.stroke();
   ctx.strokeStyle='#6d578e';ctx.lineWidth=1.8/s;ctx.strokeRect(M,M,bw,bh);
-  if(active.converted && CELL*s>=16){
+  if((active.converted||displayedConversion) && CELL*s>=16){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
       if(active.done[i]||active.rowDone[rowNum-1])continue;
-      const color=active.palette[active.cells[i]]||DEFAULT_COLORS[0];
+      const color=(displayedConversion?.palette||active.palette)[(displayedConversion?.cells||active.cells)[i]]||DEFAULT_COLORS[0];
       const rHex=parseInt(color.hex.slice(1,3),16),gHex=parseInt(color.hex.slice(3,5),16),bHex=parseInt(color.hex.slice(5,7),16);
       ctx.fillStyle=(rHex*.299+gHex*.587+bHex*.114)>145?'#312b3d':'#fff';
       ctx.fillText(color.symbol,M+(c+.5)*CELL,M+(r+.5)*CELL);
@@ -380,9 +447,10 @@ async function importImage(file){
   try{
     status('Processing image…');const data=await normalizeImage(file);
     if(!projects.has(id)||active.id!==id){toast('Project changed; image import canceled.');return;}
-    snapshot();active.referenceImage=data;active.converted=false;
+    snapshot();discardPreview(false);active.referenceImage=data;active.converted=false;
+    active.photoCrop={...FULL_CROP};active.imagePlacement='contain';
     active.palette=DEFAULT_COLORS.map(c=>({...c}));active.cells.fill(0);
-    active.opacity=.35;syncImage();scheduleSave();refreshInspector();toast('Image added below the grid. Check dimensions before converting.');
+    active.opacity=.35;syncImage();scheduleSave();refreshInspector();toast('Image loaded. Crop the artwork before previewing stitches.');
   }catch(e){toast('Image import failed: '+e.message);status('Image import failed',true);}
 }
 function hexRGB(rgb){return '#'+rgb.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');}
@@ -395,7 +463,7 @@ async function convertImage(){
     // Four rendered pixels per stitch: sample the center region, reducing grid-line contamination.
     const sampling=document.createElement('canvas');sampling.width=cols*4;sampling.height=rows*4;
     const sc=sampling.getContext('2d',{willReadFrequently:true});sc.fillStyle='#fff';sc.fillRect(0,0,sampling.width,sampling.height);
-    const ir=imageContainRect(img,0,0,sampling.width,sampling.height);sc.drawImage(img,ir.x,ir.y,ir.w,ir.h);
+    renderCroppedImage(sc,img,0,0,sampling.width,sampling.height);
     const pixels=sc.getImageData(0,0,sampling.width,sampling.height).data;
     const values=[];
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
@@ -425,9 +493,11 @@ async function convertImage(){
     const used=Array(n).fill(0);clustered.forEach(i=>used[i]++);
     const order=used.map((count,i)=>({i,count})).filter(v=>v.count>0).sort((a,b)=>b.count-a.count);
     const indices=new Map(order.map((v,i)=>[v.i,i]));
-    snapshot();active.palette=order.map((v,i)=>({hex:hexRGB(centers[v.i]),name:'Yarn color '+(i+1),symbol:SYMBOLS[i]}));
-    active.cells=clustered.map(i=>indices.get(i));active.converted=true;active.opacity=0;
-    scheduleSave();refreshInspector();toast(`Created a ${cols} × ${rows} chart with ${active.palette.length} colors. Verify the result.`);
+    pendingConversion={projectId:active.id,palette:order.map((v,i)=>({hex:hexRGB(centers[v.i]),name:'Yarn color '+(i+1),symbol:SYMBOLS[i]})),cells:clustered.map(i=>indices.get(i))};
+    $('previewSummary').textContent=`Preview: ${cols} × ${rows} stitches · ${pendingConversion.palette.length} colors`;
+    $('conversionPreview').hidden=false;
+    requestDraw();status('Preview only — no chart changes saved');
+    toast('Preview ready! Zoom in, then apply or discard it.');
   }catch(e){toast('Conversion failed: '+e.message);status('Conversion failed',true);}
 }
 
@@ -494,7 +564,7 @@ function validateBackup(p){
   if(p.referenceImage!==null&&p.referenceImage!==undefined&&(typeof p.referenceImage!=='string'||p.referenceImage.length>22*1024*1024||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/i.test(p.referenceImage)))throw new Error('Invalid reference image');
   return {id:uid(),name:p.name.trim()+' (restored)',cols:p.cols,rows:p.rows,cells:p.cells.slice(),done:p.done.slice(),rowDone:p.rowDone.slice(),
     palette:p.palette.map(c=>({hex:c.hex,name:c.name,symbol:c.symbol})),referenceImage:p.referenceImage||null,
-    opacity:clamp(Number(p.opacity)||0,0,1),converted:!!p.converted,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',converted:!!p.converted,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 async function restoreBackup(file){
   if(!file)return;
@@ -538,9 +608,55 @@ function hookEvents(){
   $('markStitch').addEventListener('click',markStitch);$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
   $('imageFile').addEventListener('change',ev=>{importImage(ev.target.files[0]);ev.target.value='';});
+  for(const [id,edge,fromTrim] of [['cropLeft','left',false],['cropRight','right',true],['cropTop','top',false],['cropBottom','bottom',true]]){
+    $(id).addEventListener('pointerdown',()=>snapshot());
+    $(id).addEventListener('input',ev=>setCropEdge(edge,fromTrim?1-Number(ev.target.value)/100:Number(ev.target.value)/100));
+    $(id).addEventListener('change',ev=>setCropEdge(edge,fromTrim?1-Number(ev.target.value)/100:Number(ev.target.value)/100));
+  }
+  $('resetCrop').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={...FULL_CROP};discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
+  $('shirtCropPreset').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={left:.20,top:.34,right:.80,bottom:.96};discardPreview(false);scheduleSave();updateCropControls();requestDraw();toast('Starting crop applied. Adjust corners to capture all of the design.');});
+  $('imagePlacement').addEventListener('change',ev=>{if(!active)return;snapshot();active.imagePlacement=ev.target.value==='stretch'?'stretch':'contain';discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
+  $('cropPreview').addEventListener('pointerdown',ev=>{
+    if(!active?.referenceImage||!cropPreviewRect)return;
+    const cv=$('cropPreview'),rect=cv.getBoundingClientRect();
+    const x=(ev.clientX-rect.left)*cv.width/rect.width,y=(ev.clientY-rect.top)*cv.height/rect.height;
+    const ir=cropPreviewRect,c=currentCrop();
+    const edges=[[c.left,c.top,'tl'],[c.right,c.top,'tr'],[c.left,c.bottom,'bl'],[c.right,c.bottom,'br']];
+    const nearest=edges.map(([fx,fy,mode])=>({mode,dist:Math.hypot(ir.x+fx*ir.w-x,ir.y+fy*ir.h-y)})).sort((a,b)=>a.dist-b.dist)[0];
+    const inside=x>=ir.x+c.left*ir.w&&x<=ir.x+c.right*ir.w&&y>=ir.y+c.top*ir.h&&y<=ir.y+c.bottom*ir.h;
+    if(nearest.dist>25&&!inside)return;
+    cropGesture={mode:nearest.dist<=25?nearest.mode:'move',startX:x,startY:y,original:c};
+    snapshot();cv.setPointerCapture(ev.pointerId);ev.preventDefault();
+  });
+  $('cropPreview').addEventListener('pointermove',ev=>{
+    if(!cropGesture||!active?.referenceImage||!cropPreviewRect)return;
+    const cv=$('cropPreview'),rect=cv.getBoundingClientRect(),ir=cropPreviewRect;
+    const x=(ev.clientX-rect.left)*cv.width/rect.width,y=(ev.clientY-rect.top)*cv.height/rect.height;
+    const g=cropGesture,c={...g.original},min=.08;
+    const dx=(x-g.startX)/ir.w,dy=(y-g.startY)/ir.h;
+    if(g.mode==='move'){
+      const mx=clamp(dx,-c.left,1-c.right),my=clamp(dy,-c.top,1-c.bottom);
+      c.left+=mx;c.right+=mx;c.top+=my;c.bottom+=my;
+    }else{
+      if(g.mode.includes('l'))c.left=clamp(c.left+dx,0,c.right-min);
+      if(g.mode.includes('r'))c.right=clamp(c.right+dx,c.left+min,1);
+      if(g.mode.includes('t'))c.top=clamp(c.top+dy,0,c.bottom-min);
+      if(g.mode.includes('b'))c.bottom=clamp(c.bottom+dy,c.top+min,1);
+    }
+    active.photoCrop=c;discardPreview(false);scheduleSave();updateCropControls();requestDraw();ev.preventDefault();
+  });
+  const endCropGesture=()=>{cropGesture=null;};
+  $('cropPreview').addEventListener('pointerup',endCropGesture);
+  $('cropPreview').addEventListener('pointercancel',endCropGesture);
+  $('applyConversion').addEventListener('click',()=>{
+    if(!active||pendingConversion?.projectId!==active.id)return;
+    snapshot();active.palette=pendingConversion.palette.map(c=>({...c}));active.cells=pendingConversion.cells.slice();active.converted=true;active.opacity=0;
+    discardPreview(false);scheduleSave();refreshInspector();toast('Converted chart applied and saved. Review fine text and colors.');
+  });
+  $('cancelConversion').addEventListener('click',()=>{discardPreview();status(memoryOnly?'Storage blocked — export backups':'✓ Saved on this device',memoryOnly);toast('Preview discarded; original project unchanged.');});
   $('imageOpacity').addEventListener('input',ev=>{if(!active)return;active.opacity=Number(ev.target.value)/100;$('opacityText').textContent=ev.target.value+'%';requestDraw();scheduleSave();});
   $('convertPhoto').addEventListener('click',convertImage);
-  $('removeImage').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();toast('Reference image removed.');});
+  $('removeImage').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();toast('Reference image removed.');});
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());
