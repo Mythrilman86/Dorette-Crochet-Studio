@@ -531,9 +531,72 @@ function previewTextConfig(){
     color:clamp(Number($('textColor').value)||0,0,Math.max(0,(active?.palette.length||1)-1))
   };
 }
+const stitchGlyphs={
+  "0": [14, 17, 19, 21, 25, 17, 14],
+  "1": [4, 12, 4, 4, 4, 4, 14],
+  "2": [14, 17, 1, 2, 4, 8, 31],
+  "3": [30, 1, 1, 6, 1, 17, 30],
+  "4": [2, 6, 10, 18, 31, 2, 2],
+  "5": [31, 16, 16, 30, 1, 1, 30],
+  "6": [14, 16, 16, 30, 17, 17, 14],
+  "7": [31, 1, 2, 4, 8, 8, 8],
+  "8": [14, 17, 17, 14, 17, 17, 14],
+  "9": [14, 17, 17, 15, 1, 1, 14],
+  "A": [14, 17, 17, 31, 17, 17, 17],
+  "B": [30, 17, 17, 30, 17, 17, 30],
+  "C": [15, 16, 16, 16, 16, 16, 15],
+  "D": [30, 17, 17, 17, 17, 17, 30],
+  "E": [31, 16, 16, 30, 16, 16, 31],
+  "F": [31, 16, 16, 30, 16, 16, 16],
+  "G": [15, 16, 16, 23, 17, 17, 15],
+  "H": [17, 17, 17, 31, 17, 17, 17],
+  "I": [31, 4, 4, 4, 4, 4, 31],
+  "J": [7, 2, 2, 2, 18, 18, 12],
+  "K": [17, 18, 20, 24, 20, 18, 17],
+  "L": [16, 16, 16, 16, 16, 16, 31],
+  "M": [17, 27, 21, 21, 17, 17, 17],
+  "N": [17, 25, 21, 19, 17, 17, 17],
+  "O": [14, 17, 17, 17, 17, 17, 14],
+  "P": [30, 17, 17, 30, 16, 16, 16],
+  "Q": [14, 17, 17, 17, 21, 18, 13],
+  "R": [30, 17, 17, 30, 20, 18, 17],
+  "S": [15, 16, 16, 14, 1, 1, 30],
+  "T": [31, 4, 4, 4, 4, 4, 4],
+  "U": [17, 17, 17, 17, 17, 17, 14],
+  "V": [17, 17, 17, 17, 17, 10, 4],
+  "W": [17, 17, 17, 21, 21, 21, 10],
+  "X": [17, 17, 10, 4, 10, 17, 17],
+  "Y": [17, 17, 10, 4, 4, 4, 4],
+  "Z": [31, 1, 2, 4, 8, 16, 31],
+  " ": [0, 0, 0, 0, 0, 0, 0],
+  "!": [4, 4, 4, 4, 4, 0, 4],
+  "?": [14, 17, 1, 2, 4, 0, 4],
+  ".": [0, 0, 0, 0, 0, 0, 4],
+  "-": [0, 0, 0, 31, 0, 0, 0]
+};
 function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
   if(!text)return null;
+  const letters=Array.from(text.toUpperCase());
+  if(letters.every(letter=>Object.hasOwn(stitchGlyphs,letter))){
+    const vertical=config.orientation==='vertical';
+    const width=vertical?5:letters.length*6-1;
+    const height=vertical?letters.length*8-1:7;
+    const scale=Math.min(config.scale,Math.floor((active.cols-config.col+1)/width),Math.floor(config.row/height));
+    if(scale<1)return {width,height,occupied:[],tooLarge:true};
+    const occupied=[];
+    letters.forEach((letter,index)=>{
+      stitchGlyphs[letter].forEach((bits,row)=>{
+        for(let col=0;col<5;col++){
+          if(!(bits & (16 >> col)))continue;
+          const x=(col+(vertical?0:index*6))*scale;
+          const y=(row+(vertical?index*8:0))*scale;
+          for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++)occupied.push({x:x+dx,y:y+dy});
+        }
+      });
+    });
+    return {width:width*scale,height:height*scale,occupied,scaledDown:scale<config.scale};
+  }
   const cellPx=8, fontSize=12+config.scale*6, pad=4+config.scale*2;
   const off=document.createElement('canvas'),g=off.getContext('2d');
   g.font=`900 ${fontSize}px system-ui, sans-serif`;
@@ -559,8 +622,17 @@ function rasterizeTextPattern(config){
 }
 function buildTextPreview(){
   if(!active)return null;
+  const feedback=$('textFitStatus');
+  feedback.textContent='';
   const config=previewTextConfig(),mask=rasterizeTextPattern(config);
   if(!mask){textPreview=null;requestDraw();return null;}
+  if(mask.tooLarge||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
+    feedback.textContent='Text does not fit here. Move it, shorten it, or choose a larger chart.';
+    textPreview={...config,cells:[]};
+    requestDraw();
+    return textPreview;
+  }
+  if(mask.scaledDown)feedback.textContent='Text was reduced to fit the available stitches.';
   const cells=[];
   for(const pt of mask.occupied){
     const col=config.col+pt.x,row=config.row-pt.y;
@@ -570,7 +642,7 @@ function buildTextPreview(){
   requestDraw();
   return textPreview;
 }
-function clearTextPreview(){textPreview=null;requestDraw();}
+function clearTextPreview(){textPreview=null;$('textFitStatus').textContent='';requestDraw();}
 function drawTextPreviewOverlay(ctx,preview,cols,rows){
   const color=active.palette[preview.color]||active.palette[0]||DEFAULT_COLORS[0];
   ctx.save();
@@ -592,7 +664,7 @@ function drawTextPreviewOverlay(ctx,preview,cols,rows){
 function applyTextPreview(){
   if(!active||pendingConversion||editBlocked('apply text to the chart'))return;
   const preview=buildTextPreview();
-  if(!preview||!preview.cells.length)return toast('Preview some text first.');
+  if(!preview||!preview.cells.length)return toast($('textFitStatus').textContent||'Enter some text first.');
   if(!preview.cells.some(cell=>active.cells[indexFor(cell.col,cell.row)]!==preview.color)){
     return toast('That text preview would not change any stitches.');
   }
@@ -1536,7 +1608,7 @@ function hookEvents(){
   for(const id of ['textInput','textOrientation','textScale','textCol','textRow','textColor']){
     $(id).addEventListener('input',()=>{if(textPreview)buildTextPreview();});
   }
-  $('previewText').addEventListener('click',()=>{if(!active)return;const preview=buildTextPreview();if(preview?.cells?.length)toast(`Previewing text across ${preview.width} × ${preview.height} cells.`);else toast('Type some text first.');});
+  $('previewText').addEventListener('click',()=>{if(!active)return;const preview=buildTextPreview();if(preview?.cells?.length)toast(`Previewing text across ${preview.width} × ${preview.height} cells.`);else if(!$('textFitStatus').textContent)toast('Type some text first.');});
   $('clearTextPreview').addEventListener('click',()=>{clearTextPreview();toast('Text preview cleared.');});
   $('applyText').addEventListener('click',applyTextPreview);
   $('textLeft').addEventListener('click',()=>nudgeText(-1,0));
