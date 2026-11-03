@@ -532,47 +532,47 @@ function previewTextConfig(){
   };
 }
 const stitchGlyphs={
-  "0": [14, 17, 19, 21, 25, 17, 14],
-  "1": [4, 12, 4, 4, 4, 4, 14],
-  "2": [14, 17, 1, 2, 4, 8, 31],
-  "3": [30, 1, 1, 6, 1, 17, 30],
-  "4": [2, 6, 10, 18, 31, 2, 2],
-  "5": [31, 16, 16, 30, 1, 1, 30],
-  "6": [14, 16, 16, 30, 17, 17, 14],
-  "7": [31, 1, 2, 4, 8, 8, 8],
-  "8": [14, 17, 17, 14, 17, 17, 14],
-  "9": [14, 17, 17, 15, 1, 1, 14],
-  "A": [14, 17, 17, 31, 17, 17, 17],
-  "B": [30, 17, 17, 30, 17, 17, 30],
-  "C": [15, 16, 16, 16, 16, 16, 15],
-  "D": [30, 17, 17, 17, 17, 17, 30],
-  "E": [31, 16, 16, 30, 16, 16, 31],
-  "F": [31, 16, 16, 30, 16, 16, 16],
-  "G": [15, 16, 16, 23, 17, 17, 15],
-  "H": [17, 17, 17, 31, 17, 17, 17],
-  "I": [31, 4, 4, 4, 4, 4, 31],
-  "J": [7, 2, 2, 2, 18, 18, 12],
-  "K": [17, 18, 20, 24, 20, 18, 17],
-  "L": [16, 16, 16, 16, 16, 16, 31],
-  "M": [17, 27, 21, 21, 17, 17, 17],
-  "N": [17, 25, 21, 19, 17, 17, 17],
-  "O": [14, 17, 17, 17, 17, 17, 14],
-  "P": [30, 17, 17, 30, 16, 16, 16],
-  "Q": [14, 17, 17, 17, 21, 18, 13],
-  "R": [30, 17, 17, 30, 20, 18, 17],
-  "S": [15, 16, 16, 14, 1, 1, 30],
-  "T": [31, 4, 4, 4, 4, 4, 4],
-  "U": [17, 17, 17, 17, 17, 17, 14],
-  "V": [17, 17, 17, 17, 17, 10, 4],
-  "W": [17, 17, 17, 21, 21, 21, 10],
-  "X": [17, 17, 10, 4, 10, 17, 17],
-  "Y": [17, 17, 10, 4, 4, 4, 4],
-  "Z": [31, 1, 2, 4, 8, 16, 31],
-  " ": [0, 0, 0, 0, 0, 0, 0],
-  "!": [4, 4, 4, 4, 4, 0, 4],
-  "?": [14, 17, 1, 2, 4, 0, 4],
-  ".": [0, 0, 0, 0, 0, 0, 4],
-  "-": [0, 0, 0, 31, 0, 0, 0]
+  "0": [7, 5, 5, 5, 7],
+  "1": [2, 6, 2, 2, 7],
+  "2": [7, 1, 2, 4, 7],
+  "3": [7, 1, 3, 1, 7],
+  "4": [5, 5, 7, 1, 1],
+  "5": [7, 4, 6, 1, 7],
+  "6": [7, 4, 6, 5, 7],
+  "7": [7, 1, 1, 1, 1],
+  "8": [7, 5, 7, 5, 7],
+  "9": [7, 5, 7, 1, 7],
+  "A": [2, 5, 7, 5, 5],
+  "B": [6, 5, 6, 5, 6],
+  "C": [3, 1, 1, 1, 3],
+  "D": [6, 5, 5, 5, 6],
+  "E": [7, 4, 6, 4, 7],
+  "F": [7, 4, 6, 4, 4],
+  "G": [3, 4, 5, 5, 3],
+  "H": [5, 5, 7, 5, 5],
+  "I": [7, 2, 2, 2, 7],
+  "J": [1, 1, 1, 5, 2],
+  "K": [5, 5, 6, 5, 5],
+  "L": [4, 4, 4, 4, 7],
+  "M": [5, 7, 7, 5, 5],
+  "N": [5, 7, 7, 7, 5],
+  "O": [15, 9, 9, 9, 15],
+  "P": [6, 5, 6, 4, 4],
+  "Q": [7, 5, 5, 7, 3],
+  "R": [6, 5, 6, 5, 5],
+  "S": [3, 4, 6, 1, 6],
+  "T": [7, 2, 2, 2, 2],
+  "U": [5, 5, 5, 5, 7],
+  "V": [5, 5, 5, 5, 2],
+  "W": [5, 5, 7, 7, 5],
+  "X": [5, 5, 2, 5, 5],
+  "Y": [5, 5, 2, 2, 2],
+  "Z": [7, 1, 2, 4, 7],
+  " ": [0, 0, 0, 0, 0],
+  "!": [2, 2, 2, 0, 2],
+  "?": [7, 1, 2, 0, 2],
+  ".": [0, 0, 0, 0, 2],
+  "-": [0, 0, 7, 0, 0]
 };
 function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
@@ -580,20 +580,23 @@ function rasterizeTextPattern(config){
   const letters=Array.from(text.toUpperCase());
   if(letters.every(letter=>Object.hasOwn(stitchGlyphs,letter))){
     const vertical=config.orientation==='vertical';
-    const width=vertical?5:letters.length*6-1;
-    const height=vertical?letters.length*8-1:7;
+    const widths=letters.map(letter=>letter==="O"?4:3);
+    const width=vertical?Math.max(...widths):widths.reduce((sum,w)=>sum+w+1,0)-1;
+    const height=vertical?letters.length*6-1:5;
     const scale=Math.min(config.scale,Math.floor((active.cols-config.col+1)/width),Math.floor(config.row/height));
     if(scale<1)return {width,height,occupied:[],tooLarge:true};
     const occupied=[];
+    let offset=0;
     letters.forEach((letter,index)=>{
       stitchGlyphs[letter].forEach((bits,row)=>{
-        for(let col=0;col<5;col++){
-          if(!(bits & (16 >> col)))continue;
-          const x=(col+(vertical?0:index*6))*scale;
-          const y=(row+(vertical?index*8:0))*scale;
+        for(let col=0;col<widths[index];col++){
+          if(!(bits & (1 << (widths[index]-1-col))))continue;
+          const x=(col+(vertical?0:offset))*scale;
+          const y=(row+(vertical?index*6:0))*scale;
           for(let dy=0;dy<scale;dy++)for(let dx=0;dx<scale;dx++)occupied.push({x:x+dx,y:y+dy});
         }
       });
+      offset+=widths[index]+1;
     });
     return {width:width*scale,height:height*scale,occupied,scaledDown:scale<config.scale};
   }
