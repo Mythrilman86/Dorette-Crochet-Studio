@@ -58,7 +58,14 @@
     const across=Math.ceil(p.cols/Math.max(1,capacityCols-2*overlap));
     const down=Math.ceil(p.rows/Math.max(1,capacityRows-2*overlap));
     const perCols=Math.ceil(p.cols/across),perRows=Math.ceil(p.rows/down);
-    return {W,H,cell,margin,gridTop,gridBottom,gridLeft,gridRight,perCols,perRows,across,down,pages:2+across*down,
+    const sectionSize=Math.max(5,Math.min(100,Math.floor(Number(options.sectionSize)||25)));
+    const notes=String(options.notes||'').slice(0,1500);
+    const noteLines=notes.split(/\r?\n/).flatMap(line=>line.match(/.{1,78}/g)||['']);
+    const checklistCapacity=Math.max(1,Math.floor((H-220)/15));
+    const notesCapacity=Math.max(1,Math.floor((H-230)/18));
+    const checklistPages=Math.ceil(Math.ceil(p.cols/sectionSize)*Math.ceil(p.rows/sectionSize)/checklistCapacity);
+    const notesPages=Math.ceil(noteLines.length/notesCapacity);
+    return {W,H,cell,margin,gridTop,gridBottom,gridLeft,gridRight,perCols,perRows,across,down,pages:2+across*down+(options.extraPages?checklistPages+notesPages:0),extraPages:!!options.extraPages,sectionSize,noteLines,checklistCapacity,notesCapacity,
       paper:options.paper==='a4'?'a4':'letter',orientation:landscape?'landscape':'portrait',
       monochrome:!!options.monochrome,completed:!!options.completed,overlap};
   }
@@ -231,6 +238,16 @@
       const yy=y+r*cell;
       g.line(x-16,yy,x+w+16,yy,'#b6afbf',.34);
     }
+    if(conf.sectionSize){
+      // Emphasize work-section boundaries at their absolute stitch positions.
+      for(let absoluteC=conf.sectionSize;absoluteC<p.cols;absoluteC+=conf.sectionSize){
+        if(absoluteC>c0&&absoluteC<c0+countC)g.line(x+(absoluteC-c0)*cell,y,x+(absoluteC-c0)*cell,y+h,'#8b52b1',1.1);
+      }
+      for(let rowFromBottom=conf.sectionSize;rowFromBottom<p.rows;rowFromBottom+=conf.sectionSize){
+        const absoluteTop=p.rows-rowFromBottom;
+        if(absoluteTop>r0&&absoluteTop<r0+countR)g.line(x,y+(absoluteTop-r0)*cell,x+w,y+(absoluteTop-r0)*cell,'#8b52b1',1.1);
+      }
+    }
     g.outline(x,y,w,h,'#5b457a',.8);
     if(conf.overlap){
       // Distinguish duplicate edge cells without changing any yarn colors or
@@ -291,7 +308,30 @@
     for(let row=0;row<conf.down;row++)for(let col=0;col<conf.across;col++){
       const detail=new Painter(conf.W,conf.H,conf.monochrome);detailPage(detail,p,conf,col,row,pages.length+1);pages.push(detail);
     }
-    return {bytes:pdfBuilder(pages,{title:safeName(p.name)+' - Crochet Chart'}),pages:conf.pages};
+    if(conf.extraPages){
+      const sections=[];for(let r=1;r<=p.rows;r+=conf.sectionSize)for(let c=1;c<=p.cols;c+=conf.sectionSize){
+        const top=Math.min(p.rows,r+conf.sectionSize-1),right=Math.min(p.cols,c+conf.sectionSize-1);
+        let done=0;for(let row=r;row<=top;row++)for(let col=c;col<=right;col++)if(p.rowDone?.[row-1]||p.done?.[(p.rows-row)*p.cols+col-1])done++;
+        sections.push(`Section ${sections.length+1}: C ${c}-${right}, R ${r}-${top} | ${done}/${(right-c+1)*(top-r+1)} done`);
+      }
+      for(let start=0;start<sections.length;start+=conf.checklistCapacity){
+        const list=new Painter(conf.W,conf.H,false);
+        chrome(list,'Working sections & checklist',`Sections are ${conf.sectionSize} x ${conf.sectionSize} chart cells.`,p,pages.length+1,conf.pages);
+        list.text('Completed sections: check these as you work',42,108,10,true);
+        sections.slice(start,start+conf.checklistCapacity).forEach((txt,i)=>list.text('[   ] '+txt,43,138+i*15,8));
+        pages.push(list);
+      }
+      for(let start=0;start<conf.noteLines.length;start+=conf.notesCapacity){
+        const notes=new Painter(conf.W,conf.H,false);
+        chrome(notes,'Project notes',`Crochet project: ${cropText(p.name,50)}`,p,pages.length+1,conf.pages);
+        const lines=conf.noteLines.slice(start,start+conf.notesCapacity);
+        notes.text('Use this page for hook size, yarn details, changes and reminders.',43,112,9);
+        lines.forEach((line,i)=>notes.text(line,43,146+i*18,9));
+        for(let y=158+lines.length*18;y<conf.H-84;y+=29)notes.line(43,y,conf.W-43,y,'#e8e0ee',.5);
+        pages.push(notes);
+      }
+    }
+    return {bytes:pdfBuilder(pages,{title:safeName(p.name)+' - Crochet Chart'}),pages:pages.length};
   }
   // Written colorwork PDF uses the same saved grid as the numbered chart PDF.
   // No source photo, API, cloud service or online library is required.

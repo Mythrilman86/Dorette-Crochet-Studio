@@ -165,3 +165,35 @@ body[data-studio-mode="crochet"] .stitch-editor,body[data-studio-mode="crochet"]
 body[data-studio-mode="create"] .inspector-section:not(.create-section):not(.always-section),body[data-studio-mode="edit"] .inspector-section:not(.edit-section):not(.always-section),body[data-studio-mode="crochet"] .inspector-section:not(.crochet-section):not(.always-section){display:none}
 @media(max-width:720px){.advanced-text-controls{grid-template-columns:1fr}.studio-modes button{flex:1}.layer-line{grid-template-columns:auto minmax(0,1fr) auto}.layer-line button:last-child{grid-column:3}}
 .layer-move-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.layer-move-row .button{min-width:0;min-height:42px}
+
+/* 1.5.0 — project gallery and flexible working panels */
+.gallery-item{display:flex;align-items:center;gap:8px;padding:6px;background:#fff;border:1px solid #e3d9ee;border-radius:10px;margin:5px 0;min-width:0}
+.gallery-item.active{border-color:#7253ab;background:#f4effa}
+.gallery-thumb{height:50px;width:50px;flex-shrink:0;border-radius:5px;border:1px solid #d6cbe2;image-rendering:pixelated}
+.gallery-choose{min-width:0;flex:1;display:flex;align-items:flex-start;flex-direction:column;gap:3px;background:transparent;border:0;text-align:left;padding:3px;color:#493858;cursor:pointer}
+.gallery-choose strong{overflow-wrap:anywhere;font-size:.77rem}.gallery-choose small{font-size:.65rem;color:#796b86}
+.gallery-favorite{padding:4px;border:0;background:transparent;color:#997020;font-size:1.3rem;cursor:pointer}
+.next-workspace-bar,.section-workbar,.next-technique{background:#fbf8ff;border:1px solid #e0d4ec;border-radius:11px;padding:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.next-workspace-bar label,.section-workbar label,.next-technique label{font-size:.71rem;display:flex;align-items:center;gap:7px}
+.next-workspace-bar input[type=range]{max-width:105px}
+.next-soft{margin-top:12px;border:1px solid #e0d6eb;background:#faf8fd;padding:11px;border-radius:11px}
+.next-soft summary{font-weight:750;font-size:.76rem;cursor:pointer}
+.next-soft label{display:flex;flex-direction:column;font-size:.72rem;font-weight:750;gap:5px;margin:8px 0}
+.next-soft .pair{align-items:flex-end}
+.next-technique{display:block}.next-technique .pair{margin:8px 0}
+.section-workbar{margin:10px 0}.section-workbar select{max-width:230px}
+.gray-trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}
+.gray-card{display:flex;flex-direction:column;gap:6px;align-items:center;min-width:0;background:white;padding:8px;border-radius:9px;border:1px solid #e3d8ed}
+.gray-card strong{font-size:.67rem}.gray-card canvas{width:100%;max-height:150px;object-fit:contain;image-rendering:pixelated}
+.quality-nav{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}.quality-nav button{font-size:.7rem}
+.dual-charts{grid-template-columns:minmax(0,var(--dorette-overview-share,1fr)) minmax(0,var(--dorette-working-share,1fr))}
+body.hide-settings .inspector{display:none!important}body.hide-projects .sidebar{display:none!important}
+body.hide-settings.hide-projects .layout{display:block}body.hide-settings .layout,body.hide-projects .layout{grid-template-columns: minmax(0,1fr)}
+body.unpinned-dock .crochet-dock{position:static}
+#gridResult,#colorAnalysis,#matchYarnResult{line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:900px){.gray-trio{grid-template-columns:1fr 1fr}.section-workbar select{max-width:150px}}
+@media(max-width:650px){.gray-trio{grid-template-columns:1fr}.next-workspace-bar{align-items:flex-start}.next-workspace-bar label{flex-wrap:wrap}.section-workbar{flex-direction:column;align-items:stretch}.dual-charts{grid-template-columns:1fr}}
+@media(max-width:650px){.next-technique .pair{display:flex;flex-wrap:wrap}.next-technique .pair button{flex:1 1 150px;min-width:0;white-space:normal;font-size:.71rem}}
+@media(max-width:1500px){.gallery-item{display:grid;grid-template-columns:54px minmax(0,1fr)}.gallery-thumb{grid-column:1;grid-row:1}.gallery-choose{grid-column:1/-1;grid-row:2}.gallery-favorite{grid-column:2;grid-row:1;justify-self:end}}
+
+.next-text-favorites{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;align-items:end}.next-text-favorites label{flex:1 1 150px;display:flex;flex-direction:column;gap:5px;font-size:.7rem}.next-text-favorites button{font-size:.7rem}.next-text-favorites select{max-width:100%}

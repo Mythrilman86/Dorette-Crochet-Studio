@@ -37,7 +37,7 @@ function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now(
 function blankProject(name, cols, rows) {
   return {id:uid(),name:name.trim()||'Untitled Chart', cols,rows, cells:Array(cols*rows).fill(0),
     done:Array(cols*rows).fill(0), rowDone:Array(rows).fill(0), palette:DEFAULT_COLORS.map(c=>({...c})),
-    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],layers:[],ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],layers:[],technique:'rows',sectionSize:25,category:'Other',favorite:false,notes:'',ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
@@ -128,20 +128,38 @@ function flushSave(){
 function refreshProjectList(){
   const list=$('projectList');list.replaceChildren();
   $('projectCount').textContent=projects.size;
-  [...projects.values()].sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).forEach(p=>{
-    const b=document.createElement('button');b.type='button';b.className='project-item'+(p.id===activeId?' active':'');
+  const query=String($('projectSearch')?.value||'').toLowerCase(),filter=$('categoryFilter')?.value||'',only=$('onlyFavorites')?.checked;
+  [...projects.values()].filter(p=>p.name.toLowerCase().includes(query)||String(p.category||'Other').toLowerCase().includes(query)).filter(p=>(!filter||filter===(p.category||'Other'))&&(!only||p.favorite)).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).forEach(p=>{
+    const item=document.createElement('div');item.className='gallery-item'+(p.id===activeId?' active':'');
+    const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';
+    const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
+    const s=Math.min(54/p.cols,54/p.rows),ox=(54-p.cols*s)/2,oy=(54-p.rows*s)/2;
+    const display=window.DoretteAdvanced.compose(p),usedW=p.cols*s,usedH=p.rows*s;
+    // Sample at thumbnail pixel resolution, not once per source stitch. Large charts remain responsive.
+    for(let y=Math.floor(oy);y<Math.ceil(oy+usedH);y++)for(let x=Math.floor(ox);x<Math.ceil(ox+usedW);x++){
+      const col=clamp(Math.floor((x-ox)/s),0,p.cols-1),row=clamp(Math.floor((y-oy)/s),0,p.rows-1);
+      const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
+    }
+    const choose=document.createElement('button');choose.type='button';choose.className='gallery-choose';
     const title=document.createElement('strong');title.textContent=p.name;
-    const dims=document.createElement('small');dims.textContent=`${p.cols} × ${p.rows} stitches`;
-    b.append(title,dims);b.addEventListener('click',()=>selectProject(p.id));list.append(b);
+    const meta=document.createElement('small');meta.textContent=`${p.cols} × ${p.rows} · ${p.category||'Other'}`;
+    choose.append(title,meta);choose.addEventListener('click',()=>selectProject(p.id));
+    const fav=document.createElement('button');fav.type='button';fav.className='gallery-favorite';fav.textContent=p.favorite?'★':'☆';fav.title='Toggle favorite';fav.setAttribute('aria-label','Favorite '+p.name);
+    fav.addEventListener('click',()=>{p.favorite=!p.favorite;queueWrite(p);refreshProjectList();});
+    item.append(thumb,choose,fav);list.append(item);
   });
 }
+
 function selectProject(id) {
+  clearColorProposal();
+  $("grayTrio").replaceChildren();
+  layerGesture=null;layerDragPreview=null;
   clearProgressHistory();
   clearMotifPreview();
   flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
-  selectedLayerId=null;editingLayerId=null;pendingCleanup=null;syncImage();refreshProjectList();refreshInspector();fitChart();
+  selectedLayerId=null;editingLayerId=null;pendingCleanup=null;nextColorProposal=null;syncImage();refreshProjectList();refreshInspector();fitChart();refreshNextPanels();
 }
 function updateReferenceActions(){
   if(!active)return;
@@ -173,12 +191,12 @@ function refreshInspector(){
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
   updateReferenceActions();
   updateCropControls();updateConversionControls();
-  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();renderLayers();updatePdfEstimate();refreshPatternPanels();requestDraw();
+  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();renderLayers();refreshNextPanels();updatePdfEstimate();refreshPatternPanels();requestDraw();
 }
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
-    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),ui:{...uiSettings(active)}};
+    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',ui:{...uiSettings(active)}};
 }
 const progressHistory=[];
 const PROGRESS_HISTORY_LIMIT=30;
@@ -186,6 +204,9 @@ let motifPreview=null;
 let progressBrush=null, overviewStroke=null;
 let lastText=null, editingText=null, placingText=false, editingLayerId=null, selectedLayerId=null, pendingCleanup=null, studioMode='edit';
 function snapshot({keepProgress=false}={}){
+  clearColorProposal();
+  pendingCleanup=null;
+  $("applyCleanup").disabled=true;
   if(!keepProgress)clearProgressHistory();
   if(editingText)clearTextPreview();
   lastText=null;
@@ -195,6 +216,7 @@ function snapshot({keepProgress=false}={}){
   redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
 }
 function restoreUndoState(state){
+  clearColorProposal();
   clearProgressHistory();
   clearMotifPreview();
   lastText=null;
@@ -240,6 +262,7 @@ function completionCounts(project=active){
   return {done,total:project.cols*project.rows,rowsDone:project.rowDone.filter(Boolean).length};
 }
 function updateProgress(){
+  refreshSections();
   if(!active)return;
   const {done,total}=completionCounts(active),pct=Math.round(done/total*100);
   $('progressText').textContent=`${format(done)} / ${format(total)} stitches`;
@@ -380,17 +403,18 @@ function clearProgressHistory(){
 }
 function progressSnapshot(){
   snapshot({keepProgress:true});
-  progressHistory.push({done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide}});
+  progressHistory.push({done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide},diagonalIndex:active.diagonalIndex||0});
   if(progressHistory.length>PROGRESS_HISTORY_LIMIT)progressHistory.shift();
   updateProgressUndo();
 }
 function undoProgress(){
   if(!active||pendingConversion||!progressHistory.length)return;
-  const {done,rowDone,guide}=progressHistory.pop();
+  const {done,rowDone,guide,diagonalIndex}=progressHistory.pop();
   snapshot({keepProgress:true});
-  Object.assign(active,{done,rowDone,guide});
+  Object.assign(active,{done,rowDone,guide,diagonalIndex});
   updateProgressUndo();
-  scheduleSave();updateProgress();focusGuideCell();
+  scheduleSave();updateProgress();
+  if(active.technique==="c2c")diagonalMove(0);else focusGuideCell();
 }
 function markStitch(){
   if(pendingConversion||!selected||!active)return;
@@ -512,19 +536,9 @@ function editDimensions(){
   const old=active;
   if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
   snapshot();
-  const newCells=Array(cols*rows).fill(0),newDone=Array(cols*rows).fill(0),newRows=Array(rows).fill(0);
-  for(let r=1;r<=Math.min(rows,old.rows);r++){
-    newRows[r-1]=old.rowDone[r-1]||0;
-    for(let c=1;c<=Math.min(cols,old.cols);c++){
-      const oldI=(old.rows-r)*old.cols+(c-1),newI=(rows-r)*cols+(c-1);
-      newCells[newI]=old.cells[oldI];newDone[newI]=old.done[oldI];
-    }
-  }
-  const remappedLayers=(active.layers||[]).map(l=>({...l,entries:l.entries.flatMap(([i,color])=>{
-    const col=i%old.cols+1,row=old.rows-Math.floor(i/old.cols);
-    return col<=cols&&row<=rows?[[(rows-row)*cols+col-1,color]]:[];
-  })}));
-  Object.assign(active,{cols,rows,cells:newCells,done:newDone,rowDone:newRows,layers:remappedLayers});
+  Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
+  active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
+  areaSelection=null;
   if(selected&&(selected.col>cols||selected.row>rows))selected=null;
   window.DorettePattern.ensure(active);active.guide.row=clamp(active.guide.row,1,rows);active.guide.position=clamp(active.guide.position,0,cols-1);
   discardPreview(false);scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
@@ -952,6 +966,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   if(pendingCleanup&&!displayedConversion){
     ctx.fillStyle='rgba(255,154,34,.42)';for(const [i] of pendingCleanup){const col=i%cols,row=Math.floor(i/cols);ctx.fillRect(M+col*CELL,M+row*CELL,CELL,CELL);}
   }
+  if(nextColorProposal?.length&&!displayedConversion){ctx.fillStyle='rgba(255,188,51,.5)';for(const [i] of nextColorProposal){const col=i%cols,row=Math.floor(i/cols);ctx.fillRect(M+col*CELL,M+row*CELL,CELL,CELL);}}
   // Every grid boundary continues through the row/column-number margins.
   ctx.strokeStyle='#9c8ea7';ctx.lineWidth=0.75/s;ctx.beginPath();
   for(let c=minCol;c<=maxCol;c++){
@@ -962,6 +977,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   }
   ctx.stroke();
   ctx.strokeStyle='#6d578e';ctx.lineWidth=1.8/s;ctx.strokeRect(M,M,bw,bh);
+  drawNextChartOverlays(ctx,cols,rows,s);
   if((active.converted||displayedConversion||active.layers?.length) && CELL*s>=16){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
@@ -1063,6 +1079,7 @@ for(const type of ['pointerup','pointercancel','lostpointercapture'])overviewCan
 overviewCanvas.addEventListener('keydown',ev=>{if(!active)return;const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};if(!moves[ev.key])return;ev.preventDefault();const [dc,dr]=moves[ev.key];selected={col:clamp((selected?.col||1)+dc,1,active.cols),row:clamp((selected?.row||1)+dr,1,active.rows)};view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;updateSelection();requestDraw();});
 
 canvas.addEventListener('pointerdown',ev=>{
+  if(startLayerDrag(ev))return;
   if(ev.button!==0&&ev.pointerType==='mouse')return;
   canvas.setPointerCapture(ev.pointerId);
   pointers.set(ev.pointerId,{x:ev.offsetX,y:ev.offsetY});
@@ -1083,6 +1100,7 @@ canvas.addEventListener('pointerdown',ev=>{
   }
 });
 canvas.addEventListener('pointermove',ev=>{
+  if(moveLayerDrag(ev))return;
   const prev=pointers.get(ev.pointerId);if(!prev)return;
   pointers.set(ev.pointerId,{x:ev.offsetX,y:ev.offsetY});
   if(pointers.size>=2){
@@ -1109,6 +1127,7 @@ canvas.addEventListener('pointermove',ev=>{
   }
 });
 function endPointer(ev){
+  if(finishLayerDrag(ev))return;
   if(!pointers.has(ev.pointerId))return;
   if(pointers.size===1&&!gesture.wasMulti){
     const cell=screenToStitch(ev.offsetX,ev.offsetY),touchSafe=uiSettings().stylusOnly&&ev.pointerType!=='pen';
@@ -1149,7 +1168,7 @@ function endPointer(ev){
   if(pointers.size===0){gesture.lastDist=0;gesture.lastMid=null;}
 }
 canvas.addEventListener('pointerup',endPointer);
-canvas.addEventListener('pointercancel',ev=>{paintStroke=null;areaStart=null;pointers.delete(ev.pointerId);});
+canvas.addEventListener('pointercancel',ev=>{if(layerGesture&&layerGesture.id===ev.pointerId){layerGesture=null;layerDragPreview=null;requestDraw();return;}paintStroke=null;areaStart=null;pointers.delete(ev.pointerId);});
 canvas.addEventListener('wheel',ev=>{ev.preventDefault();const rect=canvas.getBoundingClientRect();setZoom(view.scale*(ev.deltaY<0?1.13:.885),ev.clientX-rect.left,ev.clientY-rect.top);},{passive:false});
 canvas.addEventListener('keydown',ev=>{
   if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();ev.stopPropagation();ev.shiftKey?redo():undo();return;}
@@ -1396,13 +1415,14 @@ function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/
 function download(blob,name){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function pdfSettings(){
   return {paper:$('pdfPaper').value,orientation:$('pdfOrientation').value,
+    extraPages:$('pdfExtraPages').checked,sectionSize:Number($('workSectionSize').value)||25,notes:active?.notes||'',
     detail:$('pdfDetail').value,overlap:Number($('pdfOverlap').value),monochrome:$('pdfMonochrome').checked,completed:$('pdfCompleted').checked};
 }
 function updatePdfEstimate(){
   if(!active||!window.DorettePdf)return;
   try{
     const info=window.DorettePdf.plan(compositeProject(active),pdfSettings());
-    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered sections (${info.across} across × ${info.down} down). ${info.overlap?`Up to ${info.overlap} repeated stitches on shared edges, outside purple outline (reference only). May increase pages.`:'No repeated stitches.'}`;
+    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.across*info.down} numbered sections${info.extraPages?' + checklist and notes':''} (${info.across} across × ${info.down} down). ${info.overlap?`Up to ${info.overlap} repeated stitches on shared edges, outside purple outline (reference only). May increase pages.`:'No repeated stitches.'}`;
   }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
 }
 function exportPdf(){
@@ -1675,11 +1695,12 @@ function validatePatternExtras(p){
   const safe={workDirection:{first:direction.first==='ltr'?'ltr':'rtl',alternate:direction.alternate!==false},
     guide:{row:clamp(Math.round(Number(guide.row)||1),1,p.rows),position:clamp(Math.round(Number(guide.position)||0),0,p.cols-1),finished:!!guide.finished},
     gauge:{swatchStitches:Math.max(1,Number(gauge.swatchStitches)||100),swatchYards:Math.max(0,Number(gauge.swatchYards)||0),overage:clamp(Number(gauge.overage)||0,0,100)},
-    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
+    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),technique:['rows','tapestry','single','c2c'].includes(p.technique)?p.technique:'rows',diagonalIndex:clamp(Math.floor(Number(p.diagonalIndex)||0),0,p.cols*p.rows-1),sectionSize:[20,25,30,40].includes(p.sectionSize)?p.sectionSize:25,category:['Other','Blankets','Garments','Gifts','Practice'].includes(p.category)?p.category:'Other',favorite:!!p.favorite,notes:String(p.notes||'').slice(0,1500),ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
   return safe;
 }
 function setCrochetView(enabled){
   document.body.classList.toggle('crochet-view',enabled);
+  void updateWakeLock();
   $('crochetView').setAttribute('aria-pressed',String(enabled));
   $('crochetView').textContent=enabled?'Exit Crochet View':'Crochet View';
   if(enabled&&active&&!pendingConversion){
@@ -1975,8 +1996,9 @@ function hookAdvanced(){
   $('cleanupInfo').textContent=`Proposed fixes: ${pendingCleanup.length} base-grid stitches. Orange areas show changes, protected area is left alone.`;
   $('applyCleanup').disabled=pendingCleanup.length===0;requestDraw();
  });
- $('applyCleanup').addEventListener('click',()=>{if(!pendingCleanup||editBlocked('clean up the pattern'))return;
-  snapshot();for(const [i,c] of pendingCleanup)active.cells[i]=c;toast(`Cleaned ${pendingCleanup.length} stitches. Undo remains available.`);
+ $('applyCleanup').addEventListener('click',()=>{if(!pendingCleanup?.length||pendingConversion||editBlocked('clean up the pattern'))return;
+  const proposal=pendingCleanup;
+  snapshot();for(const [i,c] of proposal)active.cells[i]=c;toast(`Cleaned ${proposal.length} stitches. Undo remains available.`);
   pendingCleanup=null;$('applyCleanup').disabled=true;scheduleSave();updateLegend();requestDraw();
  });
  $('runQualityCheck').addEventListener('click',qualityCheck);
@@ -2016,9 +2038,324 @@ function hookAdvanced(){
  renderYarnLibrary();setStudioMode('edit');
 }
 
+// v1.5.0 additional controls. Project-specific values are stored in the existing project object.
+let nextColorProposal=null, layerGesture=null, layerDragPreview=null, wakeLock=null, galleryRefreshTimer=null;
+const NF=window.DoretteNext;
+function layerBounds(l){
+  if(!l?.entries?.length)return null;
+  const cols=l.entries.map(([i])=>i%active.cols+1),rows=l.entries.map(([i])=>active.rows-Math.floor(i/active.cols));
+  return {left:Math.min(...cols),right:Math.max(...cols),top:Math.max(...rows),bottom:Math.min(...rows)};
+}
+function refreshNextPanels(){
+  if(!active)return;
+  if($('projectCategory'))$('projectCategory').value=active.category||'Other';
+  if($('projectNotes')&&document.activeElement!==$('projectNotes'))$('projectNotes').value=active.notes||'';
+  if($('techniquePreset'))$('techniquePreset').value=active.technique||'rows';
+  if($('workSectionSize'))$('workSectionSize').value=String(active.sectionSize||25);
+  refreshSections();renderDiagonalInfo();
+}
+function refreshSections(){
+ if(!active||!$('workSectionSelect'))return;
+ const box=$('workSectionSelect'),old=Number(box.value)||1,items=NF.sections(active,active.sectionSize||25);
+ box.replaceChildren();for(const item of items){const op=document.createElement('option');op.value=item.id;op.textContent=`${item.id} · C${item.c0}–${item.c1}, R${item.r0}–${item.r1} (${Math.round(item.done/item.total*100)}%)`;box.append(op);}
+ box.value=String(Math.min(items.length,old));const selected=items[Number(box.value)-1];
+ $('sectionProgress').textContent=selected?`${selected.done}/${selected.total} stitches done in section ${selected.id} · ${items.length} sections total`:'';
+}
+function navigateSection(){const sec=NF.sections(active,active.sectionSize||25)[Number($('workSectionSelect').value)-1];if(!sec)return;
+ selected={col:Math.floor((sec.c0+sec.c1)/2),row:Math.floor((sec.r0+sec.r1)/2)};
+ view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;
+ view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;
+ updateSelection();requestDraw();refreshSections();
+}
+function completeSection(){if(!active||pendingConversion)return;
+ const sec=NF.sections(active,active.sectionSize||25)[Number($('workSectionSelect').value)-1];if(!sec)return;
+ const complete=sec.done===sec.total;
+ progressSnapshot();
+ for(let r=sec.r0;r<=sec.r1;r++)for(let c=sec.c0;c<=sec.c1;c++){
+  if(active.rowDone[r-1]){
+   const top=active.rows-r;for(let col=0;col<active.cols;col++)active.done[top*active.cols+col]=1;
+   active.rowDone[r-1]=0;
+  }
+  active.done[indexFor(c,r)]=complete?0:1;
+ }
+ scheduleSave();updateProgress();refreshSections();requestDraw();toast(complete?'Section progress cleared.':'Section marked complete.');
+}
+function renderDiagonalInfo(){if(!active||!$('diagonalStatus'))return;
+ const isC2C=active.technique==='c2c';
+ $('diagonalNext').disabled=!isC2C;$('diagonalBack').disabled=!isC2C;
+ $('techniqueHint').textContent=isC2C?'C2C preview follows the chart diagonally, one graph cell per move. It does NOT provide complete C2C block-stitch construction instructions.':active.technique==='tapestry'?'Tapestry crochet keeps row-by-row color groups; consider your yarn-carrying method and floats.':'Follow the underlying stitch instructions for your yarn and crochet technique.';
+ if(!isC2C){$('diagonalStatus').textContent='Row-based crochet progression selected.';return;}
+ const pos=NF.diagonal(active),step=Number(active.diagonalIndex)||0,cell=pos[Math.min(step,pos.length-1)];
+ $('diagonalStatus').textContent=`Diagonal chart step ${Math.min(step+1,pos.length)}/${pos.length} · Row ${cell.row}, column ${cell.col}`;
+}
+function diagonalMove(direction){
+ if(!active||active.technique!=='c2c'||pendingConversion)return;
+ const path=NF.diagonal(active),current=clamp(Math.round(Number(active.diagonalIndex)||0),0,path.length-1),cell=path[current];
+ if(direction>0){progressSnapshot();active.done[indexFor(cell.col,cell.row)]=1;}
+ active.diagonalIndex=clamp(current+direction,0,path.length-1);
+ const next=path[active.diagonalIndex];selected={...next};
+ view.x=canvasWidth/2-(M+(next.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-next.row+.5)*CELL)*view.scale;
+ scheduleSave();updateSelection();updateProgress();renderDiagonalInfo();requestDraw();
+}
+function drawNextChartOverlays(g,cols,rows,s){
+ if(!active||pendingConversion)return;
+ const sectionSize=active.sectionSize||25,stroke='#9156ba';g.lineWidth=2/s;g.strokeStyle=stroke;g.setLineDash([6/s,5/s]);
+ for(let c=sectionSize;c<cols;c+=sectionSize){g.beginPath();g.moveTo(M+c*CELL,M);g.lineTo(M+c*CELL,M+rows*CELL);g.stroke();}
+ for(let r=sectionSize;r<rows;r+=sectionSize){g.beginPath();g.moveTo(M,M+(rows-r)*CELL);g.lineTo(M+cols*CELL,M+(rows-r)*CELL);g.stroke();}
+ g.setLineDash([]);
+ if($('dragLayerOnChart')?.checked){const l=chosenLayer(),b=layerBounds(l);if(l&&b&&l.visible!==false){
+  const p=layerDragPreview||b,x=M+(p.left-1)*CELL,y=M+(rows-p.top)*CELL,w=(p.right-p.left+1)*CELL,h=(p.top-p.bottom+1)*CELL;
+  g.strokeStyle='#e66727';g.lineWidth=3/s;g.strokeRect(x,y,w,h);g.fillStyle='#e66727';g.fillRect(x+w-7/s,y-7/s,14/s,14/s);
+ }}
+}
+function startLayerDrag(ev){
+ if(!active||progressBrush||placingText||motifPreview||document.body.classList.contains('crochet-view')||!$('dragLayerOnChart')?.checked||isPatternLocked()||pendingConversion)return false;
+ const layer=chosenLayer(),bounds=layerBounds(layer),cell=screenToStitch(ev.offsetX,ev.offsetY);
+ if(!layer||!bounds||layer.locked||layer.visible===false||!cell)return false;
+ const inside=cell.col>=bounds.left&&cell.col<=bounds.right&&cell.row>=bounds.bottom&&cell.row<=bounds.top;
+ if(!inside)return false;
+ const resize=(Math.abs(cell.col-bounds.right)<=1&&Math.abs(cell.row-bounds.top)<=1);
+ layerGesture={id:ev.pointerId,layerId:layer.id,projectId:active.id,start:cell,current:cell,bounds:{...bounds},resize};
+ layerDragPreview={...bounds};canvas.setPointerCapture(ev.pointerId);ev.preventDefault();return true;
+}
+function moveLayerDrag(ev){
+ if(!layerGesture||layerGesture.id!==ev.pointerId)return false;
+ const cell=screenToStitch(ev.offsetX,ev.offsetY)||layerGesture.current;layerGesture.current=cell;
+ const g=layerGesture,dx=cell.col-g.start.col,dy=cell.row-g.start.row;
+ if(g.resize)layerDragPreview={...g.bounds,right:clamp(g.bounds.right+dx,g.bounds.left,active.cols),top:clamp(g.bounds.top+dy,g.bounds.bottom,active.rows)};
+ else{
+  const x=clamp(dx,1-g.bounds.left,active.cols-g.bounds.right);
+  const y=clamp(dy,1-g.bounds.bottom,active.rows-g.bounds.top);
+  layerDragPreview={left:g.bounds.left+x,right:g.bounds.right+x,top:g.bounds.top+y,bottom:g.bounds.bottom+y};
+ }
+ requestDraw();ev.preventDefault();return true;
+}
+function finishLayerDrag(ev){
+ if(!layerGesture||layerGesture.id!==ev.pointerId)return false;
+ const gesture=layerGesture,layer=chosenLayer(),p=layerDragPreview;layerGesture=null;layerDragPreview=null;
+ if(!layer||!p||layer.id!==gesture.layerId||active.id!==gesture.projectId||layer.locked||isPatternLocked()){requestDraw();return true;}
+ const dx=p.left-gesture.bounds.left,dy=p.top-gesture.bounds.top;
+ if(!gesture.resize&&dx===0&&dy===0){requestDraw();return true;}
+ if(gesture.resize&&p.right===gesture.bounds.right&&p.top===gesture.bounds.top){requestDraw();return true;}
+ snapshot();
+ if(gesture.resize){
+  const b=gesture.bounds,oldW=b.right-b.left+1,oldH=b.top-b.bottom+1,newW=p.right-p.left+1,newH=p.top-p.bottom+1;
+  const old=new Map(layer.entries),entries=new Map();
+  for(let nr=p.bottom;nr<=p.top;nr++)for(let nc=p.left;nc<=p.right;nc++){
+   const oc=b.left+Math.min(oldW-1,Math.floor((nc-p.left+.5)*oldW/newW)),or=b.bottom+Math.min(oldH-1,Math.floor((nr-p.bottom+.5)*oldH/newH));
+   const value=old.get(indexFor(oc,or));if(value!==undefined)entries.set(indexFor(nc,nr),value);
+  }
+  layer.entries=[...entries];layer.source=null; // raster resized layers remain editable, but text metadata no longer matches
+ }else shiftLayer(layer,dx,dy);
+ scheduleSave();renderLayers();updateLegend();requestDraw();toast(gesture.resize?'Layer resized as stitches.':'Layer moved.');return true;
+}
+function currentRenderedImage(){if(!referenceImg)return null;return referenceImg;}
+function handleGridDetection(){
+ const img=currentRenderedImage();if(!img)return toast('Import a reference image first.');
+ const crop=currentCrop(),c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*(crop.right-crop.left)));c.height=Math.max(1,Math.round(img.height*(crop.bottom-crop.top)));
+ c.getContext('2d').drawImage(img,img.width*crop.left,img.height*crop.top,img.width*(crop.right-crop.left),img.height*(crop.bottom-crop.top),0,0,c.width,c.height);
+ const found=NF.detectGrid(c),cols=found.columns.count,rows=found.rows.count;
+ if(cols>0&&cols<=200)$('gridCols').value=cols;if(rows>0&&rows<=300)$('gridRows').value=rows;
+ $('gridResult').textContent=`Suggested: ${cols||'unknown'} columns (${Math.round(found.columns.confidence*100)}% line regularity), ${rows||'unknown'} rows (${Math.round(found.rows.confidence*100)}% line regularity). Counts are estimates, not verified. Check visible square boundaries and edit the fields before using.`;
+}
+function straightenReference(){
+ if(!active?.referenceImage||!referenceImg)return toast('Import an image first.');
+ const deg=Number($('gridRotation').value)||0;if(Math.abs(deg)<.01)return toast('Select a rotation correction first.');
+ if(!confirm(`Rotate the SOURCE image by ${deg} degrees? Chart stitches will not be changed; Undo will restore the old source.`))return;
+ const w=referenceImg.width,h=referenceImg.height,angle=deg*Math.PI/180,
+  sizeW=Math.ceil(Math.abs(w*Math.cos(angle))+Math.abs(h*Math.sin(angle))),sizeH=Math.ceil(Math.abs(h*Math.cos(angle))+Math.abs(w*Math.sin(angle)));
+ const c=document.createElement('canvas');c.width=sizeW;c.height=sizeH;
+ const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,sizeW,sizeH);g.translate(sizeW/2,sizeH/2);g.rotate(angle);g.drawImage(referenceImg,-w/2,-h/2);
+ const data=c.toDataURL("image/png");if(data.length>22*1024*1024)return toast("The updated source image is too large for a project backup.");
+ snapshot();active.referenceImage=data;active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();requestDraw();toast('Reference source rotated; grid count can now be rechecked.');
+}
+function removeBackgroundFromSource(){
+ if(!referenceImg||!active)return toast('Import an image first.');
+ if(!confirm('Remove similarly colored background regions connected to the photo edges? Original chart colors will stay unchanged. Undo can restore the image.'))return;
+ try{const result=NF.backgroundRemove(referenceImg,Number($('bgTolerance').value)||35);
+  if(result.length>22*1024*1024)throw Error('Resulting image is too large.');
+  snapshot();active.referenceImage=result;active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Background cleaned around the edges. Preview the conversion before applying.');
+ }catch(e){toast('Background removal failed: '+e.message);}
+}
+function isolateSubjectCrop(){
+ if(!referenceImg||!active)return toast('Import and crop an image first.');
+ const crop=currentCrop(),w=Math.round(referenceImg.width*(crop.right-crop.left)),h=Math.round(referenceImg.height*(crop.bottom-crop.top));
+ if(w<5||h<5)return toast('Select a larger subject crop.');
+ if(!confirm('Keep only the rectangular crop selected in the image? This changes the reference image, but not the saved stitch colors. Undo is available.'))return;
+ const c=document.createElement('canvas');c.width=w;c.height=h;
+ c.getContext('2d').drawImage(referenceImg,referenceImg.width*crop.left,referenceImg.height*crop.top,referenceImg.width*(crop.right-crop.left),referenceImg.height*(crop.bottom-crop.top),0,0,w,h);
+ snapshot();active.referenceImage=c.toDataURL('image/png');active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Kept the selected subject rectangle. You can now remove similar edge background colors.');
+}
+function verifyGridDimensions(){
+ if(!active||pendingConversion||editBlocked("apply a detected grid size"))return;
+ const cols=Number($('gridCols').value),rows=Number($('gridRows').value);
+ if(!validDimensions(cols,rows))return toast('Choose a valid 1–200 by 1–300 grid.');
+ if(!confirm(`Use ${cols} columns and ${rows} rows? This resizes the current chart using nearest-cell canvas mapping. Back up your important project first.`))return;
+ snapshot();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
+}
+function doAdvancedResize(){
+ if(!active||editBlocked('resize the chart'))return;
+ const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
+ if(!validDimensions(cols,rows))return toast('Choose chart dimensions from 1–200 columns and 1–300 rows.');
+ const mode=$('resizeMode').value,anchor=$('resizeAnchor').value;
+ if(!confirm(`${mode==='scale'?'Scale all stitch cells':'Expand or crop without stretching'} to ${cols} × ${rows}, anchored ${anchor}? Cropped cells cannot be recovered except through Undo or a backup.`))return;
+ snapshot();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
+ active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Advanced resize applied. Undo remains available.');
+}
+function plotGrayTrio(){
+ if(!referenceImg)return toast('Import a photo first.');
+ const dims=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],raster=rasterizeToCells(referenceImg,dims[0],dims[1],conversionSettings());
+ const host=$('grayTrio'),projectId=active.id,source=active.referenceImage;host.replaceChildren();
+ for(const n of [2,3,4]){
+  const d=NF?window.DoretteAdvanced.grayscale(raster.values,n):null;
+  if(!d)continue;const wrapper=document.createElement('div');wrapper.className='gray-card';
+  const name=document.createElement('strong');name.textContent=`${n} grayscale yarns`;
+  const canvas=document.createElement('canvas');canvas.width=dims[0];canvas.height=dims[1];canvas.style.maxWidth='100%';
+  const g=canvas.getContext('2d'),pixels=g.createImageData(canvas.width,canvas.height);
+  d.cells.forEach((value,i)=>{const color=parseInt(d.palette[value].hex.slice(1,3),16);pixels.data.set([color,color,color,255],i*4);});g.putImageData(pixels,0,0);
+  const use=document.createElement('button');use.type='button';use.className='button ghost';use.textContent='Preview on chart';use.addEventListener('click',()=>{if(active.id!==projectId||active.referenceImage!==source)return toast('Run the comparison again for this photo.');previewResult({...d,cols:dims[0],rows:dims[1],projectId});});
+  wrapper.append(name,canvas,use);host.append(wrapper);
+ }
+}
+function colorChangeAudit(){
+ if(!active)return;const results=NF.analyze(active),worst=results.rowStats.slice(0,5).map(r=>`Row ${r.row}: ${r.changes} changes`).join('; ');
+ $('colorAnalysis').textContent=`${results.transitions} horizontal yarn transitions; ${results.isolatedCount} possible single-stitch reversals. ${results.floatCandidates.length} possible long between-use yarn spans (8+ intervening chart cells, not a verified carry). Busiest rows: ${worst||'none'}. Your technique may require these changes; review before applying.`;
+}
+function previewColorChanges(){
+ if(!active||pendingConversion)return;const data=NF.analyze(active),layered=new Set((active.layers||[]).filter(l=>l.visible!==false).flatMap(l=>l.entries.map(([i])=>i)));
+ nextColorProposal=data.examples.filter(e=>!layered.has(indexFor(e.col,e.row))).slice(0,200).map(e=>[indexFor(e.col,e.row),e.to]);
+ $('applyColorSuggestion').disabled=!nextColorProposal.length;
+ $('colorAnalysis').textContent=`Previewing ${nextColorProposal.length} possible isolated stitches; only BASE chart cells will be changed. Keep detailed lettering and photos protected by declining if these colors matter.`;
+ requestDraw();
+}
+function clearColorProposal(){
+ nextColorProposal=null;
+ $('applyColorSuggestion').disabled=true;
+}
+function applyColorChanges(){if(!nextColorProposal?.length||pendingConversion||editBlocked('apply yarn simplifications'))return;
+ const proposal=nextColorProposal;
+ snapshot();for(const [i,c] of proposal)active.cells[i]=c;
+ toast(proposal.length+' isolated stitches simplified. Undo is available.');scheduleSave();refreshInspector();requestDraw();
+}
+function navigateQualityProblem(){
+ if(!active)return;const r=NF.analyze(active).rowStats.slice(0,8),host=$('qualityNavigation');host.replaceChildren();
+ for(const issue of r){const b=document.createElement('button');b.type='button';b.className='button ghost';b.textContent=`Inspect row ${issue.row}: ${issue.changes} changes`;
+  b.onclick=()=>{selected={col:Math.ceil(active.cols/2),row:issue.row};view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;updateSelection();requestDraw();};host.append(b);
+ }
+}
+function exportChartImage(kind){
+ if(!active)return;const options={cell:Number($('imageExportScale').value)||12,numbers:$('imageExportNumbers').checked,legend:$('imageExportNumbers').checked,sections:Number(active.sectionSize)||25};
+ const svg=NF.svg(active,options),file=slug(active.name)+'-Chart';
+ if(kind==='svg'){download(new Blob([svg],{type:'image/svg+xml'}),file+'.svg');return;}
+ const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+  if(c.width*c.height>60e6){toast('PNG export too large; choose a smaller scale.');URL.revokeObjectURL(img.src);return;}
+  c.getContext('2d').drawImage(img,0,0);c.toBlob(blob=>{if(blob)download(blob,file+'.png');else toast('Unable to generate PNG.');URL.revokeObjectURL(img.src);},'image/png');};
+ img.onerror=()=>toast('PNG preview failed. Try SVG export.');img.src=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+}
+function matchSelectedYarn(){
+ const color=active?.palette?.[Number($('paintColor').value)],host=$('matchYarnResult');if(!color)return;
+ if(!yarnLibrary.length){host.textContent='Your saved yarn library is empty.';return;}
+ const list=yarnLibrary.map(c=>({...c,dist:NF.colorDistance(c.hex,color.hex)})).sort((a,b)=>a.dist-b.dist).slice(0,3);
+ host.textContent='Approximate digital color matches (NOT verified yarn matches): '+list.map(c=>`${c.name} ${c.hex} (difference ${c.dist.toFixed(0)})`).join('; ')+'. Actual yarn dye lots, lighting and screen colors can differ.';
+}
+let wakeRequest=0;
+async function updateWakeLock(){
+ const ticket=++wakeRequest;
+ const enabled=$('keepAwake')?.checked&&document.visibilityState==='visible'&&document.body.classList.contains('crochet-view');
+ if(!enabled){
+  const previous=wakeLock;wakeLock=null;
+  try{await previous?.release();}catch{}
+  return;
+ }
+ if(wakeLock&&!wakeLock.released)return;
+ if(!navigator.wakeLock){$('keepAwake').checked=false;return toast('This browser does not support screen wake lock.');}
+ try{
+  const lock=await navigator.wakeLock.request('screen');
+  if(ticket!==wakeRequest){await lock.release();return;}
+  wakeLock=lock;
+ }catch{
+  if(ticket!==wakeRequest)return;
+  toast('Screen wake lock was blocked. Check browser permissions.');$('keepAwake').checked=false;
+ }
+}
+function refreshWorkspaceLayout(){
+ const split=Number($('chartSplit').value)||50;document.documentElement.style.setProperty('--dorette-overview-share',split+'fr');document.documentElement.style.setProperty('--dorette-working-share',(100-split)+'fr');
+ document.body.classList.toggle('hide-settings',$('toggleSettings').dataset.hidden==='1');document.body.classList.toggle('hide-projects',$('toggleProjects').dataset.hidden==='1');
+ document.body.classList.toggle('unpinned-dock',!$('pinCrochetDock').checked);
+ requestDraw();
+}
+const textFavoritesKey='dorette-text-styles-v1';
+let textFavorites=[];
+try{textFavorites=JSON.parse(localStorage.getItem(textFavoritesKey)||'[]');if(!Array.isArray(textFavorites))textFavorites=[];}catch{}
+function refreshTextFavorites(){const sel=$('textStyleFavorite'),old=sel.value;sel.replaceChildren();for(const item of textFavorites){const op=new Option(item.name,item.id);sel.append(op);}if(textFavorites.some(x=>x.id===old))sel.value=old;}
+function saveTextFavorite(){
+ const name=prompt('Name this lettering style (example: Bold 20-stitch initials):','My lettering style');if(name===null)return;
+ if(textFavorites.length>=35)return toast('You have 35 saved styles. Remove one first.');
+ const fields=['textStyle','letterSpacing','textWrap','textLayout','textAngle','textScale'],options={};
+ for(const id of fields)options[id]=$(id).value;
+ const item={id:uid(),name:name.slice(0,60),options};textFavorites.push(item);
+ try{localStorage.setItem(textFavoritesKey,JSON.stringify(textFavorites));}catch{toast('Unable to save lettering styles in this browser.');}
+ refreshTextFavorites();$('textStyleFavorite').value=item.id;toast('Lettering style saved in this browser.');
+}
+function loadTextFavorite(){const item=textFavorites.find(x=>x.id===$('textStyleFavorite').value);if(!item)return;
+ for(const [id,value] of Object.entries(item.options))if($(id))$(id).value=value;
+ if(textPreview)buildTextPreview();toast('Lettering style applied. Preview before adding it to the chart.');
+}
+function deleteTextFavorite(){const id=$('textStyleFavorite').value;textFavorites=textFavorites.filter(x=>x.id!==id);
+ try{localStorage.setItem(textFavoritesKey,JSON.stringify(textFavorites));}catch{}
+ refreshTextFavorites();toast('Lettering style removed.');
+}
+function centerTextInArea(){
+ if(!areaSelection)return toast('Use Select area to choose a space for the lettering first.');
+ const c=previewTextConfig(),mask=rasterizeTextPattern(c);if(!mask)return toast('Type lettering first.');
+ const left=Math.min(areaSelection.start.col,areaSelection.end.col),right=Math.max(areaSelection.start.col,areaSelection.end.col),top=Math.max(areaSelection.start.row,areaSelection.end.row),bottom=Math.min(areaSelection.start.row,areaSelection.end.row),w=right-left+1,h=top-bottom+1;
+ if(mask.width>w||mask.height>h)return toast('The lettering is larger than this area. Use Auto-fit first.');
+ $('textCol').value=String(left+Math.floor((w-mask.width)/2));$('textRow').value=String(top-Math.floor((h-mask.height)/2));
+ buildTextPreview();toast('Lettering centered in the selected chart area.');
+}
+function hookNextEvents(){
+  refreshTextFavorites();
+  $('saveTextFavorite').addEventListener('click',saveTextFavorite);$('applyTextFavorite').addEventListener('click',loadTextFavorite);$('deleteTextFavorite').addEventListener('click',deleteTextFavorite);$('centerSelectionText').addEventListener('click',centerTextInArea);
+ for(const id of ['projectSearch','categoryFilter','onlyFavorites'])$(id).addEventListener('input',refreshProjectList);
+ $('projectCategory').addEventListener('change',e=>{if(!active)return;snapshot();active.category=e.target.value;scheduleSave();refreshProjectList();});
+ $('projectNotes').addEventListener('change',e=>{if(!active)return;snapshot();active.notes=e.target.value.slice(0,1500);scheduleSave();});
+ $('duplicateProject').addEventListener('click',()=>{if(!active)return;flushSave();const p=structuredClone(active);p.id=uid();p.name=(active.name+' copy').slice(0,70);p.createdAt=new Date().toISOString();p.updatedAt=p.createdAt;projects.set(p.id,p);queueWrite(p);selectProject(p.id);toast('Project duplicated; the original remains untouched.');});
+ $('techniquePreset').addEventListener('change',e=>{if(!active)return;snapshot();active.technique=e.target.value;active.diagonalIndex=0;scheduleSave();renderDiagonalInfo();});
+ $('diagonalNext').addEventListener('click',()=>diagonalMove(1));$('diagonalBack').addEventListener('click',()=>diagonalMove(-1));
+ $('workSectionSize').addEventListener('change',e=>{if(!active)return;active.sectionSize=Number(e.target.value);scheduleSave();refreshSections();updatePdfEstimate();requestDraw();});
+ $('workSectionSelect').addEventListener('change',refreshSections);$('goSection').addEventListener('click',navigateSection);$('markSection').addEventListener('click',completeSection);
+ $('detectGrid').addEventListener('click',handleGridDetection);
+ $('gridRotation').addEventListener('input',e=>$('gridRotationValue').textContent=e.target.value+'°');
+ $('applyRotation').addEventListener('click',straightenReference);$('useGrid').addEventListener('click',verifyGridDimensions);
+ $('removeBackground').addEventListener('click',removeBackgroundFromSource);$('isolateSubjectCrop').addEventListener('click',isolateSubjectCrop);
+ $('smartResize').addEventListener('click',doAdvancedResize);
+ $('compareGrayTrio').addEventListener('click',plotGrayTrio);
+ $('analyzeColorChanges').addEventListener('click',colorChangeAudit);
+ $('previewColorSuggestion').addEventListener('click',previewColorChanges);$('applyColorSuggestion').addEventListener('click',applyColorChanges);
+ $('runQualityCheck').addEventListener('click',()=>setTimeout(navigateQualityProblem,50));
+ $('fitLayerArea').addEventListener('click',()=>{
+  const layer=chosenLayer();if(!layer||layer.locked||!areaSelection||editBlocked('fit layer'))return toast('Select a layer and a chart area first.');
+  const b=layerBounds(layer),{start,end}=areaSelection,area={left:Math.min(start.col,end.col),right:Math.max(start.col,end.col),bottom:Math.min(start.row,end.row),top:Math.max(start.row,end.row)};
+  if(!b)return;const old=new Map(layer.entries),entries=new Map(),oldW=b.right-b.left+1,oldH=b.top-b.bottom+1,newW=area.right-area.left+1,newH=area.top-area.bottom+1;
+  for(let row=area.bottom;row<=area.top;row++)for(let col=area.left;col<=area.right;col++){
+    const c=b.left+Math.min(oldW-1,Math.floor((col-area.left+.5)*oldW/newW)),r=b.bottom+Math.min(oldH-1,Math.floor((row-area.bottom+.5)*oldH/newH)),color=old.get(indexFor(c,r));
+    if(color!==undefined)entries.set(indexFor(col,row),color);
+  }
+  snapshot();layer.entries=[...entries];layer.source=null;scheduleSave();renderLayers();updateLegend();requestDraw();toast('Layer fitted to selection (stitch-based nearest-neighbor scale).');
+ });
+ $('matchYarn').addEventListener('click',matchSelectedYarn);
+ $('exportPng').addEventListener('click',()=>exportChartImage('png'));$('exportSvg').addEventListener('click',()=>exportChartImage('svg'));
+ $('keepAwake').addEventListener('change',updateWakeLock);
+ document.addEventListener('visibilitychange',updateWakeLock);
+ for(const id of ['chartSplit','pinCrochetDock'])$(id).addEventListener('input',refreshWorkspaceLayout);
+ for(const [id,flag] of [['toggleSettings','hide-settings'],['toggleProjects','hide-projects']])$(id).addEventListener('click',()=>{const b=$(id);b.dataset.hidden=b.dataset.hidden==='1'?'0':'1';refreshWorkspaceLayout();});
+ refreshWorkspaceLayout();
+}
+
 function hookEvents(){
+  hookNextEvents();
   $('newProjectForm').addEventListener('submit',ev=>{
-    ev.preventDefault();const cols=Number($('newCols').value),rows=Number($('newRows').value);
+    ev.preventDefault();const presets={square:[50,50],blanket:[120,165],border:[120,24],initials:[40,30]},dims=presets[$('projectTemplate').value]||[Number($('newCols').value),Number($('newRows').value)],cols=dims[0],rows=dims[1];
     if(!validDimensions(cols,rows)){toast('Choose 1–200 columns and 1–300 rows.');return;}
     const p=blankProject($('newName').value,cols,rows);projects.set(p.id,p);queueWrite(p);selectProject(p.id);
     $('newProjectDetails').open=false;toast('New crochet project created.');
@@ -2174,7 +2511,7 @@ function hookEvents(){
     snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();
     toast('Reference photo removed. Existing stitched chart and progress remain unchanged.');
   });
-  for(const id of ['pdfPaper','pdfOrientation','pdfDetail','pdfOverlap','pdfMonochrome','pdfCompleted'])$(id).addEventListener('change',updatePdfEstimate);
+  for(const id of ['pdfPaper','pdfOrientation','pdfDetail','pdfOverlap','pdfMonochrome','pdfCompleted','pdfExtraPages'])$(id).addEventListener('change',updatePdfEstimate);
   $('exportPdf').addEventListener('click',exportPdf);
   $('exportWrittenPdf').addEventListener('click',exportWrittenPdf);
   $('showProgressOverlay').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),showProgress:ev.target.checked};scheduleSave();updateTabletControls();requestDraw();});
