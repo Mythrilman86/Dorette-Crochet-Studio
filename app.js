@@ -175,6 +175,7 @@ function undoState(){
     opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
     workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),ui:{...uiSettings(active)}};
 }
+let markingStitches=false;
 let lastText=null, editingText=null, placingText=false;
 function snapshot(){
   if(editingText)clearTextPreview();
@@ -202,13 +203,15 @@ function redo(){
   $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;toast('Change redone.');
 }
 function updateSelection(){
-  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=true;$('markRow').disabled=true;$('paintStitch').disabled=true;updateDashboard();return;}
-  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=true;$('markRow').disabled=true;$('paintStitch').disabled=true;updateDashboard();return;}
+  $("markStitch").setAttribute("aria-pressed",String(markingStitches));
+  $("markStitch").textContent=markingStitches?"✓ Mark stitch mode on":"✓ Mark stitch";
+  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=true;$('paintStitch').disabled=true;updateDashboard();return;}
+  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=true;$('paintStitch').disabled=true;updateDashboard();return;}
   const i=indexFor(selected.col,selected.row),d=!!active.done[i]||!!active.rowDone[selected.row-1];
   $('selectedCell').textContent=`Row ${selected.row} · Column ${selected.col} ${d?'· Complete':''}`;
   $('instructionRow').value=selected.row;queuePatternRender();
   $('markStitch').disabled=false;$('markRow').disabled=false;$('paintStitch').disabled=false;
-  $('markStitch').textContent=d?'↶ Unmark stitch':'✓ Mark stitch';
+
   $('markRow').textContent=active.rowDone[selected.row-1]?'↶ Unmark row':'✓ Mark row';
   updateDashboard();
 }
@@ -369,7 +372,21 @@ function paintStitch(){
   scheduleSave();updateLegend();requestDraw();
 }
 function applyBrushCell(cell,stroke){
-  if(!cell||!stroke||!active||pendingConversion||isPatternLocked())return false;
+  if(!cell||!stroke||!active||pendingConversion)return false;
+  if(stroke.tool==='mark'){
+    const index=indexFor(cell.col,cell.row),rowIndex=cell.row-1;
+    if(Boolean(active.done[index]||active.rowDone[rowIndex])===Boolean(stroke.color))return false;
+    if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
+    if(active.rowDone[rowIndex]){
+      const start=(active.rows-cell.row)*active.cols;
+      active.done.fill(1,start,start+active.cols);
+      active.rowDone[rowIndex]=0;
+    }
+    active.done[index]=stroke.color;
+    selected=cell;
+    return true;
+  }
+  if(isPatternLocked())return false;
   const color=stroke.tool==='erase'?0:stroke.color;
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return false;
   const i=indexFor(cell.col,cell.row);
@@ -393,7 +410,7 @@ function brushSegment(from,to,stroke){
     if(e2<dx){error+=dx;y+=sy;}
   }
   selected=to;
-  if(changed){scheduleSave();updateLegend();}
+  if(changed){scheduleSave();if(stroke.tool==="mark")updateProgress();else updateLegend();}
   updateSelection();requestDraw();
 }
 function addYarnColor(){
@@ -531,7 +548,8 @@ function screenToStitch(sx,sy){
 function previewTextConfig(){
   return {
     text:($('textInput').value||'').slice(0,40),
-    angle:((Math.round(Number($('textAngle').value)||0)%360)+360)%360,
+    angle:Number($('textAngle').value)||0,
+    flip:$('flipText').checked,
     height:$('textScale').valueAsNumber,
     col:clamp(Number($('textCol').value)||1,1,active?.cols||1),
     row:clamp(Number($('textRow').value)||1,1,active?.rows||1),
@@ -604,16 +622,17 @@ function rasterizeTextPattern(config){
     return span;
   });
   sourceWidth-=gap;
-  const radians=config.angle*Math.PI/180;
-  const cos=Math.cos(radians),sin=Math.sin(radians);
-  const width=Math.ceil(Math.abs(sourceWidth*cos)+Math.abs(config.height*sin)-1e-9);
-  const height=Math.ceil(Math.abs(sourceWidth*sin)+Math.abs(config.height*cos)-1e-9);
+  const sideways=config.angle===90||config.angle===270;
+  const width=sideways?config.height:sourceWidth;
+  const height=sideways?sourceWidth:config.height;
   const availableWidth=active.cols-config.col+1,availableHeight=config.row;
   const occupied=[];
   for(let y=0;y<Math.min(height,availableHeight);y++)for(let x=0;x<Math.min(width,availableWidth);x++){
-    const dx=x+.5-width/2,dy=y+.5-height/2;
-    const sx=Math.floor(dx*cos+dy*sin+sourceWidth/2+1e-9);
-    const sy=Math.floor(-dx*sin+dy*cos+config.height/2+1e-9);
+    const rx=config.flip?width-1-x:x;
+    let sx=rx,sy=y;
+    if(config.angle===90){sx=y;sy=config.height-1-rx;}
+    if(config.angle===180){sx=sourceWidth-1-rx;sy=config.height-1-y;}
+    if(config.angle===270){sx=sourceWidth-1-y;sy=rx;}
     if(sy<0||sy>=config.height)continue;
     const span=spans.find(span=>sx>=span.start&&sx<span.start+span.width);
     if(!span)continue;
@@ -700,6 +719,7 @@ function editLastText(){
   editingText=lastText;
   const {config}=editingText;
   for(const [id,value] of Object.entries({textInput:config.text,textAngle:config.angle,textScale:config.height,textCol:config.col,textRow:config.row,textColor:config.color}))$(id).value=value;
+  $('flipText').checked=!!config.flip;
   $('applyText').textContent='Apply lettering changes';
   buildTextPreview();
 }
@@ -897,9 +917,9 @@ canvas.addEventListener('pointerdown',ev=>{
     gesture={dragged:false,wasMulti:false,lastDist:0,lastMid:null,totalTravel:0};
     const cell=screenToStitch(ev.offsetX,ev.offsetY);
     const touchSafe=placingText||(uiSettings().stylusOnly&&ev.pointerType!=='pen');
-    if(cell&&(editorTool==='rect'||editorTool==='area')&&!pendingConversion&&!touchSafe)areaStart=cell;
-    paintStroke=cell&&(editorTool==='paint'||editorTool==='erase')&&!pendingConversion&&!touchSafe
-      ?{pointerId:ev.pointerId,tool:editorTool,color:Number($('paintColor').value),first:cell,last:cell,snapshotted:false,changed:false}:null;
+    if(cell&&(editorTool==='rect'||editorTool==='area')&&!pendingConversion&&!touchSafe&&!markingStitches)areaStart=cell;
+    paintStroke=cell&&(markingStitches||editorTool==='paint'||editorTool==='erase')&&!pendingConversion&&!placingText&&(markingStitches||!touchSafe)
+      ?{pointerId:ev.pointerId,tool:markingStitches?'mark':editorTool,color:markingStitches?Number(!(active.done[indexFor(cell.col,cell.row)]||active.rowDone[cell.row-1])):Number($('paintColor').value),first:cell,last:cell,snapshotted:false,changed:false}:null;
   }
   if(pointers.size===2){
     paintStroke=null;areaStart=null; // two-finger pan/zoom must never leave accidental paint
@@ -945,7 +965,7 @@ function endPointer(ev){
       const last=cell||areaStart;areaSelection={start:areaStart,end:last};
       if(editorTool==='rect')applyAreaFill();else {updateAreaStatus();requestDraw();}
     }else if(!gesture.dragged&&cell){
-      if(placingText){
+      if(placingText||(textPreview&&editorTool==="select"&&!markingStitches&&!isPatternLocked())){
         placeTextAt(cell);selected=cell;
       }else if(touchSafe){
         selected=cell;
@@ -967,6 +987,7 @@ function endPointer(ev){
       updateSelection();requestDraw();
     }
   }
+
   paintStroke=null;areaStart=null;
   pointers.delete(ev.pointerId);
   if(pointers.size===0){gesture.lastDist=0;gesture.lastMid=null;}
@@ -1543,7 +1564,7 @@ function hookEvents(){
   $('applyDimensions').addEventListener('click',editDimensions);
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
   $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);
-  $('markStitch').addEventListener('click',markStitch);$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
+  $('markStitch').addEventListener('click',()=>{if(!active||pendingConversion)return;clearTextPreview();markingStitches=!markingStitches;updateSelection();toast(markingStitches?'Tap or drag to mark or unmark stitches.':'Mark stitch mode off.');});$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
   for(const tool of EDIT_TOOLS){$('tool'+tool[0].toUpperCase()+tool.slice(1)).addEventListener('click',()=>setTool(tool));}
   $('paintColor').addEventListener('change',()=>selectPaintColor(Number($('paintColor').value)));
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
@@ -1680,10 +1701,10 @@ function hookEvents(){
   $('stylusOnly').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),stylusOnly:ev.target.checked};scheduleSave();updateTabletControls();toast(ev.target.checked?'Stylus mode on: finger touches only pan/select.':'Stylus mode off: touch editing restored.');});
   $('largeTouch').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),largeTouch:ev.target.checked};scheduleSave();updateTabletControls();});
   $('textColor').addEventListener('change',()=>{$('paintColor').value=$('textColor').value;updateToolUI();});
-  for(const id of ['textInput','textAngle','textScale','textCol','textRow','textColor']){
+  for(const id of ['textInput','textAngle','textScale','textCol','textRow','textColor','flipText']){
     $(id).addEventListener('input',()=>{if(textPreview)buildTextPreview();});
   }
-  for(const [id,step] of [['rotateTextLeft',-1],['rotateTextRight',1]]){
+  for(const [id,step] of [['rotateTextLeft',-90],['rotateTextRight',90]]){
     $(id).addEventListener('click',()=>{
       $('textAngle').value=(previewTextConfig().angle+step+360)%360;
       buildTextPreview();
@@ -1696,7 +1717,8 @@ function hookEvents(){
   $('editLastText').addEventListener('click',editLastText);
   $('placeText').addEventListener('click',()=>{
     if(!active||pendingConversion||editBlocked('place text'))return;
-    placingText=!placingText;
+    markingStitches=false;updateSelection();
+    placingText=true;
     $('placeText').setAttribute('aria-pressed',String(placingText));
     if(placingText)$('textFitStatus').textContent='Tap a square to set the top-left corner.';
     else if(textPreview)buildTextPreview();

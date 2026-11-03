@@ -149,3 +149,4 @@ body.large-touch .chart-layout-switch button{min-height:50px}
 @media(max-width:640px){.dashboard-grid{grid-template-columns:1fr}}
 
 #textUp{grid-area:1 / 2}#textLeft{grid-area:2 / 1}#textRight{grid-area:2 / 3}#textDown{grid-area:3 / 2}
+#markStitch[aria-pressed=true]{outline:2px solid #6955a5;outline-offset:2px}
