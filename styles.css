@@ -118,3 +118,16 @@
 .canvas-wrap{flex:0 0 auto;height:clamp(360px,57vh,700px)}
 @media(max-width:920px){.workspace{height:auto;min-height:0}.canvas-wrap{height:clamp(340px,54vh,640px)}}
 @media(max-width:640px){.workspace{height:auto;min-height:0}.canvas-wrap{height:55svh;min-height:300px}}
+
+/* v1.1 synchronized workspace */
+.dual-charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.chart-pane{min-width:0}.chart-pane h2{font-size:.85rem;margin-bottom:8px}.chart-pane h2 small{display:block;font-size:.65rem;color:#756680;font-weight:400;margin-top:4px}
+.overview-wrap,.dual-charts .canvas-wrap{height:clamp(320px,49vh,620px);min-height:320px;border:1px solid #cfc3df;border-radius:12px;overflow:hidden;background:#ede7f2;position:relative}
+#overviewCanvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.guide-dock{padding:14px;border:1px solid #cfc1df;border-radius:14px;background:#fcfaff}.guide-dock[hidden]{display:none}.guide-dock .guide-head h2{font-size:1.05rem}.guide-dock .guide-current{padding:10px;font-size:1rem;margin:8px 0}.guide-dock .guide-row-stripe{height:20px;margin-top:10px}.guide-dock .guide-buttons{margin:8px 0;gap:8px}.guide-dock .guide-buttons .button{min-height:44px;font-size:.8rem}.guide-dock .guide-next{min-height:0}
+.help-button{border:1px solid #b3a0ca;border-radius:50%;background:#fff;color:#63438e;min-width:28px;min-height:28px;margin-left:7px;font-weight:bold;vertical-align:middle}.context-help{background:#f1eafa;border-left:3px solid #8661bb;padding:12px;margin:8px 0;line-height:1.5;font-size:.82rem;color:#443454}.guide-link{font-size:.78rem;color:#63438e}
+.help-button{flex:0 0 auto;align-self:flex-start;width:28px;height:28px;padding:0}.settings-card{display:flex;flex-direction:column;gap:12px;break-inside:avoid}.inspector{align-items:start}.context-help[hidden]{display:none}
+@media(min-width:921px) and (max-width:1450px){.layout{grid-template-columns:180px minmax(0,1fr)}.inspector{grid-column:1/-1;height:auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.inspector>.section-divider{display:none}}
+@media(max-width:640px){.dual-charts{grid-template-columns:1fr}.overview-wrap{height:230px;min-height:230px}.dual-charts .canvas-wrap{height:50svh}.guide-head{flex-wrap:wrap}}
+@media(min-width:921px) and (max-width:1450px){.inspector{display:block;columns:3;column-gap:20px}.inspector>.inspector-section,.inspector>.settings-card{break-inside:avoid;margin-bottom:20px}.inspector>.context-help{break-inside:avoid}}
+@media(min-width:641px) and (max-width:920px){.settings-card{grid-column:1/-1}}

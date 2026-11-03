@@ -455,13 +455,14 @@ function screenToStitch(sx,sy){
   if(x<0||y<0||x>=active.cols*CELL||y>=active.rows*CELL)return null;
   return {col:Math.floor(x/CELL)+1,row:active.rows-Math.floor(y/CELL)};
 }
-function draw(){
+function drawScene(ctx,canvasWidth,canvasHeight,view){
   const dpr=Math.min(devicePixelRatio||1,2);
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#ede7f2';ctx.fillRect(0,0,canvasWidth,canvasHeight);
   if(!active)return;
   const s=view.scale,{cols,rows}=displayDimensions(),bw=cols*CELL,bh=rows*CELL;
   ctx.save();ctx.translate(view.x,view.y);ctx.scale(s,s);
-  ctx.fillStyle='#fff';ctx.fillRect(M-42,M-42,bw+84,bh+84);
+  const labelMargin=Math.max(42,32/s);
+  ctx.fillStyle='#fff';ctx.fillRect(M-labelMargin,M-labelMargin,bw+labelMargin*2,bh+labelMargin*2);
   const minCol=clamp(Math.floor(((-view.x/s)-M)/CELL),0,cols),maxCol=clamp(Math.ceil(((canvasWidth-view.x)/s-M)/CELL),0,cols);
   const minRow=clamp(Math.floor(((-view.y/s)-M)/CELL),0,rows),maxRow=clamp(Math.ceil(((canvasHeight-view.y)/s-M)/CELL),0,rows);
   if(referenceImg&&active.opacity>0&&!active.converted){
@@ -525,24 +526,56 @@ function draw(){
     ctx.strokeStyle='#a04aea';ctx.lineWidth=2/s;ctx.setLineDash([6/s,3/s]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
   }
   // At large zoom, show EVERY number. At fit-scale, space labels to keep them legible.
-  const interval=Math.max(1,Math.ceil(15/(CELL*s)));
-  const fontWorld=clamp(10/s,9,21);ctx.font=`bold ${fontWorld}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+  const interval=Math.max(1,Math.ceil(15/(CELL*s))),columnInterval=Math.max(1,Math.ceil(32/(CELL*s)));
+  const fontWorld=10/s;ctx.font=`bold ${fontWorld}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
   const highlightedX=selected&&!pendingConversion?selected.col-1:-1, highlightedY=selected&&!pendingConversion?rows-selected.row:-1;
   for(let c=minCol;c<maxCol;c++){
-    if(c%interval!==0&&c!==highlightedX&&c!==cols-1)continue;
+    if(c%columnInterval!==0&&c!==highlightedX&&c!==cols-1)continue;
+    if(c!==highlightedX&&highlightedX>=0&&Math.abs(c-highlightedX)*CELL*s<28)continue;
+    if(c!==cols-1&&c!==highlightedX&&(cols-1-c)*CELL*s<28)continue;
     const x=M+(c+.5)*CELL,num=String(c+1),chosen=c===highlightedX;
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(x-11,M-34,22,20);ctx.fillRect(x-11,M+bh+14,22,20);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,x,M-24);ctx.fillText(num,x,M+bh+24);
+    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(x-11/s,M-22/s,22/s,20/s);ctx.fillRect(x-11/s,M+bh+2/s,22/s,20/s);}
+    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,x,M-12/s);ctx.fillText(num,x,M+bh+12/s);
   }
   for(let r=minRow;r<maxRow;r++){
     const row=rows-r,chosen=r===highlightedY;
     if((row-1)%interval!==0&&!chosen&&row!==rows)continue;
     const y=M+(r+.5)*CELL,num=String(row);
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(M-35,y-10,27,20);ctx.fillRect(M+bw+8,y-10,27,20);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,M-22,y);ctx.fillText(num,M+bw+22,y);
+    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(M-31/s,y-10/s,27/s,20/s);ctx.fillRect(M+bw+4/s,y-10/s,27/s,20/s);}
+    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,M-18/s,y);ctx.fillText(num,M+bw+18/s,y);
   }
   ctx.restore();
 }
+
+// Two projections of the same active project; no duplicate cells or progress.
+const overviewCanvas = $('overviewCanvas');
+let overviewView = {scale:1,x:0,y:0};
+function draw(){
+  drawScene(ctx,canvasWidth,canvasHeight,view);
+  const rect=overviewCanvas.getBoundingClientRect(), w=Math.max(1,rect.width),h=Math.max(1,rect.height);
+  const dpr=Math.min(devicePixelRatio||1,2);
+  overviewCanvas.width=Math.round(w*dpr);overviewCanvas.height=Math.round(h*dpr);
+  const dims=displayDimensions();
+  const s=Math.min((w-24)/boardWidth(),(h-24)/boardHeight(),(w-64)/(dims.cols*CELL),(h-64)/(dims.rows*CELL));
+  overviewView={scale:s,x:(w-boardWidth()*s)/2,y:(h-boardHeight()*s)/2};
+  const g=overviewCanvas.getContext('2d');drawScene(g,w,h,overviewView);
+  if(!active)return;
+  // Clip the working viewport rectangle to the chart board.
+  const x=Math.max(0,-view.x/view.scale),y=Math.max(0,-view.y/view.scale);
+  const right=Math.min(boardWidth(),(canvasWidth-view.x)/view.scale),bottom=Math.min(boardHeight(),(canvasHeight-view.y)/view.scale);
+  if(right>x&&bottom>y){g.save();g.setTransform(dpr,0,0,dpr,0,0);g.strokeStyle='#d23f17';g.lineWidth=2;g.setLineDash([6,3]);g.strokeRect(overviewView.x+x*s,overviewView.y+y*s,(right-x)*s,(bottom-y)*s);g.restore();}
+}
+function navigateOverview(ev){
+  if(!active||pendingConversion)return;
+  const r=overviewCanvas.getBoundingClientRect(),v=overviewView;
+  const wx=(ev.clientX-r.left-v.x)/v.scale,wy=(ev.clientY-r.top-v.y)/v.scale;
+  const col=Math.floor((wx-M)/CELL)+1,row=active.rows-Math.floor((wy-M)/CELL);
+  if(col<1||col>active.cols||row<1||row>active.rows)return;
+  selected={col,row};view.x=canvasWidth/2-wx*view.scale;view.y=canvasHeight/2-wy*view.scale;updateSelection();requestDraw();
+}
+overviewCanvas.addEventListener('pointerdown',ev=>{overviewCanvas.setPointerCapture(ev.pointerId);navigateOverview(ev);});
+overviewCanvas.addEventListener('pointermove',ev=>{if(ev.buttons)navigateOverview(ev);});
+overviewCanvas.addEventListener('keydown',ev=>{if(!active)return;const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};if(!moves[ev.key])return;ev.preventDefault();const [dc,dr]=moves[ev.key];selected={col:clamp((selected?.col||1)+dc,1,active.cols),row:clamp((selected?.row||1)+dr,1,active.rows)};view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;updateSelection();requestDraw();});
 
 canvas.addEventListener('pointerdown',ev=>{
   if(ev.button!==0&&ev.pointerType==='mouse')return;
@@ -1031,7 +1064,7 @@ function applyAreaFill(){
   active.converted=true;scheduleSave();updateLegend();requestDraw();toast(`${format(changed)} stitches filled as a rectangle.`);updateAreaStatus();
 }
 function renderGuide(){
-  if(!active||!$('guideDialog').open)return;
+  if(!active||$('guideDialog').hidden)return;
   Pattern.ensure(active);
   const {guide:g}=active,row=g.row,pos=g.position;
   const dir=Pattern.direction(active,row),runs=Pattern.runs(active,row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(active,row,pos);
@@ -1053,6 +1086,8 @@ function renderGuide(){
 function focusGuideCell(){
   const g=active.guide;
   selected={row:g.row,col:Pattern.colAt(active,g.row,g.position)};
+  const gx=M+(selected.col-.5)*CELL,gy=M+(active.rows-selected.row+.5)*CELL;
+  if(gx*view.scale+view.x<20||gx*view.scale+view.x>canvasWidth-20||gy*view.scale+view.y<20||gy*view.scale+view.y>canvasHeight-20){view.x=canvasWidth/2-gx*view.scale;view.y=canvasHeight/2-gy*view.scale;}
   $('instructionRow').value=g.row;updateSelection();requestDraw();renderRowSequence();renderGuide();
 }
 function guideNext(){
@@ -1124,8 +1159,8 @@ function hookPatternEvents(){
     scheduleSave();updateSelection();updateProgress();renderRowSequence();requestDraw();
   });
   $('openGuide').addEventListener('click',()=>{if(pendingConversion)return toast('Apply or discard the current chart preview first.');
-    if(!$('guideDialog').open)$('guideDialog').showModal();focusGuideCell();});
-  $('closeGuide').addEventListener('click',()=>$('guideDialog').close());
+    $('guideDialog').hidden=false;focusGuideCell();});
+  $('closeGuide').addEventListener('click',()=>{$('guideDialog').hidden=true;});
   $('guideNext').addEventListener('click',guideNext);$('guidePrev').addEventListener('click',guideBack);
   $('guidePrevRow').addEventListener('click',()=>guideChangeRow(-1));$('guideNextRow').addEventListener('click',()=>guideChangeRow(1));
   for(const [field,key,min,max] of [['gaugeStitches','swatchStitches',1,100000],['gaugeYards','swatchYards',0,100000],['gaugeOverage','overage',0,100]]){
@@ -1303,6 +1338,7 @@ function hookEvents(){
   $('backupFile').addEventListener('change',ev=>{restoreBackup(ev.target.files[0]);ev.target.value='';});
   $('deleteProject').addEventListener('click',removeActiveProject);
   new ResizeObserver(resizeCanvas).observe($('canvasWrap'));
+  new ResizeObserver(requestDraw).observe(overviewCanvas);
   window.addEventListener('beforeunload',()=>flushSave());
 }
 async function initialize(){
