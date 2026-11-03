@@ -89,7 +89,7 @@
  }
  function makeCheckpoint(project,name){
    ensure(project);
-   const snap={id:Date.now()+'-'+Math.random().toString(36).slice(2,7),name:String(name||'Before editing').slice(0,65),at:new Date().toISOString(),cols:project.cols,rows:project.rows,cells:project.cells.slice(),palette:project.palette.map(c=>({...c})),done:project.done.slice(),rowDone:project.rowDone.slice(),yarnInfo:JSON.parse(JSON.stringify(project.yarnInfo))};
+   const snap={referenceMirrored:!!project.referenceMirrored,id:Date.now()+'-'+Math.random().toString(36).slice(2,7),name:String(name||'Before editing').slice(0,65),at:new Date().toISOString(),cols:project.cols,rows:project.rows,cells:project.cells.slice(),palette:project.palette.map(c=>({...c})),done:project.done.slice(),rowDone:project.rowDone.slice(),yarnInfo:JSON.parse(JSON.stringify(project.yarnInfo))};
    project.checkpoints=[snap,...project.checkpoints].slice(0,3);return snap;
  }
  window.DorettePattern=Object.freeze({direction,physicalIndex,colAt,runs,runForPosition,counts,estimate,ensure,rectangle,bucket,copyArea,paste,makeCheckpoint});

@@ -172,10 +172,10 @@ function refreshInspector(){
 }
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
-    opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
+    referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
     workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),ui:{...uiSettings(active)}};
 }
-let markingStitches=false;
+let markingStitches=false, overviewStroke=null;
 let lastText=null, editingText=null, placingText=false;
 function snapshot(){
   if(editingText)clearTextPreview();
@@ -421,6 +421,27 @@ function addYarnColor(){
   active.palette.push({hex,name:'Yarn color '+(index+1),symbol:SYMBOLS[index]});
   scheduleSave();updateLegend();updateTextControls();renderYarnInventory();$('paintColor').value=String(index);toast('New yarn color added. Select a stitch to paint it.');
 }
+function mirrorChart(){
+  if(!active||pendingConversion||editBlocked('mirror the chart'))return;
+  snapshot();
+  clearTextPreview();
+  const {cols,rows}=active;
+  for(const stitches of [active.cells,active.done]){
+    for(let row=0;row<rows;row++){
+      const start=row*cols;
+      for(let col=0;col<Math.floor(cols/2);col++){
+        const left=start+col,right=start+cols-1-col;
+        [stitches[left],stitches[right]]=[stitches[right],stitches[left]];
+      }
+    }
+  }
+  active.referenceMirrored=!active.referenceMirrored;
+  if(selected)selected={...selected,col:cols+1-selected.col};
+  active.guide.position=cols-1-active.guide.position;
+  areaSelection=null;updateAreaStatus();
+  scheduleSave();refreshInspector();
+  toast('Chart mirrored left to right. Use Undo to restore it.');
+}
 function editDimensions(){
   if(!active||editBlocked("resize the chart"))return;
   const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
@@ -459,7 +480,13 @@ function renderCroppedImage(target,img,x,y,w,h){
   const sw=(crop.right-crop.left)*img.width,sh=(crop.bottom-crop.top)*img.height;
   let dest={x,y,w,h};
   if(active?.imagePlacement!=='stretch')dest=imageContainRect({width:sw,height:sh},x,y,w,h);
+  target.save();
+  if(active?.referenceMirrored){
+    target.translate(2*dest.x+dest.w,0);
+    target.scale(-1,1);
+  }
   target.drawImage(img,sx,sy,sw,sh,dest.x,dest.y,dest.w,dest.h);
+  target.restore();
   return dest;
 }
 function updateCropControls(){
@@ -895,17 +922,28 @@ function draw(){
   const right=Math.min(boardWidth(),(canvasWidth-view.x)/view.scale),bottom=Math.min(boardHeight(),(canvasHeight-view.y)/view.scale);
   if(right>x&&bottom>y){g.save();g.setTransform(dpr,0,0,dpr,0,0);g.strokeStyle='#d23f17';g.lineWidth=2;g.setLineDash([6,3]);g.strokeRect(overviewView.x+x*s,overviewView.y+y*s,(right-x)*s,(bottom-y)*s);g.restore();}
 }
+function makeMarkStroke(cell,pointerId){
+  const complete=active.done[indexFor(cell.col,cell.row)]||active.rowDone[cell.row-1];
+  return {pointerId,tool:'mark',color:Number(!complete),first:cell,last:cell,snapshotted:false};
+}
 function navigateOverview(ev){
   if(!active||pendingConversion)return;
   const r=overviewCanvas.getBoundingClientRect(),v=overviewView;
   const wx=(ev.clientX-r.left-v.x)/v.scale,wy=(ev.clientY-r.top-v.y)/v.scale;
   const col=Math.floor((wx-M)/CELL)+1,row=active.rows-Math.floor((wy-M)/CELL);
   if(col<1||col>active.cols||row<1||row>active.rows)return;
-  if(placingText){placeTextAt({col,row});return;}
+  if(placingText){if(ev.type==="pointerdown")placeTextAt({col,row});return;}
+  if(markingStitches){
+    const cell={col,row};
+    if(ev.type==="pointerdown"&&!overviewStroke)overviewStroke=makeMarkStroke(cell,ev.pointerId);
+    if(overviewStroke?.pointerId===ev.pointerId){brushSegment(overviewStroke.last,cell,overviewStroke);overviewStroke.last=cell;}
+    return;
+  }
   selected={col,row};view.x=canvasWidth/2-wx*view.scale;view.y=canvasHeight/2-wy*view.scale;updateSelection();requestDraw();
 }
 overviewCanvas.addEventListener('pointerdown',ev=>{overviewCanvas.setPointerCapture(ev.pointerId);navigateOverview(ev);});
 overviewCanvas.addEventListener('pointermove',ev=>{if(ev.buttons)navigateOverview(ev);});
+for(const type of ['pointerup','pointercancel','lostpointercapture'])overviewCanvas.addEventListener(type,ev=>{if(overviewStroke?.pointerId===ev.pointerId)overviewStroke=null;});
 overviewCanvas.addEventListener('keydown',ev=>{if(!active)return;const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};if(!moves[ev.key])return;ev.preventDefault();const [dc,dr]=moves[ev.key];selected={col:clamp((selected?.col||1)+dc,1,active.cols),row:clamp((selected?.row||1)+dr,1,active.rows)};view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;updateSelection();requestDraw();});
 
 canvas.addEventListener('pointerdown',ev=>{
@@ -1288,7 +1326,7 @@ function validateBackup(p){
   const safe=validatePatternExtras(p);
   return {id:uid(),name:p.name.trim()+' (restored)',cols:p.cols,rows:p.rows,cells:p.cells.slice(),done:p.done.slice(),rowDone:p.rowDone.slice(),
     palette:p.palette.map(c=>({hex:c.hex,name:c.name,symbol:c.symbol})),referenceImage:p.referenceImage||null,
-    opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',conversionSettings:conversionSettings(p),converted:!!p.converted,...safe,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceMirrored:p.referenceMirrored===true,opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',conversionSettings:conversionSettings(p),converted:!!p.converted,...safe,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 async function restoreBackup(file){
   if(!file)return;
@@ -1545,7 +1583,7 @@ function hookPatternEvents(){
     if(!active||editBlocked('restore a snapshot'))return;
     const cp=active.checkpoints.find(c=>c.id===$('checkpointChoice').value);if(!cp)return;
     if(!confirm(`Restore “${cp.name}”? Current changes will be kept in Undo history. Save a ZIP backup too.`))return;
-    snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),converted:true});
+    snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),converted:true,referenceMirrored:cp.referenceMirrored===true});
     Pattern.ensure(active);areaSelection=null;selected=null;scheduleSave();refreshInspector();fitChart();toast('Snapshot restored; Undo is available.');
   });
 }
@@ -1563,8 +1601,8 @@ function hookEvents(){
   });
   $('applyDimensions').addEventListener('click',editDimensions);
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
-  $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);
-  $('markStitch').addEventListener('click',()=>{if(!active||pendingConversion)return;clearTextPreview();markingStitches=!markingStitches;updateSelection();toast(markingStitches?'Tap or drag to mark or unmark stitches.':'Mark stitch mode off.');});$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
+  $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);$('mirrorChart').addEventListener('click',mirrorChart);
+  $('markStitch').addEventListener('click',()=>{if(!active||pendingConversion)return;clearTextPreview();markingStitches=!markingStitches;overviewStroke=null;if(markingStitches&&!uiSettings().showProgress){active.ui={...uiSettings(),showProgress:true};updateTabletControls();scheduleSave();requestDraw();}updateSelection();toast(markingStitches?'Tap or drag to mark or unmark stitches.':'Mark stitch mode off.');});$('markRow').addEventListener('click',markRow);$('paintStitch').addEventListener('click',paintStitch);$('addYarnColor').addEventListener('click',addYarnColor);
   for(const tool of EDIT_TOOLS){$('tool'+tool[0].toUpperCase()+tool.slice(1)).addEventListener('click',()=>setTool(tool));}
   $('paintColor').addEventListener('change',()=>selectPaintColor(Number($('paintColor').value)));
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
@@ -1640,7 +1678,7 @@ function hookEvents(){
     const result=pendingConversion;
     if(result.cols!==active.cols||result.rows!==active.rows){
       const fresh=blankProject(`${active.name} — ${result.cols}x${result.rows}`,result.cols,result.rows);
-      fresh.referenceImage=active.referenceImage;fresh.photoCrop={...currentCrop()};
+      fresh.referenceImage=active.referenceImage;fresh.referenceMirrored=!!active.referenceMirrored;fresh.photoCrop={...currentCrop()};
       fresh.imagePlacement=active.imagePlacement;fresh.conversionSettings={...conversionSettings()};
       fresh.palette=result.palette.map(c=>({...c}));fresh.cells=result.cells.slice();fresh.converted=true;fresh.opacity=0;
       projects.set(fresh.id,fresh);queueWrite(fresh);selectProject(fresh.id);

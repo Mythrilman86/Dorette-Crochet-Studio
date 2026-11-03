@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.2.7">
+  <link rel="stylesheet" href="./styles.css?v=1.2.8">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -30,7 +30,7 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.2.7 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.2.8 · Local workspace</span></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomValue" class="zoom-value">100%</span>
@@ -39,6 +39,7 @@
         <div class="toolbar-divider"></div>
         <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button><button id="redoButton" class="button ghost" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         <button id="resetView" class="button ghost">⌖ Center</button>
+        <button id="mirrorChart" class="button ghost" type="button">Mirror chart</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
@@ -176,7 +177,7 @@
         <div class="pair"><label class="field">New color<input id="newHex" type="color" value="#4d8eaf" class="color-picker"></label><button id="addYarnColor" class="button ghost">＋ Add color</button></div>
       </div>
       <div class="section-divider"></div>
-      <div class="inspector-section"><div class="section-title"><span class="eyebrow">TEXT TO CHART</span><span class="count">v1.2.7</span></div>
+      <div class="inspector-section"><div class="section-title"><span class="eyebrow">TEXT TO CHART</span><span class="count">v1.2.8</span></div>
         <label class="field">Text / letters / numbers / symbols<input id="textInput" maxlength="40" placeholder="Type a word, initials, date or symbol"></label>
         <div class="pair"><label class="field">Rotation (degrees)<select id="textAngle"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label><label class="field">Letter height (stitches)<input id="textScale" type="number" min="5" max="100" step="1" value="5" inputmode="numeric" aria-describedby="textFitStatus"></label></div>
         <div class="pair"><label class="field">Start column<input id="textCol" type="number" min="1" max="200" value="1"></label><label class="field">Top row<input id="textRow" type="number" min="1" max="300" value="1"></label></div>
@@ -242,9 +243,9 @@
 
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./pattern-tools.js?v=1.2.7" defer></script>
-  <script src="./pdf-export.js?v=1.2.7" defer></script>
-  <script src="./app.js?v=1.2.7" defer></script>
-  <script src="./help.js?v=1.2.7" defer></script>
+  <script src="./pattern-tools.js?v=1.2.8" defer></script>
+  <script src="./pdf-export.js?v=1.2.8" defer></script>
+  <script src="./app.js?v=1.2.8" defer></script>
+  <script src="./help.js?v=1.2.8" defer></script>
 </body>
 </html>
