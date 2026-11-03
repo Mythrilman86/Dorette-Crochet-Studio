@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#6955a5">
+  <meta name="description" content="Create, track and back up crochet charts on your device.">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Dorette Crochet Studio</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
+    <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
+  </header>
+  <main class="layout">
+    <aside class="sidebar" aria-label="Projects">
+      <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
+      <div id="projectList" class="project-list"></div>
+      <details id="newProjectDetails" class="new-project"><summary>＋ New crochet project</summary>
+        <form id="newProjectForm" class="stack form-fields">
+          <label>Project name<input id="newName" maxlength="70" value="New Crochet Chart" required></label>
+          <div class="pair"><label>Columns<input id="newCols" type="number" min="1" max="200" value="79" required></label><label>Rows<input id="newRows" type="number" min="1" max="300" value="117" required></label></div>
+          <button type="submit" class="button primary block">Create project</button>
+        </form>
+      </details>
+      <div class="sidebar-note"><strong>Private by default</strong><p>Your charts are saved in this browser, not uploaded to a server. Make regular Google Drive backups.</p></div>
+    </aside>
+
+    <section class="workspace" aria-label="Chart editor">
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">● Local workspace</span></div>
+      <div class="toolbar" aria-label="Chart tools">
+        <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
+        <span id="zoomValue" class="zoom-value">100%</span>
+        <button id="zoomIn" class="icon-button" title="Zoom in" aria-label="Zoom in">＋</button>
+        <button id="fitChart" class="button ghost">Fit chart</button>
+        <div class="toolbar-divider"></div>
+        <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="resetView" class="button ghost">⌖ Center</button>
+        <span class="toolbar-hint">Tap: select · Drag: pan · Wheel/pinch: zoom</span>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
+        <div class="canvas-note">Grid lines extend into the numbered edges · Select a stitch to highlight its row & column</div>
+      </div>
+      <div class="selection-bar">
+        <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
+        <div class="selection-actions"><button id="markStitch" class="button primary" disabled>✓ Mark stitch</button><button id="markRow" class="button secondary" disabled>✓ Mark row</button></div>
+      </div>
+      <p id="helpMessage" class="hint-line">Tip: Tap a square to highlight it; then mark the stitch or its entire row. Press Space to toggle the selected stitch.</p>
+    </section>
+
+    <aside class="inspector" aria-label="Project settings">
+      <div class="inspector-heading"><span class="eyebrow">PROJECT DETAILS</span><h2>Chart settings</h2></div>
+      <label class="field">Project name<input id="projectName" maxlength="70" placeholder="Project name"></label>
+      <div class="pair"><label class="field">Columns<input id="colsInput" type="number" min="1" max="200"></label><label class="field">Rows<input id="rowsInput" type="number" min="1" max="300"></label></div>
+      <button class="button secondary block" id="applyDimensions">Apply dimensions</button>
+      <div class="section-divider"></div>
+      <div class="inspector-section"><span class="eyebrow">STITCH PROGRESS</span><div class="progress-label"><strong id="progressText">0 / 9,243</strong><span id="progressPercent">0%</span></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><p class="muted">Completing a row counts all stitches in it.</p></div>
+      <div class="section-divider"></div>
+      <div class="inspector-section"><span class="eyebrow">IMAGE TO CHART</span>
+        <label class="button secondary block upload-label" for="imageFile">▧ Import chart or photo</label><input id="imageFile" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
+        <p class="muted">Existing charts are placed under the grid as a guide. Specify the exact grid dimensions for accurate stitch counts.</p>
+        <label class="field">Reference image opacity<input id="imageOpacity" type="range" min="0" max="100" value="35"><span class="range-value" id="opacityText">35%</span></label>
+        <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" disabled>Convert to stitches</button></div>
+        <p class="muted">Conversion approximates colors by sampling the image into one color per stitch. Review and correct results before crocheting.</p>
+        <button id="removeImage" class="text-button" disabled>Remove reference image</button>
+      </div>
+      <div class="section-divider"></div>
+      <div class="inspector-section"><div class="section-title"><span class="eyebrow">YARN COLOR LEGEND</span><span id="totalColors" class="count">1</span></div><div id="legend" class="legend"></div>
+        <label class="field">Color for editing<select id="paintColor"></select></label>
+        <button id="paintStitch" class="button secondary block" disabled>◈ Paint selected stitch</button>
+        <label class="toggle"><input id="paintMode" type="checkbox"> Paint squares when tapped</label>
+        <div class="pair"><label class="field">New color<input id="newHex" type="color" value="#4d8eaf" class="color-picker"></label><button id="addYarnColor" class="button ghost">＋ Add color</button></div>
+      </div>
+      <div class="section-divider"></div>
+      <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
+      <div class="section-divider"></div>
+      <button id="deleteProject" class="text-button danger">Delete current project</button>
+    </aside>
+  </main>
+  <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
+  <div class="toast" id="toast" aria-live="polite"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
