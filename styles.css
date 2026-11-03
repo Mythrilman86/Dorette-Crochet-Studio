@@ -66,3 +66,10 @@
 .yarn-chip:focus-visible,.edit-tool:focus-visible{outline:3px solid #b58ce6;outline-offset:2px}
 .editor-hint{font-size:.7rem;color:#87778f;line-height:1.35}
 @media(max-width:640px){.stitch-editor{padding:8px}.editor-tools{gap:4px}.edit-tool{flex:1 0 auto;min-height:36px;padding:6px;font-size:.68rem}.yarn-chip{width:33px;height:33px}.editor-hint{font-size:.65rem}}
+
+/* v0.4.1: explain what to do when a project has no source photograph. */
+.source-photo-notice {
+  margin: 10px 0 12px; padding: 11px 12px; border-radius: 10px;
+  background: #f2edfa; color: #59447a; border: 1px solid #d9cce9;
+  font-size: 12px; line-height: 1.5;
+}

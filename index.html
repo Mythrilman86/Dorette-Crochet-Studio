@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.4.0">
+  <link rel="stylesheet" href="./styles.css?v=0.4.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -74,6 +74,7 @@
       <div class="inspector-section"><span class="eyebrow">IMAGE TO CHART</span>
         <label class="button secondary block upload-label" for="imageFile">▧ Import chart or photo</label><input id="imageFile" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
         <p class="muted">For ordinary photos, crop away the surroundings before converting. For existing gridded charts, enter the known stitch dimensions.</p>
+        <p id="sourcePhotoNotice" class="source-photo-notice" role="status" aria-live="polite" hidden></p>
         <div id="photoCropPanel" class="photo-crop-panel" hidden>
           <div class="section-title"><strong>Crop the photograph</strong><button id="resetCrop" class="text-button" type="button">Reset</button></div>
           <canvas id="cropPreview" width="300" height="390" role="img" aria-label="Photograph crop preview. Drag the purple corner handles to crop the picture."></canvas>
@@ -113,12 +114,12 @@
           <p class="muted">Lower light text threshold or increase fine lettering boost to recover thin letters; raise threshold if gray background noise appears. Preview changes before applying.</p>
         </div>
         <label class="field">Reference image opacity<input id="imageOpacity" type="range" min="0" max="100" value="35"><span class="range-value" id="opacityText">35%</span></label>
-        <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" disabled>Preview stitches</button></div>
+        <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" type="button">Preview stitches</button></div>
         <p id="paletteHelp" class="muted"></p>
         <label class="field">Preview grid size
           <select id="previewDimensions"><option value="current">Current project size (no resize)</option><option value="large">120 × 165 (19,800 stitches)</option></select>
         </label>
-        <button id="compareSizes" class="button secondary block" disabled>Compare 79 × 117 vs 120 × 165</button>
+        <button id="compareSizes" class="button secondary block" type="button">Compare 79 × 117 vs 120 × 165</button>
         <div id="conversionPreview" class="conversion-preview" hidden>
           <strong id="previewSummary">Conversion preview</strong>
           <p class="muted">This preview has NOT changed or erased saved stitches. Applying a different grid size creates a separate new project.</p>
@@ -150,6 +151,6 @@
   </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js?v=0.4.0" defer></script>
+  <script src="./app.js?v=0.4.1" defer></script>
 </body>
 </html>

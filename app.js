@@ -120,13 +120,35 @@ function selectProject(id) {
   try {localStorage.setItem('dorette-active-project',id);}catch{}
   syncImage();refreshProjectList();refreshInspector();fitChart();
 }
+function updateReferenceActions(){
+  if(!active)return;
+  const hasSource=!!active.referenceImage;
+  // Preview and Compare are *actions* even when source photo is missing:
+  // they guide the user into reattaching it rather than appearing broken.
+  $('convertPhoto').disabled=false;
+  $('compareSizes').disabled=false;
+  $('convertPhoto').textContent=hasSource?'Preview stitches':'Add photo to preview';
+  $('compareSizes').textContent=hasSource?'Compare 79 × 117 vs 120 × 165':'Add photo to compare sizes';
+  $('removeImage').disabled=!hasSource;
+  const notice=$('sourcePhotoNotice');
+  notice.hidden=hasSource;
+  if(!hasSource){
+    notice.textContent=active.converted||active.cells.some(v=>v!==0)
+      ? 'This project has saved stitch colors, but no source photograph is attached. To create a new conversion, select the original photo again. Your stitch colors and completed progress will be kept until you explicitly apply a new chart.'
+      : 'To turn a picture into stitches, import the original photograph. You can also tap “Add photo to preview” below.';
+  }
+}
+function requestSourcePhoto(action){
+  toast(`Select the original photo to ${action}. Existing stitch colors will stay unchanged.`);
+  $('imageFile').click();
+}
 function refreshInspector(){
   if (!active)return;
   $('workspaceTitle').textContent=active.name;$('projectName').value=active.name;
   updateChartSubtitle();
   $('colsInput').value=active.cols;$('rowsInput').value=active.rows;
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
-  $('convertPhoto').disabled=!active.referenceImage;$('compareSizes').disabled=!active.referenceImage;$('removeImage').disabled=!active.referenceImage;
+  updateReferenceActions();
   updateCropControls();updateConversionControls();
   updateSelection();updateProgress();updateLegend();requestDraw();
 }
@@ -591,14 +613,17 @@ async function importImage(file){
   try{
     status('Processing image…');const data=await normalizeImage(file);
     if(!projects.has(id)||active.id!==id){toast('Project changed; image import canceled.');return;}
-    if((active.converted||active.cells.some(v=>v!==0)) && !confirm('This image will replace the current yarn-color chart in this project. Your existing color edits will be lost unless you make a backup first. Continue?')){
-      status(memoryOnly?'Storage blocked — export backups':'✓ Saved on this device',memoryOnly);
-      toast('Import canceled; existing stitch colors preserved.');return;
-    }
-    snapshot();discardPreview(false);active.referenceImage=data;active.converted=false;
+    // Attaching or replacing a reference image is NON-DESTRUCTIVE.
+    // Converted cells, custom yarn colors and completion flags are preserved.
+    // Only Apply chart explicitly replaces a project's cell-color data.
+    const keptColors=!!active.converted||active.cells.some(v=>v!==0);
+    snapshot();discardPreview(false);active.referenceImage=data;
     active.photoCrop={...FULL_CROP};active.imagePlacement='contain';
-    active.palette=DEFAULT_COLORS.map(c=>({...c}));active.cells.fill(0);
-    active.opacity=.35;syncImage();scheduleSave();refreshInspector();toast('Image loaded. Crop the artwork before previewing stitches.');
+    if(!keptColors)active.opacity=.35;
+    syncImage();scheduleSave();refreshInspector();
+    toast(keptColors
+      ? 'Source photo attached. Your existing stitch colors and progress were kept. Crop, then preview the new version.'
+      : 'Image loaded. Crop the artwork before previewing stitches.');
   }catch(e){toast('Image import failed: '+e.message);status('Image import failed',true);}
 }
 function hexRGB(rgb){return '#'+rgb.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');}
@@ -727,7 +752,8 @@ function previewResult(result){
   toast('Preview ready. Zoom in to inspect small lettering.');
 }
 function convertImage(){
-  if(!active?.referenceImage||!referenceImg){toast('Import an image first.');return;}
+  if(!active?.referenceImage){requestSourcePhoto('preview a new stitch chart');return;}
+  if(!referenceImg){toast('Source photo is loading. Try previewing again in a moment.');return;}
   try{
     status('Converting image…');
     const [cols,rows]=$('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
@@ -735,7 +761,8 @@ function convertImage(){
   }catch(e){toast('Conversion failed: '+e.message);status('Conversion failed',true);}
 }
 function compareSizes(){
-  if(!active?.referenceImage||!referenceImg){toast('Import an image first.');return;}
+  if(!active?.referenceImage){requestSourcePhoto('compare chart sizes');return;}
+  if(!referenceImg){toast('Source photo is loading. Try comparing again in a moment.');return;}
   try{
     status('Preparing comparison…');
     comparisonResults={small:buildConversion(79,117),large:buildConversion(120,165)};
@@ -973,7 +1000,12 @@ function hookEvents(){
     if(!active)return;snapshot();active.conversionSettings={...DEFAULT_CONVERSION};
     discardPreview(false);scheduleSave();updateConversionControls();toast('High-contrast print settings restored.');
   });
-  $('removeImage').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();toast('Reference image removed.');});
+  $('removeImage').addEventListener('click',()=>{
+    if(!active?.referenceImage)return;
+    if(!confirm('Remove the source photo? Existing stitch colors will remain, but you will need to attach a photo again before previewing new conversions.'))return;
+    snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();
+    toast('Reference photo removed. Existing stitched chart and progress remain unchanged.');
+  });
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());
