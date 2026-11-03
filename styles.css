@@ -15,3 +15,18 @@
 .conversion-preview strong{font-size:.8rem;color:#58348d}
 .conversion-preview .pair{gap:7px}
 .conversion-preview .button{white-space:normal}
+
+/* v0.2.1: typed trim percentages alongside touch sliders */
+.crop-sliders .crop-trim-control{min-width:0;gap:6px}
+.crop-sliders .crop-trim-control>label{font-size:.7rem;font-weight:750}
+.crop-input-row{display:flex;align-items:center;gap:6px;min-width:0}
+.crop-input-row input[type=range]{flex:1 1 0;min-width:0;width:100%;height:26px}
+.crop-number-box{display:flex;align-items:center;flex:0 0 auto;gap:2px;background:white;border:1px solid #d7cbe7;border-radius:8px;padding:0 5px 0 1px;color:#735d91;font-size:.68rem;font-weight:750}
+.crop-number-box:focus-within{outline:2px solid #b8a4e8;outline-offset:1px}
+.crop-sliders .crop-number-box input[type=number]{width:42px;min-width:0;padding:6px 1px 6px 5px;border:none;background:transparent;text-align:right;font-size:.82rem;font-weight:700;color:#423154;box-shadow:none;outline:none}
+.crop-help{font-size:.67rem}
+@media(max-width:360px){.crop-sliders{grid-template-columns:1fr}.crop-sliders .crop-number-box input[type=number]{width:54px}}
+/* Keep sliders usable in the narrow GitHub Pages inspector on tablets. */
+.crop-sliders{grid-template-columns:minmax(0,1fr);gap:9px}
+.crop-sliders .crop-trim-control{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:center;gap:8px}
+@media(max-width:360px){.crop-sliders .crop-trim-control{grid-template-columns:72px minmax(0,1fr)}}

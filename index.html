@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.2.0">
+  <link rel="stylesheet" href="./styles.css?v=0.2.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -68,11 +68,12 @@
           <canvas id="cropPreview" width="300" height="390" role="img" aria-label="Photograph crop preview. Drag the purple corner handles to crop the picture."></canvas>
           <p class="muted">Drag the purple corners to select just the artwork, or use the sliders. Nothing outside this crop will become stitches.</p>
           <div class="crop-sliders">
-            <label class="field">Trim left <input id="cropLeft" type="range" min="0" max="90" value="0"><span class="range-value" id="cropLeftText">0%</span></label>
-            <label class="field">Trim right <input id="cropRight" type="range" min="0" max="90" value="0"><span class="range-value" id="cropRightText">0%</span></label>
-            <label class="field">Trim top <input id="cropTop" type="range" min="0" max="90" value="0"><span class="range-value" id="cropTopText">0%</span></label>
-            <label class="field">Trim bottom <input id="cropBottom" type="range" min="0" max="90" value="0"><span class="range-value" id="cropBottomText">0%</span></label>
+            <div class="field crop-trim-control"><label for="cropLeft">Trim left</label><div class="crop-input-row"><input id="cropLeft" type="range" min="0" max="90" value="0" aria-label="Trim left slider"><div class="crop-number-box"><input id="cropLeftNumber" type="number" min="0" max="90" step="1" inputmode="numeric" value="0" aria-label="Trim left percentage"><span aria-hidden="true">%</span></div></div></div>
+            <div class="field crop-trim-control"><label for="cropRight">Trim right</label><div class="crop-input-row"><input id="cropRight" type="range" min="0" max="90" value="0" aria-label="Trim right slider"><div class="crop-number-box"><input id="cropRightNumber" type="number" min="0" max="90" step="1" inputmode="numeric" value="0" aria-label="Trim right percentage"><span aria-hidden="true">%</span></div></div></div>
+            <div class="field crop-trim-control"><label for="cropTop">Trim top</label><div class="crop-input-row"><input id="cropTop" type="range" min="0" max="90" value="0" aria-label="Trim top slider"><div class="crop-number-box"><input id="cropTopNumber" type="number" min="0" max="90" step="1" inputmode="numeric" value="0" aria-label="Trim top percentage"><span aria-hidden="true">%</span></div></div></div>
+            <div class="field crop-trim-control"><label for="cropBottom">Trim bottom</label><div class="crop-input-row"><input id="cropBottom" type="range" min="0" max="90" value="0" aria-label="Trim bottom slider"><div class="crop-number-box"><input id="cropBottomNumber" type="number" min="0" max="90" step="1" inputmode="numeric" value="0" aria-label="Trim bottom percentage"><span aria-hidden="true">%</span></div></div></div>
           </div>
+          <p class="muted crop-help">Move a slider or type a percentage from 0 to 90. The crop always leaves at least 8% of the image visible in each direction.</p>
           <button id="shirtCropPreset" class="button ghost block" type="button">Try a T-shirt print starting crop</button>
           <label class="field">Placement on stitch grid
             <select id="imagePlacement">
@@ -107,6 +108,6 @@
   </main>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js?v=0.2.0" defer></script>
+  <script src="./app.js?v=0.2.1" defer></script>
 </body>
 </html>

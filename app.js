@@ -31,7 +31,7 @@ function indexFor(col,row) { return (active.rows-row)*active.cols+(col-1); }
 function format(n) {return n.toLocaleString('en-US');}
 function currentCrop(p=active){
   const c=p?.photoCrop;
-  if(!c||!Number.isFinite(c.left)||!Number.isFinite(c.top)||!Number.isFinite(c.right)||!Number.isFinite(c.bottom)||c.right-c.left<.08||c.bottom-c.top<.08)return {...FULL_CROP};
+  if(!c||!Number.isFinite(c.left)||!Number.isFinite(c.top)||!Number.isFinite(c.right)||!Number.isFinite(c.bottom)||c.right-c.left<.08-1e-9||c.bottom-c.top<.08-1e-9)return {...FULL_CROP};
   return {left:clamp(c.left,0,.92),top:clamp(c.top,0,.92),right:clamp(c.right,.08,1),bottom:clamp(c.bottom,.08,1)};
 }
 function discardPreview(redraw=true){
@@ -235,7 +235,10 @@ function updateCropControls(){
   panel.hidden=!active.referenceImage;
   const c=currentCrop();
   for(const [id,value] of Object.entries({cropLeft:c.left,cropRight:1-c.right,cropTop:c.top,cropBottom:1-c.bottom})){
-    $(id).value=String(Math.round(value*100));$(id+'Text').textContent=Math.round(value*100)+'%';
+    const percent=String(Math.round(value*100));
+    $(id).value=percent;
+    // Keep the current typing session intact; update it on commit/blur.
+    if(document.activeElement!==$(id+'Number'))$(id+'Number').value=percent;
   }
   $('imagePlacement').value=active.imagePlacement==='stretch'?'stretch':'contain';
   updateCropStats();drawCropPreview();
@@ -609,9 +612,34 @@ function hookEvents(){
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
   $('imageFile').addEventListener('change',ev=>{importImage(ev.target.files[0]);ev.target.value='';});
   for(const [id,edge,fromTrim] of [['cropLeft','left',false],['cropRight','right',true],['cropTop','top',false],['cropBottom','bottom',true]]){
-    $(id).addEventListener('pointerdown',()=>snapshot());
-    $(id).addEventListener('input',ev=>setCropEdge(edge,fromTrim?1-Number(ev.target.value)/100:Number(ev.target.value)/100));
-    $(id).addEventListener('change',ev=>setCropEdge(edge,fromTrim?1-Number(ev.target.value)/100:Number(ev.target.value)/100));
+    const slider=$(id),number=$(id+'Number');
+    const updateFromPercent=pct=>setCropEdge(edge,fromTrim?1-pct/100:pct/100);
+    slider.addEventListener('pointerdown',()=>snapshot());
+    slider.addEventListener('input',ev=>updateFromPercent(Number(ev.target.value)));
+    slider.addEventListener('change',ev=>updateFromPercent(Number(ev.target.value)));
+    let snapshotted=false;
+    number.addEventListener('focus',()=>{snapshotted=false;});
+    number.addEventListener('input',()=>{
+      // Blank/out-of-range input is allowed while typing, not committed.
+      if(number.value.trim()==='')return;
+      const pct=Number(number.value);
+      if(!Number.isInteger(pct)||pct<0||pct>90)return;
+      if(!snapshotted){snapshot();snapshotted=true;}
+      updateFromPercent(pct);
+    });
+    number.addEventListener('change',()=>{
+      const typed=number.value.trim();
+      if(typed!==''){
+        const pct=Number(typed);
+        if(Number.isFinite(pct)){
+          if(!snapshotted){snapshot();snapshotted=true;}
+          updateFromPercent(Math.round(clamp(pct,0,90)));
+        }
+      }
+      // Reflect the actual accepted value when the opposing trim limits it.
+      number.value=slider.value;
+    });
+    number.addEventListener('blur',()=>{number.value=slider.value;snapshotted=false;});
   }
   $('resetCrop').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={...FULL_CROP};discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
   $('shirtCropPreset').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={left:.20,top:.34,right:.80,bottom:.96};discardPreview(false);scheduleSave();updateCropControls();requestDraw();toast('Starting crop applied. Adjust corners to capture all of the design.');});
