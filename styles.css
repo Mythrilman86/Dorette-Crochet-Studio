@@ -30,3 +30,23 @@
 .crop-sliders{grid-template-columns:minmax(0,1fr);gap:9px}
 .crop-sliders .crop-trim-control{display:grid;grid-template-columns:76px minmax(0,1fr);align-items:center;gap:8px}
 @media(max-width:360px){.crop-sliders .crop-trim-control{grid-template-columns:72px minmax(0,1fr)}}
+
+/* v0.3.0 — photo cleanup and larger-grid comparison */
+.photo-enhance-panel{border:1px solid #ded2ea;background:#faf7ff;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.photo-enhance-panel .section-title strong{font-size:.78rem;color:#574375}
+.enhance-controls{display:flex;flex-direction:column;gap:10px}
+.enhance-control{display:grid;grid-template-columns:1fr 1fr 54px;gap:6px;align-items:center}
+.enhance-control label{font-size:.68rem;font-weight:750;color:#5c4b75}
+.enhance-control input[type=range]{min-width:0;width:100%;accent-color:#7658ac}
+.enhance-control input[type=number]{min-width:0;width:54px;text-align:center;background:#fff;border:1px solid #d7cbe7;border-radius:8px;padding:6px 2px;font-size:.75rem}
+.compare-dialog{width:min(1060px,94vw);max-height:88vh;overflow:auto;border:1px solid #d5cae4;border-radius:18px;background:#fbf9ff;color:#312741;box-shadow:0 20px 65px #271a3340;padding:20px}
+.compare-dialog::backdrop{background:#241b35a8}
+.compare-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+.compare-head h2{font-size:1.25rem;margin:5px 0 7px}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.compare-choice{min-width:0;display:flex;flex-direction:column;gap:9px;background:white;border:1px solid #e9e1ed;border-radius:12px;padding:14px}
+.compare-choice strong{font-size:.91rem}
+.compare-choice canvas{width:auto;max-width:100%;max-height:54vh;height:auto;align-self:center;image-rendering:pixelated;border:1px solid #b9adbc}
+.compare-choice .button{white-space:normal}
+.compare-footnote{padding-top:13px}
+@media(max-width:720px){.compare-grid{grid-template-columns:1fr}.compare-choice canvas{max-height:42vh}.compare-dialog{padding:12px}.enhance-control{grid-template-columns:minmax(80px,1fr) minmax(0,1fr) 50px}}

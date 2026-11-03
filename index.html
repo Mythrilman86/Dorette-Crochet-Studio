@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.2.1">
+  <link rel="stylesheet" href="./styles.css?v=0.3.0">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -83,11 +83,34 @@
           </label>
           <p class="muted" id="cropStats" aria-live="polite"></p>
         </div>
+        <div class="photo-enhance-panel">
+          <div class="section-title"><strong>Photo cleanup & lettering</strong><button id="printPreset" class="text-button" type="button">Reset cleanup</button></div>
+          <label class="field">Conversion style
+            <select id="conversionMode">
+              <option value="print">Clean printed artwork (dark, white, red, blue)</option>
+              <option value="auto">Natural image palette (automatic colors)</option>
+            </select>
+          </label>
+          <p class="muted">Clean printed artwork suppresses gray fabric shades and emphasizes light letters, the red stripes and the blue flag field.</p>
+          <div class="enhance-controls">
+            <div class="enhance-control"><label for="brightness">Brightness</label><input id="brightness" type="range" min="-50" max="50" value="0"><input id="brightnessNumber" type="number" min="-50" max="50" value="0" aria-label="Brightness amount"></div>
+            <div class="enhance-control"><label for="contrast">Contrast</label><input id="contrast" type="range" min="-50" max="80" value="24"><input id="contrastNumber" type="number" min="-50" max="80" value="24" aria-label="Contrast amount"></div>
+            <div class="enhance-control"><label for="whiteThreshold">Light text threshold</label><input id="whiteThreshold" type="range" min="70" max="230" value="151"><input id="whiteThresholdNumber" type="number" min="70" max="230" value="151" aria-label="Light text threshold"></div>
+            <div class="enhance-control"><label for="colorSensitivity">Red / blue sensitivity</label><input id="colorSensitivity" type="range" min="10" max="90" value="33"><input id="colorSensitivityNumber" type="number" min="10" max="90" value="33" aria-label="Red and blue sensitivity"></div>
+            <div class="enhance-control"><label for="detailBoost">Fine lettering boost</label><input id="detailBoost" type="range" min="0" max="100" value="58"><input id="detailBoostNumber" type="number" min="0" max="100" value="58" aria-label="Fine lettering boost"></div>
+          </div>
+          <p class="muted">Lower light text threshold or increase fine lettering boost to recover thin letters; raise threshold if gray background noise appears. Preview changes before applying.</p>
+        </div>
         <label class="field">Reference image opacity<input id="imageOpacity" type="range" min="0" max="100" value="35"><span class="range-value" id="opacityText">35%</span></label>
         <div class="pair"><label class="field">Yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" disabled>Preview stitches</button></div>
+        <p id="paletteHelp" class="muted"></p>
+        <label class="field">Preview grid size
+          <select id="previewDimensions"><option value="current">Current project size (no resize)</option><option value="large">120 × 165 (19,800 stitches)</option></select>
+        </label>
+        <button id="compareSizes" class="button secondary block" disabled>Compare 79 × 117 vs 120 × 165</button>
         <div id="conversionPreview" class="conversion-preview" hidden>
           <strong id="previewSummary">Conversion preview</strong>
-          <p class="muted">This is only a preview. Review the image at a useful zoom before applying it.</p>
+          <p class="muted">This preview has NOT changed or erased saved stitches. Applying a different grid size creates a separate new project.</p>
           <div class="pair"><button id="applyConversion" class="button primary" type="button">Apply chart</button><button id="cancelConversion" class="button ghost" type="button">Discard</button></div>
         </div>
         <p class="muted">Photo conversion reduces fine details to colored squares. Small lettering may require a larger grid and manual color corrections.</p>
@@ -106,8 +129,16 @@
       <button id="deleteProject" class="text-button danger">Delete current project</button>
     </aside>
   </main>
+  <dialog id="compareDialog" class="compare-dialog" aria-label="Compare crochet grid sizes">
+    <div class="compare-head"><div><span class="eyebrow">PHOTO-TO-STITCH COMPARISON</span><h2>Which grid preserves the lettering?</h2><p class="muted">Both images use the same crop and color-cleanup settings. Original projects are unchanged.</p></div><button id="closeCompare" class="button ghost" type="button">Close ✕</button></div>
+    <div class="compare-grid">
+      <div class="compare-choice"><strong>Smaller chart</strong><span id="compareSmallLabel" class="muted">79 × 117</span><canvas id="compareSmallCanvas" aria-label="79 by 117 stitch conversion preview"></canvas><button id="compareUseSmall" class="button primary block" type="button">Preview 79 × 117 on chart</button></div>
+      <div class="compare-choice"><strong>More lettering detail</strong><span id="compareLargeLabel" class="muted">120 × 165</span><canvas id="compareLargeCanvas" aria-label="120 by 165 stitch conversion preview"></canvas><button id="compareUseLarge" class="button primary block" type="button">Preview 120 × 165 on chart</button></div>
+    </div>
+    <p class="muted compare-footnote">The larger chart requires 10,557 more stitches. Zoom in on PUERTO RICAN and Boyfriend before making a decision.</p>
+  </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js?v=0.2.1" defer></script>
+  <script src="./app.js?v=0.3.0" defer></script>
 </body>
 </html>

@@ -9,11 +9,18 @@ const DB_NAME = 'dorette-crochet-studio', DB_VERSION = 1;
 const SYMBOLS = 'ABCDEFGHIJKL';
 const DEFAULT_COLORS = [{hex:'#fffdf9',name:'Background',symbol:'A'}];
 const FULL_CROP = Object.freeze({left:0,top:0,right:1,bottom:1});
+const DEFAULT_CONVERSION = Object.freeze({mode:'print',brightness:0,contrast:24,whiteThreshold:151,colorSensitivity:33,detail:58});
+const PRINT_PALETTE = Object.freeze([
+  {hex:'#221d25',name:'Dark background',symbol:'A'},
+  {hex:'#f5f1e9',name:'Light lettering / stripes',symbol:'B'},
+  {hex:'#da4852',name:'Flag red',symbol:'C'},
+  {hex:'#303f86',name:'Flag blue',symbol:'D'}
+]);
 const refs = {};
 let db = null, memoryOnly = false, projects = new Map(), activeId = null, active = null;
 let selected = null, undoStack = [], saveTimer = null, writeChain = Promise.resolve();
 let toastTimer = null, referenceImg = null, referenceSrc = '', canvasWidth = 800, canvasHeight = 480;
-let pendingConversion = null, cropPreviewRect = null, cropGesture = null;
+let pendingConversion = null, cropPreviewRect = null, cropGesture = null, comparisonResults = null;
 const view = {scale:1, x:0, y:0}, pointers = new Map();
 let gesture = {dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
 let drawingPending = false;
@@ -23,7 +30,7 @@ function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now(
 function blankProject(name, cols, rows) {
   return {id:uid(),name:name.trim()||'Untitled Chart', cols,rows, cells:Array(cols*rows).fill(0),
     done:Array(cols*rows).fill(0), rowDone:Array(rows).fill(0), palette:DEFAULT_COLORS.map(c=>({...c})),
-    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',converted:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
@@ -35,9 +42,24 @@ function currentCrop(p=active){
   return {left:clamp(c.left,0,.92),top:clamp(c.top,0,.92),right:clamp(c.right,.08,1),bottom:clamp(c.bottom,.08,1)};
 }
 function discardPreview(redraw=true){
-  pendingConversion=null;
+  const resized=!!pendingConversion && active && (pendingConversion.cols!==active.cols || pendingConversion.rows!==active.rows);
+  pendingConversion=null;comparisonResults=null;
   const box=$('conversionPreview');if(box)box.hidden=true;
-  if(redraw)requestDraw();
+  if(active){updateSelection();updateLegend();updateChartSubtitle();}
+  if(redraw){if(resized)fitChart();else requestDraw();}
+}
+function conversionSettings(p=active){
+  const s=p?.conversionSettings||{};
+  return {...DEFAULT_CONVERSION,...s,mode:s.mode==='auto'?'auto':'print'};
+}
+function displayDimensions(){
+  const preview=pendingConversion?.projectId===active?.id?pendingConversion:null;
+  return {cols:preview?.cols??active?.cols??79,rows:preview?.rows??active?.rows??117};
+}
+function updateChartSubtitle(){
+  if(!active)return;
+  const d=displayDimensions(),preview=!!pendingConversion;
+  $('chartSubtitle').textContent=`${d.cols} columns × ${d.rows} rows • Row 1 begins at the bottom${preview?' • PREVIEW ONLY':''}`;
 }
 function toast(msg) {const t=$('toast'); t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3300);}
 function status(msg,error=false) {const el=$('saveStatus');el.textContent=msg;el.style.color=error?'#b35269':'#537e64';}
@@ -99,18 +121,18 @@ function selectProject(id) {
 function refreshInspector(){
   if (!active)return;
   $('workspaceTitle').textContent=active.name;$('projectName').value=active.name;
-  $('chartSubtitle').textContent=`${active.cols} columns × ${active.rows} rows • Row 1 begins at the bottom`;
+  updateChartSubtitle();
   $('colsInput').value=active.cols;$('rowsInput').value=active.rows;
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
-  $('convertPhoto').disabled=!active.referenceImage;$('removeImage').disabled=!active.referenceImage;
-  updateCropControls();
+  $('convertPhoto').disabled=!active.referenceImage;$('compareSizes').disabled=!active.referenceImage;$('removeImage').disabled=!active.referenceImage;
+  updateCropControls();updateConversionControls();
   updateSelection();updateProgress();updateLegend();requestDraw();
 }
 function snapshot() {
   if(!active)return;
   undoStack.push({name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),
     rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
-    opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',converted:active.converted});
+    opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted});
   if(undoStack.length>30)undoStack.shift();
   $('undoButton').disabled=false;
 }
@@ -122,6 +144,7 @@ function undo(){
   syncImage();scheduleSave();refreshInspector();toast('Last change undone');
 }
 function updateSelection(){
+  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=true;$('markRow').disabled=true;$('paintStitch').disabled=true;return;}
   if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=true;$('markRow').disabled=true;$('paintStitch').disabled=true;return;}
   const i=indexFor(selected.col,selected.row),d=!!active.done[i]||!!active.rowDone[selected.row-1];
   $('selectedCell').textContent=`Row ${selected.row} · Column ${selected.col} ${d?'· Complete':''}`;
@@ -142,16 +165,19 @@ function updateProgress(){
 }
 function updateLegend(){
   if(!active)return;
-  const counts=active.palette.map(()=>0);
-  active.cells.forEach(i=>{if(Number.isInteger(i)&&i>=0&&i<counts.length)counts[i]++;});
-  $('totalColors').textContent=active.palette.length;
+  const preview=pendingConversion?.projectId===active.id?pendingConversion:null;
+  const palette=preview?.palette||active.palette, cells=preview?.cells||active.cells;
+  const counts=palette.map(()=>0);
+  cells.forEach(i=>{if(Number.isInteger(i)&&i>=0&&i<counts.length)counts[i]++;});
+  $('totalColors').textContent=palette.length;
   const colorSelect=$('paintColor'),current=Number(colorSelect.value);
   colorSelect.replaceChildren();
-  active.palette.forEach((c,i)=>{const o=document.createElement('option');o.value=i;o.textContent=c.symbol+' · '+c.name+' ('+c.hex+')';colorSelect.append(o);});
-  colorSelect.value=String(current>=0&&current<active.palette.length?current:0);
-  $('addYarnColor').disabled=active.palette.length>=12;
+  palette.forEach((c,i)=>{const o=document.createElement('option');o.value=i;o.textContent=c.symbol+' · '+c.name+' ('+c.hex+')';colorSelect.append(o);});
+  colorSelect.value=String(current>=0&&current<palette.length?current:0);
+  $('addYarnColor').disabled=!!preview||active.palette.length>=12;
+  $('paintMode').disabled=!!preview;
   const legend=$('legend');legend.replaceChildren();
-  active.palette.forEach((c,i)=>{
+  palette.forEach((c,i)=>{
     const item=document.createElement('div');item.className='legend-row';
     const sw=document.createElement('span');sw.className='swatch';sw.style.background=c.hex;
     const symbol=document.createElement('span');symbol.className='symbol';symbol.textContent=c.symbol;
@@ -161,7 +187,7 @@ function updateLegend(){
   });
 }
 function markStitch(){
-  if(!selected||!active)return;
+  if(pendingConversion||!selected||!active)return;
   const i=indexFor(selected.col,selected.row);snapshot();
   if(active.rowDone[selected.row-1]){
     // Expand the completed row into individual stitch flags, then unmark the selected stitch.
@@ -172,12 +198,12 @@ function markStitch(){
   scheduleSave();updateSelection();updateProgress();requestDraw();
 }
 function markRow(){
-  if(!selected||!active)return;
+  if(pendingConversion||!selected||!active)return;
   snapshot();active.rowDone[selected.row-1]=active.rowDone[selected.row-1]?0:1;
   scheduleSave();updateSelection();updateProgress();requestDraw();
 }
 function paintStitch(){
-  if(!selected||!active)return;
+  if(pendingConversion||!selected||!active)return;
   const color=Number($('paintColor').value),i=indexFor(selected.col,selected.row);
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return;
   if(active.cells[i]===color&&active.converted)return;
@@ -185,6 +211,7 @@ function paintStitch(){
   scheduleSave();updateLegend();requestDraw();
 }
 function addYarnColor(){
+  if(pendingConversion)return;
   if(!active||active.palette.length>=12){toast('Up to 12 yarn colors are supported.');return;}
   const hex=$('newHex').value;
   snapshot();const index=active.palette.length;
@@ -284,8 +311,8 @@ function resizeCanvas(){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
   requestDraw();
 }
-function boardWidth(){return active?active.cols*CELL+M*2:700;}
-function boardHeight(){return active?active.rows*CELL+M*2:700;}
+function boardWidth(){return active?displayDimensions().cols*CELL+M*2:700;}
+function boardHeight(){return active?displayDimensions().rows*CELL+M*2:700;}
 function fitChart(){
   if(!active)return;
   view.scale=clamp(Math.min((canvasWidth-30)/boardWidth(),(canvasHeight-30)/boardHeight()),.12,3.5);
@@ -305,6 +332,7 @@ function setZoom(scale,anchorX=canvasWidth/2,anchorY=canvasHeight/2){
 function updateZoomText(){$('zoomValue').textContent=Math.round(view.scale*100)+'%';}
 function screenToStitch(sx,sy){
   if(!active)return null;
+  if(pendingConversion)return null;
   const x=(sx-view.x)/view.scale-M,y=(sy-view.y)/view.scale-M;
   if(x<0||y<0||x>=active.cols*CELL||y>=active.rows*CELL)return null;
   return {col:Math.floor(x/CELL)+1,row:active.rows-Math.floor(y/CELL)};
@@ -313,7 +341,7 @@ function draw(){
   const dpr=Math.min(devicePixelRatio||1,2);
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#ede7f2';ctx.fillRect(0,0,canvasWidth,canvasHeight);
   if(!active)return;
-  const s=view.scale,cols=active.cols,rows=active.rows,bw=cols*CELL,bh=rows*CELL;
+  const s=view.scale,{cols,rows}=displayDimensions(),bw=cols*CELL,bh=rows*CELL;
   ctx.save();ctx.translate(view.x,view.y);ctx.scale(s,s);
   ctx.fillStyle='#fff';ctx.fillRect(M-42,M-42,bw+84,bh+84);
   const minCol=clamp(Math.floor(((-view.x/s)-M)/CELL),0,cols),maxCol=clamp(Math.ceil(((canvasWidth-view.x)/s-M)/CELL),0,cols);
@@ -332,12 +360,12 @@ function draw(){
       ctx.save();ctx.globalAlpha=active.opacity*.2;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
     }
   }
-  if(selected){
+  if(selected&&!pendingConversion){
     ctx.fillStyle='rgba(124,89,206,.21)';
     ctx.fillRect(M+(selected.col-1)*CELL,M,CELL,bh);
     ctx.fillRect(M,M+(rows-selected.row)*CELL,bw,CELL);
   }
-  for(let r=minRow;r<maxRow;r++){
+  for(let r=minRow;!displayedConversion&&r<maxRow;r++){
     const rowNum=rows-r, rowMarked=active.rowDone[rowNum-1];
     for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c;if(!active.done[i]&&!rowMarked)continue;
@@ -360,21 +388,21 @@ function draw(){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
-      if(active.done[i]||active.rowDone[rowNum-1])continue;
+      if(!displayedConversion&&(active.done[i]||active.rowDone[rowNum-1]))continue;
       const color=(displayedConversion?.palette||active.palette)[(displayedConversion?.cells||active.cells)[i]]||DEFAULT_COLORS[0];
       const rHex=parseInt(color.hex.slice(1,3),16),gHex=parseInt(color.hex.slice(3,5),16),bHex=parseInt(color.hex.slice(5,7),16);
       ctx.fillStyle=(rHex*.299+gHex*.587+bHex*.114)>145?'#312b3d':'#fff';
       ctx.fillText(color.symbol,M+(c+.5)*CELL,M+(r+.5)*CELL);
     }
   }
-  if(selected){
+  if(selected&&!pendingConversion){
     const x=M+(selected.col-1)*CELL,y=M+(rows-selected.row)*CELL;
     ctx.strokeStyle='#6133c8';ctx.lineWidth=2.8/s;ctx.strokeRect(x+1/s,y+1/s,CELL-2/s,CELL-2/s);
   }
   // At large zoom, show EVERY number. At fit-scale, space labels to keep them legible.
   const interval=Math.max(1,Math.ceil(15/(CELL*s)));
   const fontWorld=clamp(10/s,9,21);ctx.font=`bold ${fontWorld}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
-  const highlightedX=selected?.col-1, highlightedY=selected?rows-selected.row:-1;
+  const highlightedX=selected&&!pendingConversion?selected.col-1:-1, highlightedY=selected&&!pendingConversion?rows-selected.row:-1;
   for(let c=minCol;c<maxCol;c++){
     if(c%interval!==0&&c!==highlightedX&&c!==cols-1)continue;
     const x=M+(c+.5)*CELL,num=String(c+1),chosen=c===highlightedX;
@@ -415,7 +443,7 @@ function endPointer(ev){
   if(!pointers.has(ev.pointerId))return;
   if(pointers.size===1&&!gesture.dragged&&!gesture.wasMulti){
     const cell=screenToStitch(ev.offsetX,ev.offsetY);
-    if(cell){selected=cell;updateSelection();requestDraw();if($('paintMode').checked)paintStitch();}
+    if(cell){selected=cell;updateSelection();requestDraw();if($('paintMode').checked&&!pendingConversion)paintStitch();}
   }
   pointers.delete(ev.pointerId);if(pointers.size===0)gesture.lastDist=0;
 }
@@ -458,52 +486,150 @@ async function importImage(file){
 }
 function hexRGB(rgb){return '#'+rgb.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');}
 function distSq(a,b){return (a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;}
-async function convertImage(){
+function updateConversionControls(){
+  if(!active)return;
+  const s=conversionSettings();
+  $('conversionMode').value=s.mode;
+  for(const [id,k] of [['brightness','brightness'],['contrast','contrast'],['whiteThreshold','whiteThreshold'],['colorSensitivity','colorSensitivity'],['detailBoost','detail']]){
+    $(id).value=s[k];
+    if(document.activeElement!==$(id+'Number'))$(id+'Number').value=s[k];
+  }
+  $('paletteSize').disabled=s.mode==='print';
+  $('paletteHelp').textContent=s.mode==='print'
+    ? 'Print cleanup uses 4 yarn colors: dark, off-white, red and blue. No added gray shades.'
+    : 'Natural palette mode uses your selected number of colors.';
+}
+function adjustRGB(r,g,b,s){
+  const factor=1+s.contrast/100,offset=s.brightness*1.6;
+  return [clamp((r-128)*factor+128+offset,0,255),clamp((g-128)*factor+128+offset,0,255),clamp((b-128)*factor+128+offset,0,255)];
+}
+function weightedBrightness(v){return v[0]*.299+v[1]*.587+v[2]*.114;}
+// T-shirt graphic mode deliberately maps to the four actual print categories;
+// photo lighting and shirt folds do not create extra yarn grays.
+function printCategory(v,s){
+  const [r,g,b]=v,max=Math.max(r,g,b),min=Math.min(r,g,b),chroma=max-min;
+  const sensitivity=s.colorSensitivity;
+  if(chroma>=sensitivity && r>g*1.12 && r>b*1.07 && (r-g)>sensitivity*.7)return 2;
+  if(chroma>=sensitivity && b>g*1.04 && b>r*1.065 && (b-r)>sensitivity*.65)return 3;
+  return weightedBrightness(v)>=s.whiteThreshold?1:0;
+}
+function cleanPrintCells(cells,cols,rows,s){
+  // Subtle de-speckling: reject an isolated white pixel in an otherwise dark region;
+  // protect small letter strokes by requiring every neighbor to be dark.
+  if(s.detail>=75)return cells;
+  const copy=cells.slice();
+  for(let r=1;r<rows-1;r++)for(let c=1;c<cols-1;c++){
+    const i=r*cols+c;if(cells[i]!==1)continue;
+    let adjacent=0;
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+      if(!dr&&!dc)continue;if(cells[(r+dr)*cols+c+dc]===1)adjacent++;
+    }
+    if(adjacent===0)copy[i]=0;
+  }
+  return copy;
+}
+function rasterizeToCells(img,cols,rows,s){
+  const multiple=6;
+  const sampling=document.createElement('canvas');sampling.width=cols*multiple;sampling.height=rows*multiple;
+  const sc=sampling.getContext('2d',{willReadFrequently:true});sc.fillStyle='#fff';sc.fillRect(0,0,sampling.width,sampling.height);
+  renderCroppedImage(sc,img,0,0,sampling.width,sampling.height);
+  const pixels=sc.getImageData(0,0,sampling.width,sampling.height).data;
+  const values=[],printCells=[];
+  const coverage=multiple*multiple;
+  const minCoverage=clamp(.38-s.detail*.0028,.09,.38);
+  const minHueCoverage=clamp(.31-s.detail*.0018,.11,.31);
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    let rr=0,gg=0,bb=0;const frequency=[0,0,0,0];
+    for(let dy=0;dy<multiple;dy++)for(let dx=0;dx<multiple;dx++){
+      const i=((r*multiple+dy)*sampling.width+(c*multiple+dx))*4;
+      const v=adjustRGB(pixels[i],pixels[i+1],pixels[i+2],s);
+      rr+=v[0];gg+=v[1];bb+=v[2];
+      if(s.mode==='print')frequency[printCategory(v,s)]++;
+    }
+    values.push([rr/coverage,gg/coverage,bb/coverage]);
+    if(s.mode==='print'){
+      let category=0;
+      // Strong reds and blues are protected against neutral gray averages.
+      if(frequency[2]/coverage>=minHueCoverage||frequency[3]/coverage>=minHueCoverage)
+        category=frequency[2]>=frequency[3]?2:3;
+      else if(frequency[1]/coverage>=minCoverage)category=1;
+      else {
+        // Avoid retaining very dark gray background noise.
+        const avg=values[values.length-1];
+        if(weightedBrightness(avg)>=s.whiteThreshold+12)category=1;
+      }
+      printCells.push(category);
+    }
+  }
+  return {values,printCells};
+}
+function autoQuantize(values,n){
+  const step=Math.max(1,Math.floor(values.length/3500)),samples=values.filter((_,i)=>i%step===0);
+  const centers=[samples[0]||[255,255,255]];
+  for(let k=1;k<n;k++){
+    let best=samples[0],farthest=-1;
+    for(const v of samples){let d=Infinity;for(const center of centers)d=Math.min(d,distSq(v,center));if(d>farthest){farthest=d;best=v;}}
+    centers.push([...best]);
+  }
+  for(let iteration=0;iteration<9;iteration++){
+    const sums=Array.from({length:n},()=>[0,0,0,0]);
+    for(const v of samples){let near=0,best=Infinity;centers.forEach((center,k)=>{const d=distSq(v,center);if(d<best){best=d;near=k;}});
+      const sum=sums[near];sum[0]+=v[0];sum[1]+=v[1];sum[2]+=v[2];sum[3]++;}
+    for(let k=0;k<n;k++)if(sums[k][3])centers[k]=sums[k].slice(0,3).map(z=>z/sums[k][3]);
+  }
+  const clustered=values.map(v=>{let near=0,best=Infinity;centers.forEach((center,k)=>{const d=distSq(v,center);if(d<best){best=d;near=k;}});return near;});
+  const used=Array(n).fill(0);clustered.forEach(i=>used[i]++);
+  const order=used.map((count,i)=>({i,count})).filter(v=>v.count>0).sort((a,b)=>b.count-a.count);
+  const indices=new Map(order.map((v,i)=>[v.i,i]));
+  return {palette:order.map((v,i)=>({hex:hexRGB(centers[v.i]),name:'Yarn color '+(i+1),symbol:SYMBOLS[i]})),cells:clustered.map(i=>indices.get(i))};
+}
+function buildConversion(cols,rows){
+  if(!active||!referenceImg||!validDimensions(cols,rows))throw new Error('Valid photo and stitch dimensions required');
+  const s=conversionSettings(),raster=rasterizeToCells(referenceImg,cols,rows,s);
+  const data=s.mode==='print'
+    ?{palette:PRINT_PALETTE.map(c=>({...c})),cells:cleanPrintCells(raster.printCells,cols,rows,s)}
+    :autoQuantize(raster.values,Number($('paletteSize').value));
+  return {...data,cols,rows,projectId:active.id};
+}
+function renderComparison(canvasEl,result){
+  const scale=4,cols=result.cols,rows=result.rows;
+  canvasEl.width=cols*scale;canvasEl.height=rows*scale;
+  const g=canvasEl.getContext('2d',{alpha:false});
+  for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+    g.fillStyle=result.palette[result.cells[row*cols+col]].hex;
+    g.fillRect(col*scale,row*scale,scale,scale);
+  }
+}
+function previewResult(result){
+  pendingConversion=result;
+  $('previewSummary').textContent=`Preview: ${result.cols} × ${result.rows} stitches · ${result.palette.length} colors`;
+  $('applyConversion').textContent=result.cols!==active.cols||result.rows!==active.rows?'Create chart as new project':'Apply chart';
+  $('conversionPreview').hidden=false;
+  updateLegend();updateSelection();updateChartSubtitle();fitChart();
+  status('Preview only — no chart changes saved');
+  toast('Preview ready. Zoom in to inspect small lettering.');
+}
+function convertImage(){
   if(!active?.referenceImage||!referenceImg){toast('Import an image first.');return;}
-  const n=Number($('paletteSize').value),cols=active.cols,rows=active.rows,img=referenceImg;
   try{
     status('Converting image…');
-    // Four rendered pixels per stitch: sample the center region, reducing grid-line contamination.
-    const sampling=document.createElement('canvas');sampling.width=cols*4;sampling.height=rows*4;
-    const sc=sampling.getContext('2d',{willReadFrequently:true});sc.fillStyle='#fff';sc.fillRect(0,0,sampling.width,sampling.height);
-    renderCroppedImage(sc,img,0,0,sampling.width,sampling.height);
-    const pixels=sc.getImageData(0,0,sampling.width,sampling.height).data;
-    const values=[];
-    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
-      let rr=0,gg=0,bb=0;
-      for(let dy=1;dy<=2;dy++)for(let dx=1;dx<=2;dx++){
-        const j=((r*4+dy)*sampling.width+(c*4+dx))*4;rr+=pixels[j];gg+=pixels[j+1];bb+=pixels[j+2];
-      }
-      values.push([rr/4,gg/4,bb/4]);
-    }
-    const sampleStep=Math.max(1,Math.floor(values.length/3500));
-    const samples=values.filter((_,i)=>i%sampleStep===0);
-    const centers=[samples[0]||[255,255,255]];
-    // Deterministic farthest-first initialization; improve using k-means.
-    for(let k=1;k<n;k++){
-      let best=samples[0],farthest=-1;
-      for(const v of samples){let d=Infinity;for(const c of centers)d=Math.min(d,distSq(v,c));if(d>farthest){farthest=d;best=v;}}
-      centers.push([...best]);
-    }
-    for(let iteration=0;iteration<9;iteration++){
-      const sums=Array.from({length:n},()=>[0,0,0,0]);
-      for(const v of samples){let near=0,best=Infinity;centers.forEach((center,k)=>{const d=distSq(v,center);if(d<best){best=d;near=k;}});
-        const s=sums[near];s[0]+=v[0];s[1]+=v[1];s[2]+=v[2];s[3]++;}
-      for(let k=0;k<n;k++)if(sums[k][3])centers[k]=sums[k].slice(0,3).map(z=>z/sums[k][3]);
-    }
-    const clustered=values.map(v=>{let near=0,best=Infinity;centers.forEach((center,k)=>{const d=distSq(v,center);if(d<best){best=d;near=k;}});return near;});
-    // Keep only colors actually represented, sorted by frequency for a practical legend.
-    const used=Array(n).fill(0);clustered.forEach(i=>used[i]++);
-    const order=used.map((count,i)=>({i,count})).filter(v=>v.count>0).sort((a,b)=>b.count-a.count);
-    const indices=new Map(order.map((v,i)=>[v.i,i]));
-    pendingConversion={projectId:active.id,palette:order.map((v,i)=>({hex:hexRGB(centers[v.i]),name:'Yarn color '+(i+1),symbol:SYMBOLS[i]})),cells:clustered.map(i=>indices.get(i))};
-    $('previewSummary').textContent=`Preview: ${cols} × ${rows} stitches · ${pendingConversion.palette.length} colors`;
-    $('conversionPreview').hidden=false;
-    requestDraw();status('Preview only — no chart changes saved');
-    toast('Preview ready! Zoom in, then apply or discard it.');
+    const [cols,rows]=$('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
+    previewResult(buildConversion(cols,rows));
   }catch(e){toast('Conversion failed: '+e.message);status('Conversion failed',true);}
 }
-
+function compareSizes(){
+  if(!active?.referenceImage||!referenceImg){toast('Import an image first.');return;}
+  try{
+    status('Preparing comparison…');
+    comparisonResults={small:buildConversion(79,117),large:buildConversion(120,165)};
+    renderComparison($('compareSmallCanvas'),comparisonResults.small);
+    renderComparison($('compareLargeCanvas'),comparisonResults.large);
+    $('compareSmallLabel').textContent=`79 × 117 • 9,243 stitches • ${comparisonResults.small.palette.length} colors`;
+    $('compareLargeLabel').textContent=`120 × 165 • 19,800 stitches • ${comparisonResults.large.palette.length} colors`;
+    $('compareDialog').showModal();
+    status('Comparison only — no chart changes saved');
+  }catch(e){toast('Comparison failed: '+e.message);status('Comparison failed',true);}
+}
 // Portable ZIP implementation (STORE / method 0, with CRC-32). No CDN or network dependencies.
 const textEncoder=new TextEncoder(),textDecoder=new TextDecoder();
 const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let i=0;i<256;i++){let x=i;for(let k=0;k<8;k++)x=x&1?0xedb88320^(x>>>1):x>>>1;t[i]=x>>>0;}return t;})();
@@ -567,7 +693,7 @@ function validateBackup(p){
   if(p.referenceImage!==null&&p.referenceImage!==undefined&&(typeof p.referenceImage!=='string'||p.referenceImage.length>22*1024*1024||!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/i.test(p.referenceImage)))throw new Error('Invalid reference image');
   return {id:uid(),name:p.name.trim()+' (restored)',cols:p.cols,rows:p.rows,cells:p.cells.slice(),done:p.done.slice(),rowDone:p.rowDone.slice(),
     palette:p.palette.map(c=>({hex:c.hex,name:c.name,symbol:c.symbol})),referenceImage:p.referenceImage||null,
-    opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',converted:!!p.converted,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',conversionSettings:conversionSettings(p),converted:!!p.converted,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 async function restoreBackup(file){
   if(!file)return;
@@ -678,12 +804,56 @@ function hookEvents(){
   $('cropPreview').addEventListener('pointercancel',endCropGesture);
   $('applyConversion').addEventListener('click',()=>{
     if(!active||pendingConversion?.projectId!==active.id)return;
-    snapshot();active.palette=pendingConversion.palette.map(c=>({...c}));active.cells=pendingConversion.cells.slice();active.converted=true;active.opacity=0;
-    discardPreview(false);scheduleSave();refreshInspector();toast('Converted chart applied and saved. Review fine text and colors.');
+    const result=pendingConversion;
+    if(result.cols!==active.cols||result.rows!==active.rows){
+      const fresh=blankProject(`${active.name} — ${result.cols}x${result.rows}`,result.cols,result.rows);
+      fresh.referenceImage=active.referenceImage;fresh.photoCrop={...currentCrop()};
+      fresh.imagePlacement=active.imagePlacement;fresh.conversionSettings={...conversionSettings()};
+      fresh.palette=result.palette.map(c=>({...c}));fresh.cells=result.cells.slice();fresh.converted=true;fresh.opacity=0;
+      projects.set(fresh.id,fresh);queueWrite(fresh);selectProject(fresh.id);
+      toast(`Created ${result.cols} × ${result.rows} chart as a NEW project. The original is untouched.`);
+    }else{
+      snapshot();active.palette=result.palette.map(c=>({...c}));active.cells=result.cells.slice();active.converted=true;active.opacity=0;
+      discardPreview(false);scheduleSave();refreshInspector();toast('Converted chart applied and saved. Review fine text and colors.');
+    }
   });
   $('cancelConversion').addEventListener('click',()=>{discardPreview();status(memoryOnly?'Storage blocked — export backups':'✓ Saved on this device',memoryOnly);toast('Preview discarded; original project unchanged.');});
   $('imageOpacity').addEventListener('input',ev=>{if(!active)return;active.opacity=Number(ev.target.value)/100;$('opacityText').textContent=ev.target.value+'%';requestDraw();scheduleSave();});
   $('convertPhoto').addEventListener('click',convertImage);
+  $('compareSizes').addEventListener('click',compareSizes);
+  $('closeCompare').addEventListener('click',()=>$('compareDialog').close());
+  $('compareDialog').addEventListener('click',ev=>{if(ev.target===$('compareDialog'))$('compareDialog').close();});
+  for(const [id,key] of [['compareUseSmall','small'],['compareUseLarge','large']]){
+    $(id).addEventListener('click',()=>{
+      if(!comparisonResults?.[key]||comparisonResults[key].projectId!==active.id)return;
+      const result=comparisonResults[key];$('compareDialog').close();
+      $('previewDimensions').value=key==='large'?'large':'current';previewResult(result);
+    });
+  }
+  $('conversionMode').addEventListener('change',ev=>{
+    if(!active)return;snapshot();active.conversionSettings={...conversionSettings(),mode:ev.target.value==='auto'?'auto':'print'};
+    discardPreview(false);scheduleSave();updateConversionControls();requestDraw();
+  });
+  for(const [id,k] of [['brightness','brightness'],['contrast','contrast'],['whiteThreshold','whiteThreshold'],['colorSensitivity','colorSensitivity'],['detailBoost','detail']]){
+    const slider=$(id),number=$(id+'Number');
+    const commit=value=>{
+      if(!active)return;
+      const min=Number(slider.min),max=Number(slider.max);
+      const v=Math.round(clamp(Number(value),min,max));
+      if(!Number.isFinite(v))return;
+      active.conversionSettings={...conversionSettings(),[k]:v};
+      slider.value=v;number.value=v;
+      discardPreview(false);scheduleSave();updateConversionControls();requestDraw();
+    };
+    slider.addEventListener('pointerdown',()=>snapshot());
+    slider.addEventListener('input',ev=>commit(ev.target.value));
+    number.addEventListener('change',ev=>{snapshot();commit(ev.target.value);});
+    number.addEventListener('blur',()=>{number.value=conversionSettings()[k];});
+  }
+  $('printPreset').addEventListener('click',()=>{
+    if(!active)return;snapshot();active.conversionSettings={...DEFAULT_CONVERSION};
+    discardPreview(false);scheduleSave();updateConversionControls();toast('High-contrast print settings restored.');
+  });
   $('removeImage').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();toast('Reference image removed.');});
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
