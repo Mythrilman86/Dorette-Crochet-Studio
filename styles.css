@@ -132,3 +132,18 @@
 @media(min-width:921px) and (max-width:1450px){.inspector{display:block;columns:3;column-gap:20px}.inspector>.inspector-section,.inspector>.settings-card{break-inside:avoid;margin-bottom:20px}.inspector>.context-help{break-inside:avoid}}
 @media(min-width:641px) and (max-width:920px){.settings-card{grid-column:1/-1}}
 .chart-layout-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:.8rem}.chart-layout-controls>span:first-child{font-weight:750}.chart-layout-switch{display:inline-flex;border:1px solid #b9a7d0;border-radius:10px;padding:3px;background:#eee7f7;gap:3px}.chart-layout-switch button{border:1px solid transparent;border-radius:7px;padding:10px 15px;min-height:44px;background:transparent;color:#554269;font-weight:700}.chart-layout-switch button[aria-pressed=true]{background:#6955a5;color:white;box-shadow:0 1px 3px #42315330}.chart-layout-switch button:focus-visible{outline:3px solid #b8a4e8;outline-offset:2px}.dual-charts.single-chart{grid-template-columns:minmax(0,1fr)}.chart-pane[hidden]{display:none}
+
+
+/* v1.2.0 — dashboard, safer editing, tablet controls and text-to-chart */
+.dashboard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.dashboard-card{background:#faf7ff;border:1px solid #e2d8ee;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.dashboard-card span{font-size:.67rem;color:#6c5c82;font-weight:700}
+.dashboard-card strong{font-size:.88rem;color:#3f3154;line-height:1.35}
+.run-focus{margin-top:8px;padding:8px 10px;border-radius:8px;background:#faf7ff;border:1px dashed #d7cbe7;font-size:.72rem;line-height:1.45}
+.text-nudge-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:8px 0}
+.text-nudge-grid .button{padding:8px 10px;min-height:38px}
+body.large-touch .button,body.large-touch .edit-tool,body.large-touch .icon-button,body.large-touch select,body.large-touch input:not([type=color]),body.large-touch summary{min-height:48px}
+body.large-touch .yarn-chip{width:40px;height:40px;font-size:.85rem}
+body.large-touch .chart-layout-switch button{min-height:50px}
+.locked-hint{color:#9a5470;font-weight:700}
+@media(max-width:640px){.dashboard-grid{grid-template-columns:1fr}.text-nudge-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
