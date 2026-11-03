@@ -823,7 +823,7 @@ function updatePdfEstimate(){
   if(!active||!window.DorettePdf)return;
   try{
     const info=window.DorettePdf.plan(active,pdfSettings());
-    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered chart sections (${info.across} across × ${info.down} down).`;
+    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered sections (${info.across} across × ${info.down} down; up to ${info.perCols} columns × ${info.perRows} rows each, balanced).`;
   }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
 }
 function exportPdf(){

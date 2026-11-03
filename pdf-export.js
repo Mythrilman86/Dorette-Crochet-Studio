@@ -1,4 +1,4 @@
-/* Dorette Crochet Studio PDF Export v0.5.0
+/* Dorette Crochet Studio PDF Export v0.5.1
    Offline vector PDF generator. No external scripts, accounts, images, or server required.
    Cells are stored top-to-bottom; printed row numbers count bottom-to-top. */
 (() => {
@@ -43,9 +43,15 @@
     const W=landscape?paper[1]:paper[0],H=landscape?paper[0]:paper[1];
     const cell=CELL_SIZES[options.detail]||CELL_SIZES.normal;
     const margin=38,gridTop=165,gridBottom=H-105,gridLeft=margin+32,gridRight=W-margin-32;
-    const perCols=Math.max(1,Math.floor((gridRight-gridLeft)/cell));
-    const perRows=Math.max(1,Math.floor((gridBottom-gridTop)/cell));
-    const across=Math.ceil(p.cols/perCols),down=Math.ceil(p.rows/perRows);
+    // Establish the number of pages using their physical capacity, THEN divide
+    // the whole pattern evenly across those pages. The old implementation used
+    // full-width sections followed by a nearly empty last section (e.g.
+    // columns 1-39, 40-78, 79-117, 118-120). For 120 columns this now creates
+    // four 30-column sections without changing the number of printed pages.
+    const capacityCols=Math.max(1,Math.floor((gridRight-gridLeft)/cell));
+    const capacityRows=Math.max(1,Math.floor((gridBottom-gridTop)/cell));
+    const across=Math.ceil(p.cols/capacityCols),down=Math.ceil(p.rows/capacityRows);
+    const perCols=Math.ceil(p.cols/across),perRows=Math.ceil(p.rows/down);
     return {W,H,cell,margin,gridTop,gridBottom,gridLeft,gridRight,perCols,perRows,across,down,pages:2+across*down,
       paper:options.paper==='a4'?'a4':'letter',orientation:landscape?'landscape':'portrait',
       monochrome:!!options.monochrome,completed:!!options.completed};
@@ -177,7 +183,11 @@
     chrome(g,`Chart section ${sectionRow+1}.${sectionCol+1}`,
       `Columns ${firstC}-${lastC}  |  Rows ${lastR}-${firstR} (bottom-up numbering)`,p,pageNumber,conf.pages);
     g.text(`Section ${sectionCol+1} of ${conf.across} across; ${sectionRow+1} of ${conf.down} down.`,38,110,9,false,'#6a5d78');
-    const cell=conf.cell,x=conf.gridLeft,y=conf.gridTop;
+    const cell=conf.cell;
+    // Center each balanced section in the safe printable grid area, retaining
+    // the full-number gutters and preserving absolute stitch coordinates.
+    const x=conf.gridLeft+(conf.gridRight-conf.gridLeft-countC*cell)/2;
+    const y=conf.gridTop+(conf.gridBottom-conf.gridTop-countR*cell)/2;
     paintRuns(g,p,c0,r0,countC,countR,x,y,cell,conf.monochrome);
     // Per-stitch yarn symbols. Print in both color and black-and-white exports.
     const glyph=Math.min(7.2,Math.max(5.8,cell*.52));
@@ -229,7 +239,7 @@
     }
     objs[catalog]=`<< /Type /Catalog /Pages ${root} 0 R >>`;
     objs[root]=`<< /Type /Pages /Kids [${ids.map(x=>x+' 0 R').join(' ')}] /Count ${ids.length} >>`;
-    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 0.5.0')} /Producer ${pdfText('Dorette local PDF export')} >>`);
+    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 0.5.1')} /Producer ${pdfText('Dorette local PDF export')} >>`);
     const output=[encoder.encode('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
     // Header bytes over 127 above are encoded as UTF-8; the marker is informational only.
     const offsets=[0];let offset=output[0].length;
