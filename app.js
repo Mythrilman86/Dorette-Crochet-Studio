@@ -133,7 +133,7 @@ function refreshProjectList(){
   });
 }
 function selectProject(id) {
-  flushSave();discardPreview(false); textPreview=null; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
+  flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
   syncImage();refreshProjectList();refreshInspector();fitChart();
@@ -175,12 +175,18 @@ function undoState(){
     opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
     workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),ui:{...uiSettings(active)}};
 }
+let lastText=null, editingText=null, placingText=false;
 function snapshot(){
+  if(editingText)clearTextPreview();
+  lastText=null;
+  $("editLastText").disabled=true;
   if(!active)return;
   undoStack.push(undoState());if(undoStack.length>30)undoStack.shift();
   redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
 }
 function restoreUndoState(state){
+  lastText=null;
+  $("editLastText").disabled=true;
   discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
@@ -289,6 +295,7 @@ function updateToolUI(){
   $('applyText').disabled=locked||preview;
 }
 function setTool(tool){
+  if(textPreview&&tool!=="select"&&tool!=="pan")clearTextPreview();
   if(!EDIT_TOOLS.includes(tool))return;
   if(pendingConversion){toast('Apply or discard the preview before editing stitches.');return;}
   if(isPatternLocked() && !['select','pan'].includes(tool)){editBlocked('use editing tools');return;}
@@ -587,13 +594,14 @@ function rasterizeTextPattern(config){
     bits.forEach((row,y)=>{
       for(let x=0;x<width;x++)if(row & (1 << (width-1-x)))occupied.push({x,y});
     });
+    if(vertical&&letters.length===1)return {width:5,height:width,occupied:occupied.map(({x,y})=>({x:4-y,y:x}))};
     return {width,height:5,occupied};
   });
   const gap=Math.round(config.height/5);
   const widths=glyphs.map(glyph=>Math.max(1,Math.round(glyph.width*config.height/glyph.height)));
   const width=vertical?Math.max(...widths):widths.reduce((sum,w)=>sum+w,0)+gap*(glyphs.length-1);
   const height=vertical?glyphs.length*(config.height+gap)-gap:config.height;
-  if(width>active.cols-config.col+1||height>config.row)return {width,height,tooLarge:true};
+  const availableWidth=active.cols-config.col+1,availableHeight=config.row;
   const occupied=[];
   let offset=0;
   glyphs.forEach((glyph,index)=>{
@@ -610,13 +618,15 @@ function rasterizeTextPattern(config){
     for(const {x,y} of glyph.occupied){
       const left=Math.round(x*width/glyph.width),right=Math.round((x+1)*width/glyph.width);
       const top=Math.round(y*config.height/glyph.height),bottom=Math.round((y+1)*config.height/glyph.height);
-      for(let row=top;row<bottom;row++)for(let col=left;col<right;col++){
+      const maxRow=Math.min(bottom,availableHeight-(vertical?index*(config.height+gap):0));
+      const maxCol=Math.min(right,availableWidth-(vertical?0:offset));
+      for(let row=top;row<maxRow;row++)for(let col=left;col<maxCol;col++){
         occupied.push({x:col+(vertical?0:offset),y:row+(vertical?index*(config.height+gap):0)});
       }
     }
     offset+=width+gap;
   });
-  return {width,height,occupied};
+  return {width,height,occupied,tooLarge:width>availableWidth||height>availableHeight};
 }
 function rasterizeSymbol(text){
   const cellPx=1, fontSize=40, pad=8;
@@ -660,21 +670,36 @@ function buildTextPreview(){
   if(!mask){textPreview=null;requestDraw();return null;}
   if(mask.tooLarge||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
     feedback.textContent=`Text needs ${mask.width} × ${mask.height} stitches. Only ${active.cols-config.col+1} × ${config.row} are available here. Reduce the height, move the text, or use a larger chart.`;
-    textPreview={...config,cells:[]};
-    requestDraw();
-    return textPreview;
-  }
-  feedback.textContent=`Text size: ${mask.width} × ${mask.height} stitches.`;
+  }else feedback.textContent=`Text size: ${mask.width} × ${mask.height} stitches.`;
   const cells=[];
   for(const pt of mask.occupied){
     const col=config.col+pt.x,row=config.row-pt.y;
     if(col>=1&&col<=active.cols&&row>=1&&row<=active.rows)cells.push({col,row});
   }
-  textPreview={...config,width:mask.width,height:mask.height,cells};
+  textPreview={...config,width:mask.width,height:mask.height,cells,tooLarge:mask.tooLarge};
   requestDraw();
   return textPreview;
 }
-function clearTextPreview(){textPreview=null;$('textFitStatus').textContent='';requestDraw();}
+function clearTextPreview(){
+  textPreview=null;editingText=null;placingText=false;
+  $('placeText').setAttribute('aria-pressed','false');
+  $('applyText').textContent='Apply text to chart';
+  $('textFitStatus').textContent='';requestDraw();
+}
+function placeTextAt(cell){
+  placingText=false;
+  $('placeText').setAttribute('aria-pressed','false');
+  $('textCol').value=cell.col;$('textRow').value=cell.row;
+  buildTextPreview();
+}
+function editLastText(){
+  if(!active||!lastText||pendingConversion||editBlocked('edit lettering'))return;
+  editingText=lastText;
+  const {config}=editingText;
+  for(const [id,value] of Object.entries({textInput:config.text,textOrientation:config.orientation,textScale:config.height,textCol:config.col,textRow:config.row,textColor:config.color}))$(id).value=value;
+  $('applyText').textContent='Apply lettering changes';
+  buildTextPreview();
+}
 function drawTextPreviewOverlay(ctx,preview,cols,rows){
   const color=active.palette[preview.color]||active.palette[0]||DEFAULT_COLORS[0];
   ctx.save();
@@ -696,17 +721,26 @@ function drawTextPreviewOverlay(ctx,preview,cols,rows){
 function applyTextPreview(){
   if(!active||pendingConversion||editBlocked('apply text to the chart'))return;
   const preview=buildTextPreview();
-  if(!preview||!preview.cells.length)return toast($('textFitStatus').textContent||'Enter some text first.');
-  if(!preview.cells.some(cell=>active.cells[indexFor(cell.col,cell.row)]!==preview.color)){
-    return toast('That text preview would not change any stitches.');
+  if(!preview||preview.tooLarge||!preview.cells.length)return toast($('textFitStatus').textContent||'Enter some text first.');
+  const changes=new Map();
+  if(editingText){
+    for(const [index,original] of editingText.original)changes.set(index,original);
   }
-  let changed=0; snapshot();
+  const original=new Map();
   for(const cell of preview.cells){
-    const i=indexFor(cell.col,cell.row);
-    if(active.cells[i]!==preview.color){active.cells[i]=preview.color;changed++;}
+    const index=indexFor(cell.col,cell.row);
+    const under=changes.get(index)??active.cells[index];
+    if(under!==preview.color)original.set(index,under);
+    changes.set(index,preview.color);
   }
+  const changed=[...changes].filter(([index,color])=>active.cells[index]!==color);
+  if(!changed.length)return toast('That text preview would not change any stitches.');
+  snapshot();
+  for(const [index,color] of changed)active.cells[index]=color;
+  lastText={config:preview,original};
+  $('editLastText').disabled=false;
   clearTextPreview();
-  active.converted=true; scheduleSave(); updateLegend(); updateSelection(); requestDraw(); toast(`Applied ${changed} text stitches to the chart.`);
+  active.converted=true; scheduleSave(); updateLegend(); updateSelection(); requestDraw(); toast(`Updated ${changed.length} stitches to the chart.`);
 }
 function nudgeText(dx,dy){
   $('textCol').value=String(clamp((Number($('textCol').value)||1)+dx,1,active.cols));
@@ -844,6 +878,7 @@ function navigateOverview(ev){
   const wx=(ev.clientX-r.left-v.x)/v.scale,wy=(ev.clientY-r.top-v.y)/v.scale;
   const col=Math.floor((wx-M)/CELL)+1,row=active.rows-Math.floor((wy-M)/CELL);
   if(col<1||col>active.cols||row<1||row>active.rows)return;
+  if(placingText){placeTextAt({col,row});return;}
   selected={col,row};view.x=canvasWidth/2-wx*view.scale;view.y=canvasHeight/2-wy*view.scale;updateSelection();requestDraw();
 }
 overviewCanvas.addEventListener('pointerdown',ev=>{overviewCanvas.setPointerCapture(ev.pointerId);navigateOverview(ev);});
@@ -858,7 +893,7 @@ canvas.addEventListener('pointerdown',ev=>{
     areaStart=null;
     gesture={dragged:false,wasMulti:false,lastDist:0,lastMid:null,totalTravel:0};
     const cell=screenToStitch(ev.offsetX,ev.offsetY);
-    const touchSafe=uiSettings().stylusOnly&&ev.pointerType!=='pen';
+    const touchSafe=placingText||(uiSettings().stylusOnly&&ev.pointerType!=='pen');
     if(cell&&(editorTool==='rect'||editorTool==='area')&&!pendingConversion&&!touchSafe)areaStart=cell;
     paintStroke=cell&&(editorTool==='paint'||editorTool==='erase')&&!pendingConversion&&!touchSafe
       ?{pointerId:ev.pointerId,tool:editorTool,color:Number($('paintColor').value),first:cell,last:cell,snapshotted:false,changed:false}:null;
@@ -907,7 +942,9 @@ function endPointer(ev){
       const last=cell||areaStart;areaSelection={start:areaStart,end:last};
       if(editorTool==='rect')applyAreaFill();else {updateAreaStatus();requestDraw();}
     }else if(!gesture.dragged&&cell){
-      if(touchSafe){
+      if(placingText){
+        placeTextAt(cell);selected=cell;
+      }else if(touchSafe){
         selected=cell;
       }else if(editorTool==='bucket'&&!pendingConversion){
         if(editBlocked('fill stitches')){}
@@ -1643,6 +1680,15 @@ function hookEvents(){
   $('previewText').addEventListener('click',()=>{if(!active)return;const preview=buildTextPreview();if(preview?.cells?.length)toast(`Previewing text across ${preview.width} × ${preview.height} cells.`);else if(!$('textFitStatus').textContent)toast('Type some text first.');});
   $('clearTextPreview').addEventListener('click',()=>{clearTextPreview();toast('Text preview cleared.');});
   $('applyText').addEventListener('click',applyTextPreview);
+  $('editLastText').addEventListener('click',editLastText);
+  $('placeText').addEventListener('click',()=>{
+    if(!active||pendingConversion||editBlocked('place text'))return;
+    placingText=!placingText;
+    $('placeText').setAttribute('aria-pressed',String(placingText));
+    if(placingText)$('textFitStatus').textContent='Tap a square to set the top-left corner.';
+    else if(textPreview)buildTextPreview();
+    else $('textFitStatus').textContent='';
+  });
   $('textLeft').addEventListener('click',()=>nudgeText(-1,0));
   $('textRight').addEventListener('click',()=>nudgeText(1,0));
   $('textUp').addEventListener('click',()=>nudgeText(0,1));
