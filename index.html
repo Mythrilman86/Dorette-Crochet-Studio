@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.4.1">
+  <link rel="stylesheet" href="./styles.css?v=0.5.0">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -136,6 +136,21 @@
         <div class="pair"><label class="field">New color<input id="newHex" type="color" value="#4d8eaf" class="color-picker"></label><button id="addYarnColor" class="button ghost">＋ Add color</button></div>
       </div>
       <div class="section-divider"></div>
+      <div class="inspector-section pdf-panel" aria-label="Printable PDF export">
+        <div class="section-title"><span class="eyebrow">PRINTABLE PDF EXPORT</span><span class="pdf-chip">OFFLINE</span></div>
+        <p class="muted">Download a complete PDF with a full-chart overview, symbol and yarn legend, and numbered stitch-by-stitch pages.</p>
+        <div class="pair">
+          <label class="field">Paper size<select id="pdfPaper"><option value="letter">US Letter</option><option value="a4">A4</option></select></label>
+          <label class="field">Orientation<select id="pdfOrientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
+        </div>
+        <label class="field">Stitch square size<select id="pdfDetail"><option value="compact">Compact - 10 pt (fewer pages)</option><option value="normal" selected>Standard - 12 pt</option><option value="large">Large - 14 pt (easier to read)</option></select></label>
+        <label class="toggle pdf-checkbox"><input id="pdfMonochrome" type="checkbox"> Black &amp; white (yarn letters only)</label>
+        <label class="toggle pdf-checkbox"><input id="pdfCompleted" type="checkbox"> Mark completed stitches on printout</label>
+        <p id="pdfPages" class="pdf-page-info" role="status">Preparing page count…</p>
+        <button id="exportPdf" class="button primary block" type="button">⇩ Download printable PDF</button>
+        <p class="muted">Creates a real PDF on this device. Your saved project and backup ZIPs are not changed. It does not print the source photograph.</p>
+      </div>
+      <div class="section-divider"></div>
       <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
       <div class="section-divider"></div>
       <button id="deleteProject" class="text-button danger">Delete current project</button>
@@ -151,6 +166,7 @@
   </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./app.js?v=0.4.1" defer></script>
+  <script src="./pdf-export.js?v=0.5.0" defer></script>
+  <script src="./app.js?v=0.5.0" defer></script>
 </body>
 </html>

@@ -150,7 +150,7 @@ function refreshInspector(){
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
   updateReferenceActions();
   updateCropControls();updateConversionControls();
-  updateSelection();updateProgress();updateLegend();requestDraw();
+  updateSelection();updateProgress();updateLegend();updatePdfEstimate();requestDraw();
 }
 function snapshot() {
   if(!active)return;
@@ -815,6 +815,34 @@ function readZip(bytes){
 function backupPayload(items){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items};}
 function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,45)||'crochet-chart';}
 function download(blob,name){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function pdfSettings(){
+  return {paper:$('pdfPaper').value,orientation:$('pdfOrientation').value,
+    detail:$('pdfDetail').value,monochrome:$('pdfMonochrome').checked,completed:$('pdfCompleted').checked};
+}
+function updatePdfEstimate(){
+  if(!active||!window.DorettePdf)return;
+  try{
+    const info=window.DorettePdf.plan(active,pdfSettings());
+    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered chart sections (${info.across} across × ${info.down} down).`;
+  }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
+}
+function exportPdf(){
+  if(!active)return;
+  if(!window.DorettePdf){toast('PDF export files are missing. Update all GitHub files.');return;}
+  const button=$('exportPdf');
+  if(button.disabled)return;
+  button.disabled=true;button.textContent='Preparing PDF…';
+  // Let the browser draw the busy state before doing the vector export.
+  setTimeout(()=>{
+    try{
+      // Always export the SAVED project, never a temporary photo preview.
+      const {bytes,pages}=window.DorettePdf.build(active,pdfSettings());
+      download(new Blob([bytes],{type:'application/pdf'}),`${slug(active.name)}-Crochet-Chart.pdf`);
+      toast(`${pages}-page PDF downloaded. Open it from Downloads.`);
+    }catch(e){toast('PDF export failed: '+e.message);console.error(e);}
+    finally{button.disabled=false;button.textContent='⇩ Download printable PDF';}
+  },50);
+}
 function exportBackup(all=false){
   flushSave();const items=all?[...projects.values()]:[active];
   if(!items.length)return;
@@ -1006,6 +1034,8 @@ function hookEvents(){
     snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();
     toast('Reference photo removed. Existing stitched chart and progress remain unchanged.');
   });
+  for(const id of ['pdfPaper','pdfOrientation','pdfDetail','pdfMonochrome','pdfCompleted'])$(id).addEventListener('change',updatePdfEstimate);
+  $('exportPdf').addEventListener('click',exportPdf);
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());

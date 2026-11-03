@@ -73,3 +73,12 @@
   background: #f2edfa; color: #59447a; border: 1px solid #d9cce9;
   font-size: 12px; line-height: 1.5;
 }
+/* Version 0.5.0 — offline PDF layout controls */
+.pdf-panel{border:1px solid #ded2ea;background:#faf8fd;padding:13px;border-radius:13px}
+.pdf-chip{border:1px solid #c9d9cb;border-radius:6px;background:#eef8ef;color:#45744b;font-size:.59rem;font-weight:850;padding:4px 7px;letter-spacing:.06em}
+.pdf-panel .pair{gap:8px}
+.pdf-panel .field{min-width:0}
+.pdf-panel .pdf-checkbox{font-weight:650;line-height:1.4;align-items:flex-start}
+.pdf-panel .pdf-checkbox input{margin:2px 1px 0 0;width:16px;height:16px;flex-shrink:0}
+.pdf-page-info{border-radius:8px;background:#eee7f8;color:#5e497e;padding:9px;font-weight:750;font-size:.73rem;line-height:1.4}
+.pdf-panel button[disabled]{opacity:.65}
