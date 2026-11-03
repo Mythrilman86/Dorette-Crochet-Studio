@@ -531,7 +531,7 @@ function screenToStitch(sx,sy){
 function previewTextConfig(){
   return {
     text:($('textInput').value||'').slice(0,40),
-    orientation:$('textOrientation').value==='vertical'?'vertical':'horizontal',
+    angle:((Math.round(Number($('textAngle').value)||0)%360)+360)%360,
     height:$('textScale').valueAsNumber,
     col:clamp(Number($('textCol').value)||1,1,active?.cols||1),
     row:clamp(Number($('textRow').value)||1,1,active?.rows||1),
@@ -585,7 +585,6 @@ function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
   if(!text)return null;
   const letters=Array.from(text.toUpperCase());
-  const vertical=config.orientation==='vertical';
   const glyphs=letters.map(letter=>{
     const bits=stitchGlyphs[letter];
     if(!bits)return rasterizeSymbol(letter);
@@ -594,40 +593,44 @@ function rasterizeTextPattern(config){
     bits.forEach((row,y)=>{
       for(let x=0;x<width;x++)if(row & (1 << (width-1-x)))occupied.push({x,y});
     });
-    if(vertical&&letters.length===1)return {width:5,height:width,occupied:occupied.map(({x,y})=>({x:4-y,y:x}))};
     return {width,height:5,occupied};
   });
   const gap=Math.round(config.height/5);
-  const widths=glyphs.map(glyph=>Math.max(1,Math.round(glyph.width*config.height/glyph.height)));
-  const width=vertical?Math.max(...widths):widths.reduce((sum,w)=>sum+w,0)+gap*(glyphs.length-1);
-  const height=vertical?glyphs.length*(config.height+gap)-gap:config.height;
+  let sourceWidth=0;
+  const spans=glyphs.map(glyph=>{
+    const width=Math.max(1,Math.round(glyph.width*config.height/glyph.height));
+    const span={glyph,width,start:sourceWidth,pixels:new Set(glyph.occupied.map(({x,y})=>y*glyph.width+x))};
+    sourceWidth+=width+gap;
+    return span;
+  });
+  sourceWidth-=gap;
+  const radians=config.angle*Math.PI/180;
+  const cos=Math.cos(radians),sin=Math.sin(radians);
+  const width=Math.ceil(Math.abs(sourceWidth*cos)+Math.abs(config.height*sin)-1e-9);
+  const height=Math.ceil(Math.abs(sourceWidth*sin)+Math.abs(config.height*cos)-1e-9);
   const availableWidth=active.cols-config.col+1,availableHeight=config.row;
   const occupied=[];
-  let offset=0;
-  glyphs.forEach((glyph,index)=>{
-    const width=widths[index];
-    const source=new Set(glyph.occupied.map(({x,y})=>y*glyph.width+x));
-    if(glyph.height>config.height){
-      for(let row=0;row<config.height;row++)for(let col=0;col<width;col++){
-        const x=Math.floor((col+.5)*glyph.width/width),y=Math.floor((row+.5)*glyph.height/config.height);
-        if(source.has(y*glyph.width+x))occupied.push({x:col+(vertical?0:offset),y:row+(vertical?index*(config.height+gap):0)});
-      }
-      offset+=width+gap;
-      return;
-    }
-    for(const {x,y} of glyph.occupied){
-      const left=Math.round(x*width/glyph.width),right=Math.round((x+1)*width/glyph.width);
-      const top=Math.round(y*config.height/glyph.height),bottom=Math.round((y+1)*config.height/glyph.height);
-      const maxRow=Math.min(bottom,availableHeight-(vertical?index*(config.height+gap):0));
-      const maxCol=Math.min(right,availableWidth-(vertical?0:offset));
-      for(let row=top;row<maxRow;row++)for(let col=left;col<maxCol;col++){
-        occupied.push({x:col+(vertical?0:offset),y:row+(vertical?index*(config.height+gap):0)});
-      }
-    }
-    offset+=width+gap;
-  });
+  for(let y=0;y<Math.min(height,availableHeight);y++)for(let x=0;x<Math.min(width,availableWidth);x++){
+    const dx=x+.5-width/2,dy=y+.5-height/2;
+    const sx=Math.floor(dx*cos+dy*sin+sourceWidth/2+1e-9);
+    const sy=Math.floor(-dx*sin+dy*cos+config.height/2+1e-9);
+    if(sy<0||sy>=config.height)continue;
+    const span=spans.find(span=>sx>=span.start&&sx<span.start+span.width);
+    if(!span)continue;
+    const {glyph}=span;
+    // Keep the same stitch boundaries as unrotated lettering.
+    const localX=sx-span.start;
+    const gx=glyph.width<=span.width
+      ?Math.ceil((localX+.5)*glyph.width/span.width)-1
+      :Math.floor((localX+.5)*glyph.width/span.width);
+    const gy=glyph.height<=config.height
+      ?Math.ceil((sy+.5)*glyph.height/config.height)-1
+      :Math.floor((sy+.5)*glyph.height/config.height);
+    if(span.pixels.has(gy*glyph.width+gx))occupied.push({x,y});
+  }
   return {width,height,occupied,tooLarge:width>availableWidth||height>availableHeight};
 }
+
 function rasterizeSymbol(text){
   const cellPx=1, fontSize=40, pad=8;
   const off=document.createElement('canvas'),g=off.getContext('2d');
@@ -696,7 +699,7 @@ function editLastText(){
   if(!active||!lastText||pendingConversion||editBlocked('edit lettering'))return;
   editingText=lastText;
   const {config}=editingText;
-  for(const [id,value] of Object.entries({textInput:config.text,textOrientation:config.orientation,textScale:config.height,textCol:config.col,textRow:config.row,textColor:config.color}))$(id).value=value;
+  for(const [id,value] of Object.entries({textInput:config.text,textAngle:config.angle,textScale:config.height,textCol:config.col,textRow:config.row,textColor:config.color}))$(id).value=value;
   $('applyText').textContent='Apply lettering changes';
   buildTextPreview();
 }
@@ -1023,11 +1026,14 @@ function updateConversionControls(){
     $(id).value=s[k];
     if(document.activeElement!==$(id+'Number'))$(id+'Number').value=s[k];
   }
-  $('paletteSize').disabled=s.mode==='print'||s.mode==='grayscale';
+  const paletteSize=$('paletteSize');
+  if(!paletteSize.disabled)paletteSize.dataset.natural=paletteSize.value;
+  paletteSize.disabled=s.mode!=='auto';
+  paletteSize.value=s.mode==='print'?'4':s.mode==='grayscale'?'3':paletteSize.dataset.natural||'6';
   $('paletteHelp').textContent=s.mode==='print'
-    ? 'Print cleanup uses 4 yarn colors: dark, off-white, red and blue. No added gray shades.'
+    ? 'Print cleanup uses 4 yarn colors: dark, off-white, red and blue. Choose Natural image palette to adjust the number.'
     : s.mode==='grayscale'
-      ? 'Grayscale mode reduces the image to 3 yarn colors: black, gray and white.'
+      ? 'Grayscale mode reduces the image to 3 yarn colors: black, gray and white. Choose Natural image palette to adjust the number.'
       : 'Natural palette mode uses your selected number of colors.';
 }
 function adjustRGB(r,g,b,s){
@@ -1674,9 +1680,16 @@ function hookEvents(){
   $('stylusOnly').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),stylusOnly:ev.target.checked};scheduleSave();updateTabletControls();toast(ev.target.checked?'Stylus mode on: finger touches only pan/select.':'Stylus mode off: touch editing restored.');});
   $('largeTouch').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),largeTouch:ev.target.checked};scheduleSave();updateTabletControls();});
   $('textColor').addEventListener('change',()=>{$('paintColor').value=$('textColor').value;updateToolUI();});
-  for(const id of ['textInput','textOrientation','textScale','textCol','textRow','textColor']){
+  for(const id of ['textInput','textAngle','textScale','textCol','textRow','textColor']){
     $(id).addEventListener('input',()=>{if(textPreview)buildTextPreview();});
   }
+  for(const [id,step] of [['rotateTextLeft',-1],['rotateTextRight',1]]){
+    $(id).addEventListener('click',()=>{
+      $('textAngle').value=(previewTextConfig().angle+step+360)%360;
+      buildTextPreview();
+    });
+  }
+  $('textAngle').addEventListener('change',()=>{$('textAngle').value=previewTextConfig().angle;});
   $('previewText').addEventListener('click',()=>{if(!active)return;const preview=buildTextPreview();if(preview?.cells?.length)toast(`Previewing text across ${preview.width} × ${preview.height} cells.`);else if(!$('textFitStatus').textContent)toast('Type some text first.');});
   $('clearTextPreview').addEventListener('click',()=>{clearTextPreview();toast('Text preview cleared.');});
   $('applyText').addEventListener('click',applyTextPreview);

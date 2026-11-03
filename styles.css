@@ -146,4 +146,6 @@ body.large-touch .button,body.large-touch .edit-tool,body.large-touch .icon-butt
 body.large-touch .yarn-chip{width:40px;height:40px;font-size:.85rem}
 body.large-touch .chart-layout-switch button{min-height:50px}
 .locked-hint{color:#9a5470;font-weight:700}
-@media(max-width:640px){.dashboard-grid{grid-template-columns:1fr}.text-nudge-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.dashboard-grid{grid-template-columns:1fr}}
+
+#textUp{grid-area:1 / 2}#textLeft{grid-area:2 / 1}#textRight{grid-area:2 / 3}#textDown{grid-area:3 / 2}
