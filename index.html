@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.5.1">
+  <link rel="stylesheet" href="./styles.css?v=0.5.2">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -144,6 +144,15 @@
           <label class="field">Orientation<select id="pdfOrientation"><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select></label>
         </div>
         <label class="field">Stitch square size<select id="pdfDetail"><option value="compact">Compact - 10 pt (fewer pages)</option><option value="normal" selected>Standard - 12 pt</option><option value="large">Large - 14 pt (easier to read)</option></select></label>
+        <label class="field">Section overlap
+          <select id="pdfOverlap">
+            <option value="0" selected>None (original layout)</option>
+            <option value="1">1 repeated stitch on each shared edge</option>
+            <option value="2">2 repeated stitches on each shared edge</option>
+            <option value="3">3 repeated stitches on each shared edge</option>
+          </select>
+        </label>
+        <p class="muted">Repeated stitches appear outside a purple outline on adjoining pages. They're guides only; don't crochet them twice. Overlap may add pages.</p>
         <label class="toggle pdf-checkbox"><input id="pdfMonochrome" type="checkbox"> Black &amp; white (yarn letters only)</label>
         <label class="toggle pdf-checkbox"><input id="pdfCompleted" type="checkbox"> Mark completed stitches on printout</label>
         <p id="pdfPages" class="pdf-page-info" role="status">Preparing page count…</p>
@@ -166,7 +175,7 @@
   </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./pdf-export.js?v=0.5.1" defer></script>
-  <script src="./app.js?v=0.5.1" defer></script>
+  <script src="./pdf-export.js?v=0.5.2" defer></script>
+  <script src="./app.js?v=0.5.2" defer></script>
 </body>
 </html>

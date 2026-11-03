@@ -817,13 +817,13 @@ function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/
 function download(blob,name){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function pdfSettings(){
   return {paper:$('pdfPaper').value,orientation:$('pdfOrientation').value,
-    detail:$('pdfDetail').value,monochrome:$('pdfMonochrome').checked,completed:$('pdfCompleted').checked};
+    detail:$('pdfDetail').value,overlap:Number($('pdfOverlap').value),monochrome:$('pdfMonochrome').checked,completed:$('pdfCompleted').checked};
 }
 function updatePdfEstimate(){
   if(!active||!window.DorettePdf)return;
   try{
     const info=window.DorettePdf.plan(active,pdfSettings());
-    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered sections (${info.across} across × ${info.down} down; up to ${info.perCols} columns × ${info.perRows} rows each, balanced).`;
+    $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.pages-2} numbered sections (${info.across} across × ${info.down} down). ${info.overlap?`Up to ${info.overlap} repeated stitches on shared edges, outside purple outline (reference only). May increase pages.`:'No repeated stitches.'}`;
   }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
 }
 function exportPdf(){
@@ -1034,7 +1034,7 @@ function hookEvents(){
     snapshot();discardPreview(false);active.referenceImage=null;active.opacity=0;syncImage();scheduleSave();refreshInspector();
     toast('Reference photo removed. Existing stitched chart and progress remain unchanged.');
   });
-  for(const id of ['pdfPaper','pdfOrientation','pdfDetail','pdfMonochrome','pdfCompleted'])$(id).addEventListener('change',updatePdfEstimate);
+  for(const id of ['pdfPaper','pdfOrientation','pdfDetail','pdfOverlap','pdfMonochrome','pdfCompleted'])$(id).addEventListener('change',updatePdfEstimate);
   $('exportPdf').addEventListener('click',exportPdf);
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));

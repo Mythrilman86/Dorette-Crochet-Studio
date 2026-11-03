@@ -1,4 +1,4 @@
-/* Dorette Crochet Studio PDF Export v0.5.1
+/* Dorette Crochet Studio PDF Export v0.5.2
    Offline vector PDF generator. No external scripts, accounts, images, or server required.
    Cells are stored top-to-bottom; printed row numbers count bottom-to-top. */
 (() => {
@@ -42,19 +42,38 @@
     const landscape=options.orientation==='landscape';
     const W=landscape?paper[1]:paper[0],H=landscape?paper[0]:paper[1];
     const cell=CELL_SIZES[options.detail]||CELL_SIZES.normal;
+    // Every shared section boundary may repeat this many neighboring stitches.
+    // Repeats are never counted in the overall yarn legend or completed stitch total.
+    const overlap=[0,1,2,3].includes(Number(options.overlap))?Number(options.overlap):0;
     const margin=38,gridTop=165,gridBottom=H-105,gridLeft=margin+32,gridRight=W-margin-32;
     // Establish the number of pages using their physical capacity, THEN divide
     // the whole pattern evenly across those pages. The old implementation used
     // full-width sections followed by a nearly empty last section (e.g.
     // columns 1-39, 40-78, 79-117, 118-120). For 120 columns this now creates
-    // four 30-column sections without changing the number of printed pages.
+    // four 30-column sections when overlap is OFF; overlap can add pages.
     const capacityCols=Math.max(1,Math.floor((gridRight-gridLeft)/cell));
     const capacityRows=Math.max(1,Math.floor((gridBottom-gridTop)/cell));
-    const across=Math.ceil(p.cols/capacityCols),down=Math.ceil(p.rows/capacityRows);
+    // Allow room for overlap on BOTH edges of an interior section. This may
+    // increase the number of pages, but never shrinks the chosen stitch squares.
+    const across=Math.ceil(p.cols/Math.max(1,capacityCols-2*overlap));
+    const down=Math.ceil(p.rows/Math.max(1,capacityRows-2*overlap));
     const perCols=Math.ceil(p.cols/across),perRows=Math.ceil(p.rows/down);
     return {W,H,cell,margin,gridTop,gridBottom,gridLeft,gridRight,perCols,perRows,across,down,pages:2+across*down,
       paper:options.paper==='a4'?'a4':'letter',orientation:landscape?'landscape':'portrait',
-      monochrome:!!options.monochrome,completed:!!options.completed};
+      monochrome:!!options.monochrome,completed:!!options.completed,overlap};
+  }
+  // Main sections partition the chart exactly once. The printed bounds may
+  // extend by a few cells in all four directions as labeled references.
+  function sectionBounds(project,conf,sectionCol,sectionRow){
+    const coreC0=sectionCol*conf.perCols,coreR0=sectionRow*conf.perRows;
+    const coreC1=Math.min(project.cols,coreC0+conf.perCols);
+    const coreR1=Math.min(project.rows,coreR0+conf.perRows);
+    const c0=Math.max(0,coreC0-conf.overlap),r0=Math.max(0,coreR0-conf.overlap);
+    const c1=Math.min(project.cols,coreC1+conf.overlap);
+    const r1=Math.min(project.rows,coreR1+conf.overlap);
+    return {c0,r0,countC:c1-c0,countR:r1-r0,coreC0,coreR0,
+      coreCountC:coreC1-coreC0,coreCountR:coreR1-coreR0,
+      firstC:coreC0+1,lastC:coreC1,firstR:project.rows-coreR1+1,lastR:project.rows-coreR0};
   }
   class Painter{
     constructor(W,H,mono=false){this.W=W;this.H=H;this.mono=mono;this.ops=[];this.lastFill='';this.lastStroke='';}
@@ -122,7 +141,7 @@
     const done=finishedCount(p);
     g.text(`${formatInt(done)} / ${formatInt(p.cols*p.rows)} stitches completed in app (${Math.round(done/(p.cols*p.rows)*100)}%)`,38,g.H-106,9);
     g.text(`Full yarn-color key and stitch totals: see page 2 (${p.palette.length} yarn colors).`,38,g.H-87,8);
-    g.text(`${conf.paper.toUpperCase()}  |  ${conf.orientation}  |  ${conf.across} x ${conf.down} detailed sections  |  ${conf.monochrome?'Black and white':'Color'}`,38,g.H-69,8);
+    g.text(`${conf.paper.toUpperCase()}  |  ${conf.orientation}  |  ${conf.across} x ${conf.down} sections  |  ${conf.monochrome?'Black and white':'Color'}  |  Overlap: ${conf.overlap} stitches`,38,g.H-69,8);
   }
   function legendPage(g,p,conf,counts){
     chrome(g,'Yarn color & symbol legend','Use these letters to identify the yarn color in each square.',p,2,conf.pages);
@@ -171,21 +190,23 @@
       'Each square represents one stitch. The letter identifies its yarn color.',
       'Column 1 is on the LEFT; columns increase toward the right.',
       'Row 1 is at the BOTTOM; row numbers increase upward.',
-      'Each detail page is a section of the full chart, with absolute row/column numbers.',
+      conf.overlap?`Purple border = main stitches. Outside: ${conf.overlap}-stitch overlap, reference only.`:'Each detail page is a section of the full chart, with absolute row/column numbers.',
       conf.monochrome?'Black-and-white export: read the letter in each square.':'Color export: letter symbols are printed over the yarn colors.'
     ];
     rules.forEach((t,i)=>g.text(`${i+1}. ${t}`,42,bottom+33+i*18,8.5));
   }
   function detailPage(g,p,conf,sectionCol,sectionRow,pageNumber){
-    const c0=sectionCol*conf.perCols,r0=sectionRow*conf.perRows;
-    const countC=Math.min(conf.perCols,p.cols-c0),countR=Math.min(conf.perRows,p.rows-r0);
-    const firstC=c0+1,lastC=c0+countC,firstR=p.rows-r0,lastR=p.rows-r0-countR+1;
+    const b=sectionBounds(p,conf,sectionCol,sectionRow);
+    const {c0,r0,countC,countR,firstC,lastC,firstR,lastR}=b;
     chrome(g,`Chart section ${sectionRow+1}.${sectionCol+1}`,
-      `Columns ${firstC}-${lastC}  |  Rows ${lastR}-${firstR} (bottom-up numbering)`,p,pageNumber,conf.pages);
+      `Main: Columns ${firstC}-${lastC}  |  Rows ${firstR}-${lastR} (bottom-up numbering)`,p,pageNumber,conf.pages);
     g.text(`Section ${sectionCol+1} of ${conf.across} across; ${sectionRow+1} of ${conf.down} down.`,38,110,9,false,'#6a5d78');
+    if(conf.overlap){
+      g.text(`Purple outline = main stitches; outside = repeated reference stitches (up to ${conf.overlap}).`,38,128,8,true,'#6e4895');
+    }
     const cell=conf.cell;
-    // Center each balanced section in the safe printable grid area, retaining
-    // the full-number gutters and preserving absolute stitch coordinates.
+    // The complete print area (main plus neighboring reference cells) must fit
+    // in the same safe area regardless of page size or orientation.
     const x=conf.gridLeft+(conf.gridRight-conf.gridLeft-countC*cell)/2;
     const y=conf.gridTop+(conf.gridBottom-conf.gridTop-countR*cell)/2;
     paintRuns(g,p,c0,r0,countC,countR,x,y,cell,conf.monochrome);
@@ -210,7 +231,13 @@
       const yy=y+r*cell;
       g.line(x-16,yy,x+w+16,yy,'#b6afbf',.34);
     }
-    g.outline(x,y,w,h,'#5b457a',1.1);
+    g.outline(x,y,w,h,'#5b457a',.8);
+    if(conf.overlap){
+      // Distinguish duplicate edge cells without changing any yarn colors or
+      // overprinting their symbols. Thick border encloses the UNIQUE section.
+      const mainX=x+(b.coreC0-c0)*cell,mainY=y+(b.coreR0-r0)*cell;
+      g.outline(mainX,mainY,b.coreCountC*cell,b.coreCountR*cell,'#8150bc',2.2);
+    }
     // Number all columns at top and bottom; all rows at left and right.
     const numSize=Math.min(6.5,Math.max(5.2,cell*.50));
     for(let c=0;c<countC;c++){
@@ -223,8 +250,8 @@
       g.text(label,x-27,yy,numSize,true);
       g.text(label,x+w+8,yy,numSize,true);
     }
-    g.text('Continue with neighboring chart sections as needed.',38,g.H-75,7.8,false,'#78668e');
-    g.text('Row 1 is at the bottom of the full chart.',38,g.H-62,7.8,false,'#78668e');
+    g.text(conf.overlap?'OUTSIDE PURPLE OUTLINE: repeated stitches, for reference only.':'Continue with neighboring chart sections as needed.',38,g.H-75,7.8,false,'#78668e');
+    g.text(conf.overlap?'Row 1 begins at the bottom. Never crochet duplicate overlap cells twice.':'Row 1 is at the bottom of the full chart.',38,g.H-62,7.8,false,'#78668e');
   }
   function pdfBuilder(pages,metadata){
     const objs=[''];
@@ -239,7 +266,7 @@
     }
     objs[catalog]=`<< /Type /Catalog /Pages ${root} 0 R >>`;
     objs[root]=`<< /Type /Pages /Kids [${ids.map(x=>x+' 0 R').join(' ')}] /Count ${ids.length} >>`;
-    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 0.5.1')} /Producer ${pdfText('Dorette local PDF export')} >>`);
+    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 0.5.2')} /Producer ${pdfText('Dorette local PDF export')} >>`);
     const output=[encoder.encode('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
     // Header bytes over 127 above are encoded as UTF-8; the marker is informational only.
     const offsets=[0];let offset=output[0].length;
@@ -266,5 +293,5 @@
     }
     return {bytes:pdfBuilder(pages,{title:safeName(p.name)+' - Crochet Chart'}),pages:conf.pages};
   }
-  window.DorettePdf=Object.freeze({build,plan});
+  window.DorettePdf=Object.freeze({build,plan,sectionBounds});
 })();
