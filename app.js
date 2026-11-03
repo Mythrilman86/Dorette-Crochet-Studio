@@ -2279,7 +2279,8 @@ async function updateWakeLock(){
  }
 }
 function refreshWorkspaceLayout(){
- const split=Number($('chartSplit').value)||50;document.documentElement.style.setProperty('--dorette-overview-share',split+'fr');document.documentElement.style.setProperty('--dorette-working-share',(100-split)+'fr');
+ const split=Number($('chartSplit').value)||50;
+ if(document.activeElement!==$('chartSplitNumber'))$('chartSplitNumber').value=split;document.documentElement.style.setProperty('--dorette-overview-share',split+'fr');document.documentElement.style.setProperty('--dorette-working-share',(100-split)+'fr');
  document.body.classList.toggle('hide-settings',$('toggleSettings').dataset.hidden==='1');document.body.classList.toggle('hide-projects',$('toggleProjects').dataset.hidden==='1');
  document.body.classList.toggle('unpinned-dock',!$('pinCrochetDock').checked);
  requestDraw();
@@ -2347,7 +2348,25 @@ function hookNextEvents(){
  $('exportPng').addEventListener('click',()=>exportChartImage('png'));$('exportSvg').addEventListener('click',()=>exportChartImage('svg'));
  $('keepAwake').addEventListener('change',updateWakeLock);
  document.addEventListener('visibilitychange',updateWakeLock);
- for(const id of ['chartSplit','pinCrochetDock'])$(id).addEventListener('input',refreshWorkspaceLayout);
+ $('chartSplit').addEventListener('input',()=>{
+  $('chartSplitNumber').value=$('chartSplit').value;
+  refreshWorkspaceLayout();
+ });
+ $('pinCrochetDock').addEventListener('input',refreshWorkspaceLayout);
+ const splitNumber=$('chartSplitNumber');
+ splitNumber.addEventListener('input',()=>{
+  if(splitNumber.validity.valid&&splitNumber.value!==''){
+   $('chartSplit').value=splitNumber.value;
+   refreshWorkspaceLayout();
+  }
+ });
+ splitNumber.addEventListener('change',()=>{
+  const value=splitNumber.valueAsNumber;
+  if(Number.isFinite(value))$('chartSplit').value=clamp(Math.round(value),25,75);
+  splitNumber.value=$('chartSplit').value;
+  refreshWorkspaceLayout();
+ });
+ splitNumber.addEventListener('blur',()=>{splitNumber.value=$('chartSplit').value;});
  for(const [id,flag] of [['toggleSettings','hide-settings'],['toggleProjects','hide-projects']])$(id).addEventListener('click',()=>{const b=$(id);b.dataset.hidden=b.dataset.hidden==='1'?'0':'1';refreshWorkspaceLayout();});
  refreshWorkspaceLayout();
 }

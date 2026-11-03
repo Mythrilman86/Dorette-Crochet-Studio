@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.5.1">
+  <link rel="stylesheet" href="./styles.css?v=1.5.2">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -30,9 +30,9 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.5.1 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.5.2 · Local workspace</span></div>
       <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
-      <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><label>Chart split <input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage"></label><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
+      <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><div class="chart-split-control"><label for="chartSplit">Chart split</label><input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage slider"><label class="chart-split-number"><input id="chartSplitNumber" type="number" min="25" max="75" step="1" value="50" inputmode="numeric" aria-label="Overview width percentage">%</label></div><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomValue" class="zoom-value">100%</span>
@@ -260,11 +260,11 @@
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
   <div class="crochet-dock" aria-label="Crochet progress controls"><strong id="dockStatus" role="status"></strong><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo progress</button></div>
-  <script src="./pattern-tools.js?v=1.5.1" defer></script>
-  <script src="./advanced.js?v=1.5.1" defer></script>
-  <script src="./pdf-export.js?v=1.5.1" defer></script>
-  <script src="./next-features.js?v=1.5.1" defer></script>
-  <script src="./app.js?v=1.5.1" defer></script>
-  <script src="./help.js?v=1.5.1" defer></script>
+  <script src="./pattern-tools.js?v=1.5.2" defer></script>
+  <script src="./advanced.js?v=1.5.2" defer></script>
+  <script src="./pdf-export.js?v=1.5.2" defer></script>
+  <script src="./next-features.js?v=1.5.2" defer></script>
+  <script src="./app.js?v=1.5.2" defer></script>
+  <script src="./help.js?v=1.5.2" defer></script>
 </body>
 </html>
