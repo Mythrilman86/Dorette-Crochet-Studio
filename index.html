@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=0.5.2">
+  <link rel="stylesheet" href="./styles.css?v=1.0.0">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -37,7 +37,7 @@
         <button id="zoomIn" class="icon-button" title="Zoom in" aria-label="Zoom in">＋</button>
         <button id="fitChart" class="button ghost">Fit chart</button>
         <div class="toolbar-divider"></div>
-        <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button><button id="redoButton" class="button ghost" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         <button id="resetView" class="button ghost">⌖ Center</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
@@ -48,8 +48,20 @@
           <button id="toolErase" class="edit-tool" type="button" aria-pressed="false">⌫ Erase</button>
           <button id="toolPick" class="edit-tool" type="button" aria-pressed="false">◉ Pick</button>
           <button id="toolPan" class="edit-tool" type="button" aria-pressed="false">✥ Pan</button>
+          <button id="toolRect" class="edit-tool" type="button" aria-pressed="false">▧ Rectangle</button>
+          <button id="toolBucket" class="edit-tool" type="button" aria-pressed="false">◉ Fill bucket</button>
+          <button id="toolArea" class="edit-tool" type="button" aria-pressed="false">▢ Select area</button>
+          <button id="toolPaste" class="edit-tool" type="button" aria-pressed="false">▣ Paste</button>
         </div>
         <div class="editor-palette"><span class="editor-label">Yarn color</span><div id="quickPalette" class="quick-palette" aria-label="Choose a yarn color"></div></div>
+        <div class="edit-extra">
+          <span id="areaStatus" class="muted">Select area: drag across chart; use Copy or Fill selection.</span>
+          <button type="button" class="button ghost" id="copyArea">Copy area</button>
+          <button type="button" class="button ghost" id="fillArea">Fill area</button>
+          <button type="button" class="button ghost" id="saveCheckpoint">Save snapshot</button>
+          <select id="checkpointChoice" aria-label="Saved editing snapshots"><option value="">No snapshots</option></select>
+          <button type="button" class="button ghost" id="restoreCheckpoint">Restore snapshot</button>
+        </div>
         <p id="editorHint" class="editor-hint" aria-live="polite">Select to inspect stitches. Choose Paint or a color to draw; Erase restores the background. Pinch to zoom.</p>
       </div>
       <div class="canvas-wrap" id="canvasWrap">
@@ -60,6 +72,17 @@
         <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
         <div class="selection-actions"><button id="markStitch" class="button primary" disabled>✓ Mark stitch</button><button id="markRow" class="button secondary" disabled>✓ Mark row</button></div>
       </div>
+      <details class="work-instructions" open>
+        <summary>Row-by-row color instructions</summary>
+        <div class="instruction-config">
+          <label>First row direction<select id="rowFirstDirection"><option value="rtl">Right to left</option><option value="ltr">Left to right</option></select></label>
+          <label class="toggle"><input id="rowAlternate" type="checkbox" checked> Alternate direction each row</label>
+          <label>Show row <input id="instructionRow" type="number" min="1" max="300" value="1"></label>
+        </div>
+        <div id="rowRunSummary" class="run-summary" aria-live="polite">Select a row to see its stitch sequence.</div>
+        <div id="rowRunChips" class="run-chips"></div>
+        <div class="instruction-actions"><button type="button" id="rowPrev" class="button ghost">← Previous row</button><button type="button" id="rowNext" class="button ghost">Next row →</button><button type="button" id="rowMarkDone" class="button secondary">Mark this row complete</button><button type="button" id="openGuide" class="button primary">▶ Guided Crochet Mode</button></div>
+      </details>
       <p id="helpMessage" class="hint-line">Tip: Select a yarn color and drag to paint stitches. Erase restores the background. Use Pan to move the chart; Undo reverses an entire stroke.</p>
     </section>
 
@@ -136,6 +159,14 @@
         <div class="pair"><label class="field">New color<input id="newHex" type="color" value="#4d8eaf" class="color-picker"></label><button id="addYarnColor" class="button ghost">＋ Add color</button></div>
       </div>
       <div class="section-divider"></div>
+      <details class="inspector-section yarn-manager" open>
+        <summary>YARN INVENTORY &amp; ESTIMATES</summary>
+        <p class="muted">Enter an actual yarn usage swatch. Estimates cannot be accurate without a measured sample; they include the allowance below.</p>
+        <div class="inventory-grid"><label>Sample stitches<input id="gaugeStitches" type="number" min="1" max="100000" value="100"></label><label>Yards used in sample<input id="gaugeYards" type="number" min="0" step="0.01" value="0"></label><label>Extra yarn %<input id="gaugeOverage" type="number" min="0" max="100" value="10"></label></div>
+        <div id="yarnInventoryRows" class="yarn-inventory-rows"></div>
+        <p id="yarnEstimateSummary" class="muted"></p>
+      </details>
+      <div class="section-divider"></div>
       <div class="inspector-section pdf-panel" aria-label="Printable PDF export">
         <div class="section-title"><span class="eyebrow">PRINTABLE PDF EXPORT</span><span class="pdf-chip">OFFLINE</span></div>
         <p class="muted">Download a complete PDF with a full-chart overview, symbol and yarn legend, and numbered stitch-by-stitch pages.</p>
@@ -157,6 +188,10 @@
         <label class="toggle pdf-checkbox"><input id="pdfCompleted" type="checkbox"> Mark completed stitches on printout</label>
         <p id="pdfPages" class="pdf-page-info" role="status">Preparing page count…</p>
         <button id="exportPdf" class="button primary block" type="button">⇩ Download printable PDF</button>
+        <div class="section-divider"></div>
+        <strong class="small-title">Written row-by-row pattern PDF</strong>
+        <p class="muted">Includes every row in the chosen crochet direction, grouped consecutive yarn stitches, row checkboxes, and a color key. Uses the saved chart; no photograph required.</p>
+        <button id="exportWrittenPdf" class="button secondary block" type="button">⇩ Download written instructions PDF</button>
         <p class="muted">Creates a real PDF on this device. Your saved project and backup ZIPs are not changed. It does not print the source photograph.</p>
       </div>
       <div class="section-divider"></div>
@@ -173,9 +208,19 @@
     </div>
     <p class="muted compare-footnote">The larger chart requires 10,557 more stitches. Zoom in on PUERTO RICAN and Boyfriend before making a decision.</p>
   </dialog>
+  <dialog id="guideDialog" class="guide-dialog" aria-label="Guided Crochet Mode">
+    <div class="guide-head"><div><span class="eyebrow">DORETTE • GUIDED CROCHET</span><h2 id="guideTitle">Row 1</h2><p id="guideStatus" class="muted"></p></div><button id="closeGuide" class="button ghost" type="button">Close ✕</button></div>
+    <div id="guideRowStripe" class="guide-row-stripe" aria-label="Current row colorwork"></div>
+    <div id="guideCurrent" class="guide-current"></div>
+    <div id="guideNextColor" class="guide-next muted"></div>
+    <div class="guide-buttons"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
+    <div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row →</button></div>
+    <p class="muted">Next stitch marks the current square complete and saves progress. Previous stitch only changes position; it does not erase completion.</p>
+  </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <script src="./pdf-export.js?v=0.5.2" defer></script>
-  <script src="./app.js?v=0.5.2" defer></script>
+  <script src="./pattern-tools.js?v=1.0.0" defer></script>
+  <script src="./pdf-export.js?v=1.0.0" defer></script>
+  <script src="./app.js?v=1.0.0" defer></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-/* Dorette Crochet Studio PDF Export v0.5.2
+/* Dorette Crochet Studio PDF Export v1.0.0
    Offline vector PDF generator. No external scripts, accounts, images, or server required.
    Cells are stored top-to-bottom; printed row numbers count bottom-to-top. */
 (() => {
@@ -266,7 +266,7 @@
     }
     objs[catalog]=`<< /Type /Catalog /Pages ${root} 0 R >>`;
     objs[root]=`<< /Type /Pages /Kids [${ids.map(x=>x+' 0 R').join(' ')}] /Count ${ids.length} >>`;
-    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 0.5.2')} /Producer ${pdfText('Dorette local PDF export')} >>`);
+    const info=add(`<< /Title ${pdfText(metadata.title.replace(/[—–]/g,'-'))} /Creator ${pdfText('Dorette Crochet Studio 1.0.0')} /Producer ${pdfText('Dorette local PDF export')} >>`);
     const output=[encoder.encode('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')];
     // Header bytes over 127 above are encoded as UTF-8; the marker is informational only.
     const offsets=[0];let offset=output[0].length;
@@ -293,5 +293,72 @@
     }
     return {bytes:pdfBuilder(pages,{title:safeName(p.name)+' - Crochet Chart'}),pages:conf.pages};
   }
-  window.DorettePdf=Object.freeze({build,plan,sectionBounds});
+  // Written colorwork PDF uses the same saved grid as the numbered chart PDF.
+  // No source photo, API, cloud service or online library is required.
+  function buildWritten(project,options={}){
+    const p=validated(project),pt=window.DorettePattern;
+    if(!pt)throw Error('Row instruction module is missing');
+    pt.ensure(p);
+    const paper=PAGE_SIZES[options.paper]||PAGE_SIZES.letter,landscape=options.orientation==='landscape';
+    const W=landscape?paper[1]:paper[0],H=landscape?paper[0]:paper[1];
+    const pages=[],make=()=>{const g=new Painter(W,H,false);pages.push(g);return g;};
+    const counts=pt.counts(p),gauge=p.gauge||{},firstDir=p.workDirection.first==='ltr'?'Left to right':'Right to left';
+    let g=make();
+    // Cover page: project details, directions, palette and optional inventory.
+    g.text('WORKING DIRECTIONS',43,118,12,true,'#7156a5');
+    g.text(`Project: ${cropText(p.name,65)}`,43,144,11,true);
+    g.text(`Chart: ${p.cols} columns x ${p.rows} rows (${formatInt(p.cols*p.rows)} stitches)`,43,166,10);
+    g.text(`Row 1 begins at BOTTOM; first row: ${firstDir}.`,43,189,10);
+    g.text(p.workDirection.alternate!==false?'Working direction ALTERNATES every row.':'Use the SAME direction for every row.',43,211,10);
+    g.text('Read each color block in the stated working direction. Example: "8 A, 3 B"',43,238,9);
+    g.text('means 8 consecutive stitches in yarn A, then 3 in yarn B.',43,256,9);
+    g.text('A row checkbox is for your pencil; your saved app progress is unchanged.',43,283,9);
+    g.line(42,313,W-42,313,'#dcd3e8');
+    g.text('YARN COLOR KEY / UNIQUE STITCH COUNTS',43,328,11,true,'#7156a5');
+    let y=358;
+    p.palette.forEach((color,i)=>{
+      if(i>=12)return;
+      const info=p.yarnInfo?.[i]||{};
+      g.rect(44,y+1,16,15,color.hex);g.outline(44,y+1,16,15,'#8f829a',.35);
+      g.text(`${color.symbol}  ${cropText(color.name,36)}`,70,y,9,true);
+      g.text(`${formatInt(counts[i])} stitches`,W-150,y,9);
+      if(info.brand||info.code||info.dyeLot)g.text(cropText(`${info.brand||''} ${info.code||''} ${info.dyeLot?'lot '+info.dyeLot:''}`,70),71,y+15,7,false,'#8c7e98');
+      y+=((info.brand||info.code||info.dyeLot)?36:27);
+    });
+    if(y+90<H-85){
+      g.line(42,y+8,W-42,y+8,'#dcd3e8');
+      g.text('YARN USAGE ESTIMATE',43,y+21,10,true,'#7156a5');
+      const sample=Number(gauge.swatchYards)||0;
+      g.text(sample>0?`Based on your measured swatch: ${gauge.swatchStitches} stitches used ${sample} yards; ${gauge.overage||0}% allowance.`:'No measured swatch entered. Yardage cannot be calculated from stitch counts alone.',43,y+43,8.3);
+    }
+    // Add all rows, in crocheting order: Row 1 at bottom -> Row N at top.
+    g=make();y=117;
+    function newPage(){g=make();y=117;}
+    const safeChars=Math.max(55,Math.floor((W-92)/(9.1*.55)));
+    for(let row=1;row<=p.rows;row++){
+      const direction=pt.direction(p,row)==='rtl'?'RIGHT to LEFT':'LEFT to RIGHT';
+      const runs=pt.runs(p,row),tokens=runs.map(r=>`${r.count} ${p.palette[r.color].symbol}`);
+      const lines=[];let line='';
+      for(const token of tokens){
+        if(!line)line=token;
+        else if(line.length+3+token.length<=safeChars)line+='  |  '+token;
+        else{lines.push(line);line=token;}
+      }
+      if(line)lines.push(line);
+      const required=30+lines.length*12+9;
+      if(y+required>H-91)newPage();
+      const done=p.rowDone?.[row-1]||Array.from({length:p.cols},(_,c)=>p.done?.[(p.rows-row)*p.cols+c]).every(Boolean);
+      g.outline(44,y+3,11,11,done?'#7356ab':'#988aa6',.8);
+      if(done)g.text('X',46,y,10,true,'#654a96');
+      g.text(`Row ${row} / ${p.rows}  |  ${direction}  |  ${p.cols} stitches  |  ${runs.length} blocks`,65,y-1,10,true);
+      y+=19;
+      for(const l of lines){g.text(l,65,y,9,false,'#2b2437');y+=12;}
+      g.line(44,y+4,W-44,y+4,'#e8e1ec',.35);y+=16;
+    }
+    const total=pages.length;
+    pages.forEach((pg,i)=>chrome(pg,i===0?'Written row-by-row instructions':'Written colorwork — rows',i===0?'Crochet in the direction printed for each row.':'Consecutive same-color stitches are grouped into runs.',p,i+1,total));
+    return {bytes:pdfBuilder(pages,{title:safeName(p.name)+' - Written Colorwork'}),pages:total};
+  }
+
+  window.DorettePdf=Object.freeze({build,plan,sectionBounds,buildWritten});
 })();

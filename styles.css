@@ -82,3 +82,39 @@
 .pdf-panel .pdf-checkbox input{margin:2px 1px 0 0;width:16px;height:16px;flex-shrink:0}
 .pdf-page-info{border-radius:8px;background:#eee7f8;color:#5e497e;padding:9px;font-weight:750;font-size:.73rem;line-height:1.4}
 .pdf-panel button[disabled]{opacity:.65}
+/* v1.0: instructions, guided stitch-by-stitch work, yarn planning and advanced editor */
+.edit-extra{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.69rem}
+.edit-extra .button{font-size:.67rem;padding:7px}.edit-extra select{max-width:180px;padding:7px;border:1px solid #ded4e8;border-radius:8px;background:white}
+.work-instructions{background:#fff;border:1px solid #ded4e8;border-radius:13px;padding:13px;color:#4d3f63}
+.work-instructions summary,.yarn-manager summary{cursor:pointer;font-size:.85rem;font-weight:850;color:#59447b}
+.instruction-config{display:flex;gap:9px;flex-wrap:wrap;align-items:end;margin:12px 0}
+.instruction-config label{font-size:.71rem;display:flex;flex-direction:column;gap:5px;font-weight:750}
+.instruction-config .toggle{flex-direction:row;align-items:center}
+.instruction-config select,.instruction-config input[type=number]{min-height:35px;padding:7px;background:#fff;border:1px solid #ded4e8;border-radius:8px;max-width:175px}
+.run-summary{font-size:.76rem;font-weight:750;padding:9px;border-radius:9px;background:#f3eef9;line-height:1.45}
+.run-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;max-height:240px;overflow:auto}
+.run-chip{display:flex;align-items:center;gap:5px;border-radius:8px;border:1px solid #ded4e8;padding:6px 8px;background:#fff;font-size:.69rem;white-space:nowrap}
+.run-swatch{display:inline-block;width:14px;height:14px;border:1px solid #887c9170;border-radius:4px}
+.instruction-actions{display:flex;flex-wrap:wrap;gap:7px}.instruction-actions .button{font-size:.73rem}
+.yarn-manager{border:1px solid #e4d9ed;background:#faf7ff;padding:11px;border-radius:12px}
+.inventory-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin:12px 0}
+.inventory-grid label,.inventory-row label{display:flex;flex-direction:column;font-size:.65rem;gap:4px;color:#5f4d73;font-weight:750}
+.inventory-grid input,.inventory-row input{width:100%;padding:7px;border:1px solid #dcd1e8;border-radius:7px;background:#fff;font-size:.72rem;min-width:0}
+.yarn-inventory-rows{display:flex;flex-direction:column;gap:9px}
+.inventory-row{padding:9px;background:white;border:1px solid #e8e0ef;border-radius:9px;display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.inventory-row .inventory-heading,.inventory-row .estimate{grid-column:1/-1;font-size:.72rem}
+.inventory-row .estimate{background:#f4effa;padding:7px;border-radius:6px;line-height:1.4}
+.small-title{display:block;font-size:.77rem;margin:10px 0 6px;color:#59447b}
+.guide-dialog{width:min(900px,98vw);max-height:95vh;overflow:auto;border:1px solid #cfc1df;border-radius:18px;padding:26px;background:#fcfaff;color:#392d4c;box-shadow:0 20px 75px #32274465}
+.guide-dialog::backdrop{background:#221b34c2}.guide-head{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.guide-head h2{font-size:1.5rem;margin:4px 0}.guide-current{background:#eee5fa;border-radius:14px;padding:20px;text-align:center;font-weight:850;font-size:clamp(1.25rem,3vw,2rem);margin:14px 0;line-height:1.4}
+.guide-next{min-height:35px;font-size:.88rem}.guide-row-stripe{display:flex;width:100%;height:42px;border:1px solid #b2a2c5;border-radius:8px;overflow:hidden;margin-top:20px}
+.guide-run{position:relative;height:100%;border-right:1px solid #fff9;min-width:0}.guide-run.current{outline:4px solid #9d64f1;outline-offset:-4px;z-index:2}
+.guide-buttons{display:flex;flex-wrap:wrap;gap:12px;margin:15px 0}.guide-buttons .button{flex:1;min-height:54px;font-size:.89rem;white-space:normal}
+@media(max-width:640px){.guide-dialog{padding:14px}.inventory-grid{grid-template-columns:1fr 1fr}.instruction-config{gap:7px}.guide-buttons{gap:7px}.guide-buttons .button{padding:9px}}
+/* The additional row-instruction panel needs a normal scrolling document.
+   Keep the canvas generously sized instead of allowing the flex column to collapse. */
+.workspace{max-height:none;height:auto;min-height:calc(100vh - 74px)}
+.canvas-wrap{flex:0 0 auto;height:clamp(360px,57vh,700px)}
+@media(max-width:920px){.workspace{height:auto;min-height:0}.canvas-wrap{height:clamp(340px,54vh,640px)}}
+@media(max-width:640px){.workspace{height:auto;min-height:0}.canvas-wrap{height:55svh;min-height:300px}}
