@@ -181,17 +181,17 @@ function snapshot(){
   redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
 }
 function restoreUndoState(state){
-  discardPreview(false);Object.assign(active,state);window.DorettePattern.ensure(active);
+  discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
 }
 function undo(){
-  if(!active||!undoStack.length)return;
+  if(!active||!undoStack.length||editBlocked("undo changes"))return;
   redoStack.push(undoState());restoreUndoState(undoStack.pop());
   $('undoButton').disabled=!undoStack.length;$('redoButton').disabled=false;toast('Undone — use Redo to restore.');
 }
 function redo(){
-  if(!active||!redoStack.length)return;
+  if(!active||!redoStack.length||editBlocked("redo changes"))return;
   undoStack.push(undoState());restoreUndoState(redoStack.pop());
   $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;toast('Change redone.');
 }
@@ -250,7 +250,8 @@ function updateTextControls(){
   const tc=$('textColor'),prev=tc.value;
   tc.replaceChildren();
   active.palette.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=`${c.symbol} · ${c.name}`;tc.append(o);});
-  tc.value=active.palette[Number(prev)]?prev:$('paintColor').value||'0';
+  tc.value=prev!==''&&active.palette[Number(prev)]?prev:$('paintColor').value||'0';
+  if(textPreview)buildTextPreview();
 }
 function updateToolUI(){
   const preview = !!pendingConversion, locked=isPatternLocked();
@@ -394,9 +395,10 @@ function addYarnColor(){
   const hex=$('newHex').value;
   snapshot();const index=active.palette.length;
   active.palette.push({hex,name:'Yarn color '+(index+1),symbol:SYMBOLS[index]});
-  scheduleSave();updateLegend();renderYarnInventory();$('paintColor').value=String(index);toast('New yarn color added. Select a stitch to paint it.');
+  scheduleSave();updateLegend();updateTextControls();renderYarnInventory();$('paintColor').value=String(index);toast('New yarn color added. Select a stitch to paint it.');
 }
 function editDimensions(){
+  if(!active||editBlocked("resize the chart"))return;
   const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
   if(!validDimensions(cols,rows)){toast('Columns must be 1–200 and rows 1–300.');return;}
   if(cols===active.cols&&rows===active.rows){toast('The dimensions have not changed.');return;}
@@ -589,14 +591,17 @@ function drawTextPreviewOverlay(ctx,preview,cols,rows){
 }
 function applyTextPreview(){
   if(!active||pendingConversion||editBlocked('apply text to the chart'))return;
-  const preview=textPreview||buildTextPreview();
+  const preview=buildTextPreview();
   if(!preview||!preview.cells.length)return toast('Preview some text first.');
+  if(!preview.cells.some(cell=>active.cells[indexFor(cell.col,cell.row)]!==preview.color)){
+    return toast('That text preview would not change any stitches.');
+  }
   let changed=0; snapshot();
   for(const cell of preview.cells){
     const i=indexFor(cell.col,cell.row);
     if(active.cells[i]!==preview.color){active.cells[i]=preview.color;changed++;}
   }
-  if(!changed){undoStack.pop();toast('That text preview would not change any stitches.');return;}
+  clearTextPreview();
   active.converted=true; scheduleSave(); updateLegend(); updateSelection(); requestDraw(); toast(`Applied ${changed} text stitches to the chart.`);
 }
 function nudgeText(dx,dy){
@@ -660,7 +665,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
-      if(!displayedConversion&&(active.done[i]||active.rowDone[rowNum-1]))continue;
+      if(showProgressOverlay&&!displayedConversion&&(active.done[i]||active.rowDone[rowNum-1]))continue;
       const color=(displayedConversion?.palette||active.palette)[(displayedConversion?.cells||active.cells)[i]]||DEFAULT_COLORS[0];
       const rHex=parseInt(color.hex.slice(1,3),16),gHex=parseInt(color.hex.slice(3,5),16),bHex=parseInt(color.hex.slice(5,7),16);
       ctx.fillStyle=(rHex*.299+gHex*.587+bHex*.114)>145?'#312b3d':'#fff';
@@ -1369,6 +1374,7 @@ function hookPatternEvents(){
     snapshot();Pattern.makeCheckpoint(active,name);scheduleSave();renderCheckpoints();toast('Saved project snapshot in local storage and backups.');
   });
   $('restoreCheckpoint').addEventListener('click',()=>{
+    if(!active||editBlocked('restore a snapshot'))return;
     const cp=active.checkpoints.find(c=>c.id===$('checkpointChoice').value);if(!cp)return;
     if(!confirm(`Restore “${cp.name}”? Current changes will be kept in Undo history. Save a ZIP backup too.`))return;
     snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),converted:true});
@@ -1462,7 +1468,7 @@ function hookEvents(){
   $('cropPreview').addEventListener('pointerup',endCropGesture);
   $('cropPreview').addEventListener('pointercancel',endCropGesture);
   $('applyConversion').addEventListener('click',()=>{
-    if(!active||pendingConversion?.projectId!==active.id)return;
+    if(!active||pendingConversion?.projectId!==active.id||editBlocked("apply a photo conversion"))return;
     const result=pendingConversion;
     if(result.cols!==active.cols||result.rows!==active.rows){
       const fresh=blankProject(`${active.name} — ${result.cols}x${result.rows}`,result.cols,result.rows);
@@ -1527,6 +1533,9 @@ function hookEvents(){
   $('stylusOnly').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),stylusOnly:ev.target.checked};scheduleSave();updateTabletControls();toast(ev.target.checked?'Stylus mode on: finger touches only pan/select.':'Stylus mode off: touch editing restored.');});
   $('largeTouch').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),largeTouch:ev.target.checked};scheduleSave();updateTabletControls();});
   $('textColor').addEventListener('change',()=>{$('paintColor').value=$('textColor').value;updateToolUI();});
+  for(const id of ['textInput','textOrientation','textScale','textCol','textRow','textColor']){
+    $(id).addEventListener('input',()=>{if(textPreview)buildTextPreview();});
+  }
   $('previewText').addEventListener('click',()=>{if(!active)return;const preview=buildTextPreview();if(preview?.cells?.length)toast(`Previewing text across ${preview.width} × ${preview.height} cells.`);else toast('Type some text first.');});
   $('clearTextPreview').addEventListener('click',()=>{clearTextPreview();toast('Text preview cleared.');});
   $('applyText').addEventListener('click',applyTextPreview);
