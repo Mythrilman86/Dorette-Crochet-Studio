@@ -1,0 +1,16 @@
+#stitchStudio { width: min(56rem, 94vw); max-height: 90vh; overflow: auto; padding: 1rem;
+  color: #222; background: #fffaf7; border: 1px solid #866d72; border-radius: 1rem; }
+#stitchStudio::backdrop { background: rgb(30 20 24 / 65%); }
+#stitchStudio header, .stitch-controls { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+#stitchStudio header { justify-content: space-between; }
+#stitchStudio label { display: inline-flex; flex-direction: column; gap: .2rem; }
+#stitchStudio input[type=number] { width: 5.5rem; }
+#stitchStudio input[type=file] { max-width: 100%; }
+#stitchStudio button, #stitchStudio select, #stitchStudio input { font: inherit; }
+#stitchStudio canvas, #stitchStudio video { display: block; max-width: 100%; height: auto; border: 1px solid #866d72; }
+#stitchImage { touch-action: none; cursor: crosshair; }
+#stitchStudio details, #stitchStudio article { margin: .5rem 0; padding: .5rem; border: 1px solid #ccb8b9; border-radius: .5rem; }
+#stitchStudio summary { cursor: pointer; }
+.stitch-glyph { width: 2.2rem; height: 2.2rem; vertical-align: middle; margin-right: .4rem; }
+.stitch-step { width: 8rem; display: block; margin: .25rem 0; }
+#stitchStudio [hidden] { display: none !important; }

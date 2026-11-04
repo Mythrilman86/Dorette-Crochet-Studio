@@ -270,3 +270,8 @@ body.crochet-view .crochet-dock .button{min-height:48px}
 .export-preview-dialog canvas{display:block;max-width:100%;height:auto;max-height:50vh;object-fit:contain;margin:8px auto;border:1px solid #bfb4c5;image-rendering:pixelated}
 #exportPreviewReport{font-weight:700;color:#4a3a64;font-size:.78rem;line-height:1.5}
 @media(max-width:640px){.command-dialog{padding:12px}.conflict-alert{font-size:.76rem}}
+
+/* Keep the working grid first where the chart panes stack. */
+@media(max-width:650px){
+  .dual-charts > .chart-pane:not(#overviewPane){grid-row:1}
+}

@@ -7,8 +7,9 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.8.1">
+  <link rel="stylesheet" href="./styles.css?v=1.8.1-chart-first">
   <title>Dorette Crochet Studio</title>
+  <link rel="stylesheet" href="./stitch-studio.css">
 </head>
 <body>
   <header class="topbar">
@@ -34,15 +35,11 @@
 
     <section class="workspace" aria-label="Chart editor">
       <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.8.1 · Local workspace</span></div>
-      <section class="v16-quickbar" aria-label="Display and skill level">
-        <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
-        <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
-        <label class="toggle"><input id="colorCueMode" type="checkbox"> Yarn shape cues</label>
-        <label class="toggle"><input id="alwaysSymbols" type="checkbox"> Emphasize yarn letters</label>
-        <label>Number size <select id="numberScale"><option value="1">Standard</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
-      </section>
-      <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
-      <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><div class="chart-split-control"><label for="chartSplit">Chart split</label><input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage slider"><label class="chart-split-number"><input id="chartSplitNumber" type="number" min="25" max="75" step="1" value="50" inputmode="numeric" aria-label="Overview width percentage">%</label></div><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
+      <div class="dual-charts" id="chartViews"><section class="chart-pane" id="overviewPane"><h2>Overview <small>Tap to locate · dashed orange box = working view</small></h2><div class="overview-wrap"><canvas id="overviewCanvas" tabindex="0" aria-label="Full chart overview. Tap to select and center the working chart. Arrow keys move selection."></canvas></div></section><section class="chart-pane"><h2>Working chart <small>Zoom, select and edit here</small></h2><div class="canvas-wrap" id="canvasWrap">
+        <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
+        <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
+      </div>
+      </section></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomValue" class="zoom-value">100%</span>
@@ -55,19 +52,29 @@
         <button id="mirrorChart" class="button ghost" type="button">Mirror chart</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
-      <details class="reliability-drawer"><summary><span>Studio health &amp; updates</span><span class="reliability-subline">Project integrity, safe saves, diagnostics</span></summary>
-        <div class="reliability-grid">
-          <div class="health-mini"><strong>Save status</strong><p id="saveStateDetails" role="status">Opening local storage…</p><button id="checkUpdates" class="button ghost" type="button">Check for Studio updates</button></div>
-          <div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
-        </div>
-        <div class="health-mini storage-mini"><strong>Local storage capacity</strong><p id="storageInfo" role="status">Not checked</p><button id="refreshStorage" class="button ghost" type="button">Check storage usage</button><p class="muted">Storage estimates are approximate. This is not a cloud backup.</p></div>
-        <p class="muted">Checks never modify a broken project. Invalid records stay in your browser's local database until you decide what to do. Diagnostics do not include pattern images, names, yarn records, notes, or stitch colors.</p>
-        <div class="health-mini"><strong>Privacy-safe diagnostics</strong><button id="copyDiagnostic" class="button secondary" type="button">Copy diagnostic report</button><pre id="diagnosticSummary" class="diagnostic-output" aria-label="Current diagnostics"></pre></div>
-      </details>
-      <details class="reliability-drawer history-drawer"><summary><span>Design Undo / Redo history</span><span class="reliability-subline">Separate from crochet progress</span></summary>
-        <div class="history-actions"><button id="historyUndo" type="button" class="button ghost">Undo</button><button id="historyRedo" type="button" class="button ghost">Redo</button></div><div id="designHistory" aria-live="polite"></div><p class="muted">Undo and Redo track chart edits and crochet progress together for the current project session. Use saved design versions for long-term milestones.</p>
-      </details>
-      <div id="backgroundJob" class="background-job" role="status" hidden><span id="backgroundJobLabel">Processing image…</span><progress id="backgroundJobProgress" value="0" max="100" aria-labelledby="backgroundJobLabel"></progress><button id="cancelBackgroundJob" type="button" class="button ghost">Cancel</button></div>
+      <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="openStitchStudio">Stitch Scanner</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
+  <section id="guideDialog" class="guide-dock" aria-label="Guided Crochet Mode">
+    <div class="guide-head"><div><span class="eyebrow">DORETTE • GUIDED CROCHET</span><h2 id="guideTitle">Row 1</h2><p id="guideStatus" class="muted"></p></div><button id="closeGuide" class="button ghost" type="button">Hide controls</button></div>
+    <div id="guideRowStripe" class="guide-row-stripe" aria-label="Current row colorwork"></div>
+    <div id="guideCurrent" class="guide-current"></div>
+    <div id="guideNextColor" class="guide-next muted"></div><div class="next-technique"><label>Technique<select id="techniquePreset"><option value="rows">Standard colorwork (rows)</option><option value="tapestry">Tapestry colorwork</option><option value="single">Single-crochet graph</option><option value="c2c">Corner-to-corner (diagonal chart cells)</option></select></label><div id="techniqueHint" class="muted">Presets adjust the guide workflow; always follow your specific crochet pattern for stitch technique.</div><div class="pair"><button id="diagonalBack" type="button" class="button ghost">← Previous diagonal cell</button><button id="diagonalNext" type="button" class="button secondary">Complete diagonal cell →</button></div><span id="diagonalStatus" class="muted"></span></div>
+    <label class="toggle"><input type="checkbox" id="spotlightMode"> Row spotlight <span class="muted">(dim other rows)</span></label>
+    <div class="guide-buttons"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
+    <div class="guide-buttons"><button id="guideRun" class="button primary" type="button">Complete color run</button></div><div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row →</button></div>
+    <p class="muted">Next stitch marks the current square complete and saves progress. Previous stitch only changes position; it does not erase completion.</p>
+  </section>
+      <div class="selection-bar">
+        <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
+        <div class="selection-actions"><button id="startHere" class="button ghost" type="button">Start here</button><button id="markStitch" class="button primary" aria-pressed="false">✓ Mark stitch</button><button id="markRow" class="button secondary" aria-pressed="false">✓ Mark row</button></div>
+      </div>
+      <section class="v16-quickbar" aria-label="Display and skill level">
+        <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
+        <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
+        <label class="toggle"><input id="colorCueMode" type="checkbox"> Yarn shape cues</label>
+        <label class="toggle"><input id="alwaysSymbols" type="checkbox"> Emphasize yarn letters</label>
+        <label>Number size <select id="numberScale"><option value="1">Standard</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
+      </section>
+      <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><div class="chart-split-control"><label for="chartSplit">Chart split</label><input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage slider"><label class="chart-split-number"><input id="chartSplitNumber" type="number" min="25" max="75" step="1" value="50" inputmode="numeric" aria-label="Overview width percentage">%</label></div><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
@@ -94,25 +101,20 @@
       <div class="advanced-edit-toolbar"><label>Symmetry<select id="symmetryMode"><option value="off">Off</option><option value="h">Left/right mirror</option><option value="v">Top/bottom mirror</option><option value="hv">Both axes</option></select></label><label>Repeat copies<input type="number" id="repeatCount" value="2" min="1" max="12"></label><label>Repeat direction<select id="repeatDirection"><option value="horizontal">Across columns</option><option value="vertical">Across rows</option></select></label><button id="repeatSelection" type="button" class="button ghost">Repeat selected area</button></div>
       <div class="motif-tools"><button id="saveMotif" class="button ghost" type="button">Save selected area as motif</button><select id="motifChoice" aria-label="Saved motifs"></select><button id="loadMotif" class="button ghost" type="button">Place motif</button><button id="rotateMotif" class="button ghost" type="button">Rotate motif 90°</button><button id="flipMotif" class="button ghost" type="button">Flip motif</button><button id="deleteMotif" class="button ghost" type="button">Remove motif</button></div>
       <div id="motifPreviewTools" hidden><p id="motifStatus" role="status"></p><div class="text-nudge-grid motif-nudge"><button id="motifUp" type="button">↑ Up</button><button id="motifLeft" type="button">← Left</button><button id="motifRight" type="button">Right →</button><button id="motifDown" type="button">↓ Down</button></div><button id="applyMotif" class="button primary" type="button">Apply motif</button> <button id="cancelMotif" class="button ghost" type="button">Cancel preview</button></div><form id="goToCell" class="jump-controls"><label>Row <input id="jumpRow" type="number" min="1" value="1" required></label><label>Column <input id="jumpCol" type="number" min="1" value="1" required></label><button class="button ghost">Go to square</button></form><div class="chart-layout-controls"><span id="chartLayoutLabel">Chart view</span><div class="chart-layout-switch" role="group" aria-labelledby="chartLayoutLabel"><button id="singleChart" type="button" aria-pressed="false" aria-controls="chartViews">Single chart</button><button id="dualChart" type="button" aria-pressed="true" aria-controls="chartViews">Dual charts</button></div><span class="muted">Your view choice is remembered on this device.</span></div>
-      <section class="section-workbar"><label>Work sections<select id="workSectionSize"><option value="20">20 × 20</option><option value="25" selected>25 × 25</option><option value="30">30 × 30</option><option value="40">40 × 40</option></select></label><label>Section<select id="workSectionSelect"></select></label><button id="goSection" class="button ghost" type="button">Jump to section</button><button id="markSection" class="button secondary" type="button">Complete section</button><span id="sectionProgress" class="muted"></span></section><div class="dual-charts" id="chartViews"><section class="chart-pane" id="overviewPane"><h2>Overview <small>Tap to locate · dashed orange box = working view</small></h2><div class="overview-wrap"><canvas id="overviewCanvas" tabindex="0" aria-label="Full chart overview. Tap to select and center the working chart. Arrow keys move selection."></canvas></div></section><section class="chart-pane"><h2>Working chart <small>Zoom, select and edit here</small></h2><div class="canvas-wrap" id="canvasWrap">
-        <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
-        <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
-      </div>
-      </section></div>
-  <section id="guideDialog" class="guide-dock" aria-label="Guided Crochet Mode">
-    <div class="guide-head"><div><span class="eyebrow">DORETTE • GUIDED CROCHET</span><h2 id="guideTitle">Row 1</h2><p id="guideStatus" class="muted"></p></div><button id="closeGuide" class="button ghost" type="button">Hide controls</button></div>
-    <div id="guideRowStripe" class="guide-row-stripe" aria-label="Current row colorwork"></div>
-    <div id="guideCurrent" class="guide-current"></div>
-    <div id="guideNextColor" class="guide-next muted"></div><div class="next-technique"><label>Technique<select id="techniquePreset"><option value="rows">Standard colorwork (rows)</option><option value="tapestry">Tapestry colorwork</option><option value="single">Single-crochet graph</option><option value="c2c">Corner-to-corner (diagonal chart cells)</option></select></label><div id="techniqueHint" class="muted">Presets adjust the guide workflow; always follow your specific crochet pattern for stitch technique.</div><div class="pair"><button id="diagonalBack" type="button" class="button ghost">← Previous diagonal cell</button><button id="diagonalNext" type="button" class="button secondary">Complete diagonal cell →</button></div><span id="diagonalStatus" class="muted"></span></div>
-    <label class="toggle"><input type="checkbox" id="spotlightMode"> Row spotlight <span class="muted">(dim other rows)</span></label>
-    <div class="guide-buttons"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
-    <div class="guide-buttons"><button id="guideRun" class="button primary" type="button">Complete color run</button></div><div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row →</button></div>
-    <p class="muted">Next stitch marks the current square complete and saves progress. Previous stitch only changes position; it does not erase completion.</p>
-  </section>
-      <div class="selection-bar">
-        <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
-        <div class="selection-actions"><button id="startHere" class="button ghost" type="button">Start here</button><button id="markStitch" class="button primary" aria-pressed="false">✓ Mark stitch</button><button id="markRow" class="button secondary" aria-pressed="false">✓ Mark row</button></div>
-      </div>
+      <section class="section-workbar"><label>Work sections<select id="workSectionSize"><option value="20">20 × 20</option><option value="25" selected>25 × 25</option><option value="30">30 × 30</option><option value="40">40 × 40</option></select></label><label>Section<select id="workSectionSelect"></select></label><button id="goSection" class="button ghost" type="button">Jump to section</button><button id="markSection" class="button secondary" type="button">Complete section</button><span id="sectionProgress" class="muted"></span></section>
+      <details class="reliability-drawer"><summary><span>Studio health &amp; updates</span><span class="reliability-subline">Project integrity, safe saves, diagnostics</span></summary>
+        <div class="reliability-grid">
+          <div class="health-mini"><strong>Save status</strong><p id="saveStateDetails" role="status">Opening local storage…</p><button id="checkUpdates" class="button ghost" type="button">Check for Studio updates</button></div>
+          <div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
+        </div>
+        <div class="health-mini storage-mini"><strong>Local storage capacity</strong><p id="storageInfo" role="status">Not checked</p><button id="refreshStorage" class="button ghost" type="button">Check storage usage</button><p class="muted">Storage estimates are approximate. This is not a cloud backup.</p></div>
+        <p class="muted">Checks never modify a broken project. Invalid records stay in your browser's local database until you decide what to do. Diagnostics do not include pattern images, names, yarn records, notes, or stitch colors.</p>
+        <div class="health-mini"><strong>Privacy-safe diagnostics</strong><button id="copyDiagnostic" class="button secondary" type="button">Copy diagnostic report</button><pre id="diagnosticSummary" class="diagnostic-output" aria-label="Current diagnostics"></pre></div>
+      </details>
+      <details class="reliability-drawer history-drawer"><summary><span>Design Undo / Redo history</span><span class="reliability-subline">Separate from crochet progress</span></summary>
+        <div class="history-actions"><button id="historyUndo" type="button" class="button ghost">Undo</button><button id="historyRedo" type="button" class="button ghost">Redo</button></div><div id="designHistory" aria-live="polite"></div><p class="muted">Undo and Redo track chart edits and crochet progress together for the current project session. Use saved design versions for long-term milestones.</p>
+      </details>
+      <div id="backgroundJob" class="background-job" role="status" hidden><span id="backgroundJobLabel">Processing image…</span><progress id="backgroundJobProgress" value="0" max="100" aria-labelledby="backgroundJobLabel"></progress><button id="cancelBackgroundJob" type="button" class="button ghost">Cancel</button></div>
       <details class="work-instructions" open>
         <summary>Row-by-row color instructions</summary>
         <div class="instruction-config">
@@ -343,5 +345,52 @@
   <script src="./studio-ops.js?v=1.8.1" defer></script>
   <script src="./app.js?v=1.8.1" defer></script>
   <script src="./help.js?v=1.8.1" defer></script>
+<dialog id="stitchStudio" aria-labelledby="stitchTitle">
+  <header><h2 id="stitchTitle">Stitch Scanner &amp; Encyclopedia</h2><form method="dialog"><button>Close</button></form></header>
+  <label>Tool <select id="stitchMode">
+    <option value="library">Encyclopedia</option><option value="symbol">Single chart symbol</option>
+    <option value="chart">Multi-symbol chart</option><option value="fabric">Fabric comparison (experimental)</option>
+  </select></label>
+  <section id="stitchPhoto" hidden>
+    <p>Photos stay on this device. Use a sharp, upright photo with dark symbols on a light background.</p>
+    <div class="stitch-controls">
+      <label>Open photo <input id="stitchFile" type="file" accept="image/*"></label>
+      <label>Take photo on phone <input id="stitchCapture" type="file" accept="image/*" capture="environment"></label>
+      <button id="stitchCamera" type="button">Open live camera</button>
+    </div>
+    <div id="stitchLive" hidden><video autoplay muted playsinline></video><button id="stitchSnap">Take photo</button> <button id="stitchStop">Stop camera</button></div>
+    <p id="stitchStatus" role="status">Choose an image to start.</p>
+    <div id="stitchPreview" hidden>
+      <p>Drag over the image to select a crop, or edit the crop in pixels. The orange outline marks the crop.</p>
+      <canvas id="stitchImage" aria-label="Photo with crop and numbered chart markers"></canvas>
+      <div class="stitch-controls" id="stitchCrop">
+        <label>Left <input type="number" min="0" step="1"></label>
+        <label>Top <input type="number" min="0" step="1"></label>
+        <label>Width <input type="number" min="1" step="1"></label>
+        <label>Height <input type="number" min="1" step="1"></label>
+        <button id="stitchReset">Whole image</button>
+      </div>
+      <details open><summary>Magnified crop</summary><canvas id="stitchZoom" aria-label="Magnified crop"></canvas></details>
+      <div class="stitch-controls">
+        <button id="stitchAnalyze">Scan crop</button>
+        <button id="stitchAdd">Mark crop manually</button>
+      </div>
+    </div>
+    <div id="stitchResults" aria-live="polite"></div>
+  </section>
+  <section id="stitchReference">
+    <h3>Compare with the pattern legend</h3>
+    <div class="stitch-controls">
+      <label>Search stitches <input id="stitchSearch" type="search" placeholder="Try hdc or treble"></label>
+      <label>Search terms <select id="stitchTerms"><option value="both">US and UK</option><option value="us">US</option><option value="uk">UK</option></select></label>
+    </div>
+    <div id="stitchEntries"></div>
+    <small>Source for chart conventions and terminology: Craft Yarn Council. Illustrations are original. Always follow your pattern's own legend.</small>
+  </section>
+</dialog>
+
+  <script src="./stitch-library.js" defer></script>
+  <script src="./stitch-match.js" defer></script>
+  <script src="./stitch-studio.js" defer></script>
 </body>
 </html>
