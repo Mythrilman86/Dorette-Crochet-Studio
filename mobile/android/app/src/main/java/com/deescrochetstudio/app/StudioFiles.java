@@ -141,8 +141,8 @@ public class StudioFiles extends Plugin {
                     getContext().getPackageName() + ".fileprovider", shared);
                 Intent intent = new Intent(Intent.ACTION_SEND).setType("application/zip")
                     .putExtra(Intent.EXTRA_STREAM, uri)
-                    .setClipData(ClipData.newRawUri(name, uri))
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setClipData(ClipData.newRawUri(name, uri));
                 getActivity().startActivity(Intent.createChooser(intent, "Share crochet project"));
                 call.resolve(new JSObject().put("saved", true));
             } catch (RuntimeException error) {
