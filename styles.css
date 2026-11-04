@@ -250,3 +250,23 @@ body.crochet-view .crochet-dock .button{min-height:48px}
 @media(max-width:700px){.reliability-grid{grid-template-columns:1fr}.reliability-subline{font-size:.62rem}.topbar{padding:0 11px}.save-status{max-width:115px}.reliability-alert,.update-notice{flex-wrap:wrap}.reliability-alert .button,.update-notice .button{width:100%}}
 @media(pointer:coarse){.edit-tool,.reliability-drawer button,.studio-modes button{min-height:44px}canvas{touch-action:none}}
 @media(prefers-reduced-motion:reduce){.toast,.progress-bar{transition:none}}
+
+/* v1.8.0 reliability + calm task UI */
+.conflict-alert{background:#fff1df;border-color:#dba551;color:#6b4214;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.conflict-alert[hidden]{display:none}
+.conflict-alert span{flex:1 1 260px}
+.dorette-readonly .stitch-editor,.dorette-readonly .crochet-dock,.dorette-readonly .guide-dock,.dorette-readonly #newProjectDetails{pointer-events:none;opacity:.6}
+.dorette-readonly .gallery-favorite{pointer-events:none}
+.storage-mini{grid-column:1/-1}
+.background-job{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:#f7f1ff;border:1px solid #baa6d2;padding:11px;border-radius:11px;font-size:.84rem}
+.background-job[hidden]{display:none}
+.background-job progress{flex:1 1 110px;accent-color:#7251a5;min-width:90px}
+.command-dialog{width:min(600px,92vw);max-height:86vh;overflow:auto;padding:20px;border-radius:18px;border:1px solid #bca5d5;background:#fff;color:#342b45}
+.command-dialog::backdrop,.export-preview-dialog::backdrop{background:#221b34ac}
+#commandResults{display:flex;flex-direction:column;gap:6px;max-height:48vh;overflow:auto;margin:12px 0}
+.command-result{background:#f8f4fc;border:1px solid #e1d5ef;color:#3f2e5d;border-radius:9px;text-align:left;min-height:43px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.command-result:hover,.command-result:focus-visible{background:#e7dbf9;outline:2px solid #a17bdb}
+.command-result small{font-size:.66rem;opacity:.8}
+.export-preview-dialog canvas{display:block;max-width:100%;height:auto;max-height:50vh;object-fit:contain;margin:8px auto;border:1px solid #bfb4c5;image-rendering:pixelated}
+#exportPreviewReport{font-weight:700;color:#4a3a64;font-size:.78rem;line-height:1.5}
+@media(max-width:640px){.command-dialog{padding:12px}.conflict-alert{font-size:.76rem}}

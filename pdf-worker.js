@@ -1,6 +1,6 @@
-/* v1.7.2: render large PDF pages off the UI thread, using the same offline PDF engine. */
+/* v1.8.1: render large PDF pages off the UI thread, using the same offline PDF engine. */
 self.window=self;
-importScripts('./pattern-tools.js?v=1.7.2','./pdf-export.js?v=1.7.2');
+importScripts('./pattern-tools.js?v=1.8.1','./pdf-export.js?v=1.8.1');
 self.onmessage=(ev)=>{
   try{
     const {kind,project,settings}=ev.data||{};

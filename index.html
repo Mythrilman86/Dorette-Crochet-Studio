@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.7.2">
+  <link rel="stylesheet" href="./styles.css?v=1.8.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -15,6 +15,7 @@
     <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
+  <div id="tabLockBanner" class="reliability-alert conflict-alert" role="alert" hidden><strong>Read-only in this tab.</strong><span id="tabLockMessage">Another Studio tab is editing local projects. Close that tab to prevent overwrites.</span><button id="retryEditing" class="button secondary" type="button">Retry editing</button></div>
   <div id="saveAlert" class="reliability-alert" role="alert" hidden><span id="saveAlertText"></span><button id="retrySave" class="button ghost" type="button">Retry saving</button></div>
   <div id="updateAvailable" class="update-notice" role="status" hidden><span id="updateAvailableText"></span><button id="installReadyUpdate" class="button secondary" type="button">Save and update Studio</button></div>
   <main class="layout">
@@ -32,7 +33,7 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.7.2 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.8.1 · Local workspace</span></div>
       <section class="v16-quickbar" aria-label="Display and skill level">
         <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
         <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
@@ -50,6 +51,7 @@
         <div class="toolbar-divider"></div>
         <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button><button id="redoButton" class="button ghost" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         <button id="resetView" class="button ghost">⌖ Center</button>
+        <button id="openCommandSearch" class="button secondary" type="button" title="Find a feature (Ctrl+K)">⌕ Find a tool</button>
         <button id="mirrorChart" class="button ghost" type="button">Mirror chart</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
@@ -58,12 +60,14 @@
           <div class="health-mini"><strong>Save status</strong><p id="saveStateDetails" role="status">Opening local storage…</p><button id="checkUpdates" class="button ghost" type="button">Check for Studio updates</button></div>
           <div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
         </div>
+        <div class="health-mini storage-mini"><strong>Local storage capacity</strong><p id="storageInfo" role="status">Not checked</p><button id="refreshStorage" class="button ghost" type="button">Check storage usage</button><p class="muted">Storage estimates are approximate. This is not a cloud backup.</p></div>
         <p class="muted">Checks never modify a broken project. Invalid records stay in your browser's local database until you decide what to do. Diagnostics do not include pattern images, names, yarn records, notes, or stitch colors.</p>
         <div class="health-mini"><strong>Privacy-safe diagnostics</strong><button id="copyDiagnostic" class="button secondary" type="button">Copy diagnostic report</button><pre id="diagnosticSummary" class="diagnostic-output" aria-label="Current diagnostics"></pre></div>
       </details>
       <details class="reliability-drawer history-drawer"><summary><span>Design Undo / Redo history</span><span class="reliability-subline">Separate from crochet progress</span></summary>
         <div class="history-actions"><button id="historyUndo" type="button" class="button ghost">Undo</button><button id="historyRedo" type="button" class="button ghost">Redo</button></div><div id="designHistory" aria-live="polite"></div><p class="muted">Undo and Redo track chart edits and crochet progress together for the current project session. Use saved design versions for long-term milestones.</p>
       </details>
+      <div id="backgroundJob" class="background-job" role="status" hidden><span id="backgroundJobLabel">Processing image…</span><progress id="backgroundJobProgress" value="0" max="100" aria-labelledby="backgroundJobLabel"></progress><button id="cancelBackgroundJob" type="button" class="button ghost">Cancel</button></div>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
@@ -128,7 +132,7 @@
       <section class="settings-card"><div class="inspector-heading"><span class="eyebrow">PROJECT DETAILS</span><h2>Chart settings</h2></div>
       <label class="field">Project category<select id="projectCategory"><option>Other</option><option>Blankets</option><option>Garments</option><option>Gifts</option><option>Practice</option></select></label><button id="duplicateProject" class="button ghost block" type="button">Duplicate current project</button><label class="field">Project name<input id="projectName" maxlength="70" placeholder="Project name"></label>
       <div class="pair"><label class="field">Columns<input id="colsInput" type="number" min="1" max="200"></label><label class="field">Rows<input id="rowsInput" type="number" min="1" max="300"></label></div>
-      <button class="button secondary block" id="applyDimensions">Apply dimensions (original behavior)</button><details class="next-soft" open><summary>Advanced canvas resize / crop</summary><p class="muted">Change canvas size without stretching artwork, or choose scaling. New chart dimensions must be 1–200 columns and 1–300 rows.</p><label>Mode<select id="resizeMode"><option value="canvas">Expand / crop canvas (no stretching)</option><option value="scale">Scale entire chart (nearest-stitch)</option></select></label><label>Anchor<select id="resizeAnchor"><option value="center">Center</option><option value="left">Left / bottom</option><option value="right">Right / top</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><button id="smartResize" type="button" class="button secondary block">Apply advanced resize</button></details></section>
+      <button class="button secondary block" id="applyDimensions">Apply dimensions (original behavior)</button><label class="toggle"><input id="safeEdits" type="checkbox" checked> Apply major changes to a separate project copy (recommended)</label><details class="next-soft" open><summary>Advanced canvas resize / crop</summary><p class="muted">Change canvas size without stretching artwork, or choose scaling. New chart dimensions must be 1–200 columns and 1–300 rows.</p><label>Mode<select id="resizeMode"><option value="canvas">Expand / crop canvas (no stretching)</option><option value="scale">Scale entire chart (nearest-stitch)</option></select></label><label>Anchor<select id="resizeAnchor"><option value="center">Center</option><option value="left">Left / bottom</option><option value="right">Right / top</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><button id="smartResize" type="button" class="button secondary block">Apply advanced resize</button></details></section>
       <div class="section-divider"></div>
       <div class="inspector-section"><span class="eyebrow">STITCH PROGRESS</span><div class="progress-label"><strong id="progressText">0 / 9,243</strong><span id="progressPercent">0%</span></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><label class="toggle"><input id="showProgressOverlay" type="checkbox" checked> Show completed shading on chart</label><p class="muted">Completing a row counts all stitches in it. Completion stays separate from yarn colors.</p></div>
       <div class="section-divider"></div>
@@ -294,6 +298,8 @@
         <label class="toggle pdf-checkbox"><input id="pdfCompleted" type="checkbox"> Mark completed stitches on printout</label>
         <p id="pdfPages" class="pdf-page-info" role="status">Preparing page count…</p>
         <button id="exportPdf" class="button primary block" type="button">⇩ Download printable PDF</button>
+        <button id="previewExport" type="button" class="button ghost block">Preview export &amp; verify colors</button>
+        <p id="exportConsistency" class="muted" role="status">Compare the chart preview with what the exports will use.</p>
         <div class="section-divider"></div>
         <strong class="small-title">Written row-by-row pattern PDF</strong>
         <p class="muted">Includes every row in the chosen crochet direction, grouped consecutive yarn stitches, row checkboxes, and a color key. Uses the saved chart; no photograph required.</p>
@@ -307,6 +313,16 @@
     </aside>
   </main>
   <dialog id="tutorialDialog" class="compare-dialog"><div class="compare-head"><h2>Studio guided tour</h2><button id="closeTutorial" class="button ghost" type="button">Close ✕</button></div><div id="tutorialContent" class="tutorial-content"></div><div class="pair"><button id="tutorialPrev" class="button ghost" type="button">← Previous</button><button id="tutorialNext" class="button primary" type="button">Next →</button></div></dialog>
+  <dialog id="commandDialog" class="command-dialog" aria-label="Find a Studio feature">
+    <div class="compare-head"><h2>Find a Studio tool</h2><button id="closeCommandSearch" class="button ghost" type="button">Close ✕</button></div>
+    <label class="field">Search commands<input id="commandQuery" type="search" placeholder="Try grayscale, resize, PDF, progress, or layers" autocomplete="off" aria-controls="commandResults"></label>
+    <div id="commandResults" role="region" aria-label="Matching commands"></div><p class="muted">Press Ctrl+K to open. Search finds controls already in the Studio.</p>
+  </dialog>
+  <dialog id="exportPreviewDialog" class="compare-dialog export-preview-dialog" aria-label="Export preview and verification">
+    <div class="compare-head"><div><h2>Export preview</h2><p class="muted">Displays the effective stitch colors including visible layers. All image and printable exports should use these colors.</p></div><button id="closeExportPreview" class="button ghost" type="button">Close ✕</button></div>
+    <canvas id="exportPreviewCanvas" width="480" height="480" aria-label="Full export preview"></canvas><p id="exportPreviewReport" role="status"></p>
+    <p class="muted">Preview includes the pattern colors; PDF page formatting, text labels and paper margins can differ. This is not a byte-for-byte PDF rendering.</p>
+  </dialog>
   <dialog id="compareDialog" class="compare-dialog" aria-label="Compare crochet grid sizes">
     <div class="compare-head"><div><span class="eyebrow">PHOTO-TO-STITCH COMPARISON</span><h2>Which grid preserves the lettering?</h2><p class="muted">Both images use the same crop and color-cleanup settings. Original projects are unchanged.</p></div><button id="closeCompare" class="button ghost" type="button">Close ✕</button></div>
     <div class="compare-grid">
@@ -319,12 +335,13 @@
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
   <div class="crochet-dock" aria-label="Crochet progress controls"><strong id="dockStatus" role="status"></strong><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
-  <script src="./pattern-tools.js?v=1.7.2" defer></script>
-  <script src="./advanced.js?v=1.7.2" defer></script>
-  <script src="./pdf-export.js?v=1.7.2" defer></script>
-  <script src="./next-features.js?v=1.7.2" defer></script>
-  <script src="./reliability.js?v=1.7.2" defer></script>
-  <script src="./app.js?v=1.7.2" defer></script>
-  <script src="./help.js?v=1.7.2" defer></script>
+  <script src="./pattern-tools.js?v=1.8.1" defer></script>
+  <script src="./advanced.js?v=1.8.1" defer></script>
+  <script src="./pdf-export.js?v=1.8.1" defer></script>
+  <script src="./next-features.js?v=1.8.1" defer></script>
+  <script src="./reliability.js?v=1.8.1" defer></script>
+  <script src="./studio-ops.js?v=1.8.1" defer></script>
+  <script src="./app.js?v=1.8.1" defer></script>
+  <script src="./help.js?v=1.8.1" defer></script>
 </body>
 </html>

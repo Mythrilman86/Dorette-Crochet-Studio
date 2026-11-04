@@ -47,7 +47,7 @@ function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInt
 function indexFor(col,row) { return (active.rows-row)*active.cols+(col-1); }
 function format(n) {return n.toLocaleString('en-US');}
 let renderRevision=0, composedCache=null, composedCacheRevision=-1, composedCacheProject=null;
-function invalidateChartCache(){renderRevision++;composedCache=null;}
+function invalidateChartCache(){renderRevision++;composedCache=null;tileCache.clear();pixelPreviewCache=null;}
 function composedCells(project=active){
   if(project===active&&composedCache&&composedCacheRevision===renderRevision&&composedCacheProject===active)return composedCache;
   const result=window.DoretteAdvanced.compose(project);
@@ -79,6 +79,7 @@ function uiSettings(p=active){
 }
 function isPatternLocked(){return uiSettings().patternLock;}
 function editBlocked(action='edit the chart'){
+  if(studioReadOnly||!Ops.canWrite()){toast('This tab is read-only.');return true;}
   if(!isPatternLocked())return false;
   toast('Unlock Pattern lock to '+action+'.');
   return true;
@@ -96,6 +97,13 @@ function toast(msg) {const t=$('toast'); t.textContent=msg;t.classList.add('show
 function status(msg,error=false){const el=$('saveStatus');el.textContent=msg;el.style.color=error?'#b35269':'#537e64';}
 const invalidProjects=new Map();
 const reliability=window.DoretteReliability;
+const Ops=window.DoretteOps;
+let reloadingProjects=false,majorCopyPending=false,pageClosing=null;
+let studioReadOnly=false,storageRefreshTimer=0,runningImageJob=null,safeEditsEnabled=true;
+const TILE_SIDE=24,MAX_CACHED_TILES=20;
+const tileCache=new Map();
+let pixelPreviewCache=null;
+
 let savePhase='opening',lastSaveTime=null,lastSaveError='',writePending=0;
 const failedWrites=new Map();
 let drawSamples=0,drawTotal=0,drawLast=0;
@@ -144,6 +152,7 @@ function queueWrite(project){
  const copy=audit.ok?structuredClone(project):null;
  const result=writeChain.catch(()=>{}).then(()=>{
    if(memoryOnly)throw new Error('Local database unavailable');
+   if(studioReadOnly||!Ops?.canWrite())throw new Error('Another tab owns the project editing lock');
    if(!audit.ok)throw new Error('Project validation: '+audit.errors[0]);
    return dbRequest('readwrite',store=>store.put(copy));
  });
@@ -161,6 +170,7 @@ function queueWrite(project){
 }
 function scheduleSave(){
  if(!active)return;
+ if(studioReadOnly||!Ops.canWrite()){failedWrites.set(active.id,'Editing ownership was lost before saving');return;}
  invalidateChartCache();queuePatternRender();
  active.updatedAt=new Date().toISOString();
  if(memoryOnly){failedWrites.set(active.id,'Local database unavailable');setSavePhase('blocked');return;}
@@ -198,6 +208,7 @@ function refreshProjectList(){
 }
 
 function selectProject(id) {
+  if(runningImageJob)cancelImageJob();
   invalidateChartCache();
   v16ShapeProposal=null;
   clearColorProposal();
@@ -551,8 +562,9 @@ function addYarnColor(){
   active.palette.push({hex,name:'Yarn color '+(index+1),symbol:SYMBOLS[index]});
   scheduleSave();updateLegend();updateTextControls();renderYarnInventory();$('paintColor').value=String(index);toast('New yarn color added. Select a stitch to paint it.');
 }
-function mirrorChart(){
+async function mirrorChart(){
   if(!active||pendingConversion||editBlocked('mirror the chart'))return;
+  if(!await safeMajorCopy('mirrored chart'))return;
   snapshot();
   clearTextPreview();
   const {cols,rows}=active;
@@ -578,13 +590,14 @@ function mirrorChart(){
   scheduleSave();refreshInspector();
   toast('Chart mirrored left to right. Use Undo to restore it.');
 }
-function editDimensions(){
+async function editDimensions(){
   if(!active||editBlocked("resize the chart"))return;
   const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
   if(!validDimensions(cols,rows)){toast('Columns must be 1–200 and rows 1–300.');return;}
   if(cols===active.cols&&rows===active.rows){toast('The dimensions have not changed.');return;}
   const old=active;
   if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
+  if(!await safeMajorCopy('resized chart'))return;
   snapshot();
   Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
   active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
@@ -944,6 +957,50 @@ function nudgeText(dx,dy){
   $('textRow').value=String(clamp((Number($('textRow').value)||1)+dy,1,active.rows));
   if(textPreview)buildTextPreview();
 }
+function colorRasterForProject(colors){
+ if(pixelPreviewCache?.revision===renderRevision&&pixelPreviewCache?.project===active)return pixelPreviewCache.canvas;
+ const c=document.createElement('canvas');c.width=active.cols;c.height=active.rows;
+ const g=c.getContext('2d',{alpha:false});
+ for(let r=0;r<active.rows;r++)for(let col=0;col<active.cols;col++){
+   const paletteIndex=colors[r*active.cols+col];g.fillStyle=active.palette[paletteIndex]?.hex||'#ffffff';g.fillRect(col,r,1,1);
+ }
+ pixelPreviewCache={revision:renderRevision,project:active,canvas:c};return c;
+}
+function tileForProject(tx,ty,colors){
+ const key=renderRevision+':'+tx+':'+ty;
+ const existing=tileCache.get(key);
+ if(existing){tileCache.delete(key);tileCache.set(key,existing);return existing;}
+ const c=document.createElement('canvas'),left=tx*TILE_SIDE,top=ty*TILE_SIDE;
+ c.width=Math.min(TILE_SIDE,active.cols-left)*CELL;c.height=Math.min(TILE_SIDE,active.rows-top)*CELL;
+ const g=c.getContext('2d',{alpha:false});
+ for(let y=0;y<c.height/CELL;y++)for(let x=0;x<c.width/CELL;x++){
+   g.fillStyle=active.palette[colors[(top+y)*active.cols+left+x]]?.hex||'#ffffff';g.fillRect(x*CELL,y*CELL,CELL,CELL);
+ }
+ tileCache.set(key,c);
+ if(tileCache.size>MAX_CACHED_TILES)tileCache.delete(tileCache.keys().next().value);
+ return c;
+}
+function drawCachedChartColors(g,s,cols,rows,colors,preview,minCol,maxCol,minRow,maxRow){
+ if(preview||cols!==active.cols||rows!==active.rows){
+   const palette=preview?.palette||active.palette;
+   for(let row=minRow;row<maxRow;row++)for(let col=minCol;col<maxCol;col++){
+     g.fillStyle=palette[colors[row*cols+col]]?.hex||'#fff';g.fillRect(M+col*CELL,M+row*CELL,CELL,CELL);
+   }
+   return;
+ }
+ g.save();g.imageSmoothingEnabled=false;
+ if(s*CELL<5){
+   g.drawImage(colorRasterForProject(colors),M,M,cols*CELL,rows*CELL);
+ }else{
+   const startX=Math.floor(minCol/TILE_SIDE),endX=Math.ceil(maxCol/TILE_SIDE);
+   const startY=Math.floor(minRow/TILE_SIDE),endY=Math.ceil(maxRow/TILE_SIDE);
+   for(let y=startY;y<endY;y++)for(let x=startX;x<endX;x++){
+     const tile=tileForProject(x,y,colors);
+     g.drawImage(tile,M+x*TILE_SIDE*CELL,M+y*TILE_SIDE*CELL);
+   }
+ }
+ g.restore();
+}
 function drawScene(ctx,canvasWidth,canvasHeight,view){
   const dpr=Math.min(devicePixelRatio||1,2);
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#ede7f2';ctx.fillRect(0,0,canvasWidth,canvasHeight);
@@ -960,11 +1017,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   const displayedConversion=pendingConversion?.projectId===active.id?pendingConversion:null;
   const composedColors=displayedConversion?.cells||composedCells(active);
   if(active.converted||displayedConversion||active.layers?.length){
-    const colorCells=composedColors,colors=displayedConversion?.palette||active.palette;
-    for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
-      const i=r*cols+c, color=colors[colorCells[i]]||DEFAULT_COLORS[0];
-      ctx.fillStyle=color.hex;ctx.fillRect(M+c*CELL,M+r*CELL,CELL,CELL);
-    }
+    drawCachedChartColors(ctx,s,cols,rows,composedColors,displayedConversion,minCol,maxCol,minRow,maxRow);
     if(referenceImg&&active.opacity>0){
       ctx.save();ctx.globalAlpha=active.opacity*.2;renderCroppedImage(ctx,referenceImg,M,M,bw,bh);ctx.restore();
     }
@@ -1408,29 +1461,93 @@ function previewResult(result){
   status('Preview only — no chart changes saved');
   toast('Preview ready. Zoom in to inspect small lettering.');
 }
-function convertImage(){
+function sampledPhotoPixels(cols,rows){
+ const sampling=document.createElement('canvas');sampling.width=cols*6;sampling.height=rows*6;
+ const g=sampling.getContext('2d',{willReadFrequently:true});g.fillStyle='#fff';g.fillRect(0,0,sampling.width,sampling.height);
+ renderCroppedImage(g,referenceImg,0,0,sampling.width,sampling.height);
+ return g.getImageData(0,0,sampling.width,sampling.height).data;
+}
+function cancelImageJob(){
+ if(!runningImageJob)return;
+ runningImageJob.cancelled=true;
+ clearTimeout(runningImageJob.timer);runningImageJob.worker?.terminate();runningImageJob.resolve?.(null);runningImageJob=null;
+ $('backgroundJob').hidden=true;toast('Background operation cancelled. Your saved chart is unchanged.');
+}
+async function runImageJob(kind,data,fallback,label){
+ if(runningImageJob)cancelImageJob();
+ const box=$('backgroundJob'),progress=$('backgroundJobProgress');
+ box.hidden=false;progress.value=0;$('backgroundJobLabel').textContent=label;
+ const initialId=active?.id,revision=renderRevision;
+ const settings=()=>JSON.stringify([$('paletteSize').value,$('grayCount').value,$('previewDimensions').value,$('cleanupThreshold').value,$('protectArea').checked,areaSelection]);
+ const initialSettings=settings();
+ const outdated=()=>active?.id!==initialId||renderRevision!==revision||settings()!==initialSettings;
+ const session={cancelled:false,worker:null,resolve:null};
+ runningImageJob=session;
+ const finish=value=>{
+   if(session.cancelled||runningImageJob!==session)return null;
+   clearTimeout(session.timer);session.worker?.terminate();runningImageJob=null;box.hidden=true;
+   if(outdated()){toast('Chart or settings changed. Discarded outdated results.');return null;}
+   return value;
+ };
+ if(typeof Worker!=='undefined'&&/^https?:$/.test(location.protocol)){
+   try{
+     const result=await new Promise(resolve=>{
+       session.resolve=resolve;
+       const worker=new Worker('./image-worker.js?v=1.8.1');session.worker=worker;
+       worker.onmessage=e=>{
+         if(e.data?.type==='progress'){progress.value=e.data.percent||0;return;}
+         resolve(e.data?.type==='done'?e.data.result:null);
+       };
+       worker.onerror=()=>resolve(null);worker.onmessageerror=()=>resolve(null);
+       session.timer=setTimeout(()=>resolve(null),30000);
+       worker.postMessage({kind,...data});
+     });
+     clearTimeout(session.timer);
+     if(session.cancelled)return null;
+     if(result!==null||outdated())return finish(result);
+     session.worker?.terminate();session.worker=null;
+   }catch(err){console.warn('Image worker unavailable, using in-page computation:',err);}
+ }
+ if(session.cancelled)return null;
+ progress.value=35;
+ await new Promise(resolve=>setTimeout(resolve,20));
+ if(session.cancelled)return null;
+ if(outdated())return finish(null);
+ try{const answer=fallback();progress.value=100;return finish(answer);}
+ catch(e){finish(null);throw e;}
+}
+async function buildConversionAsync(cols,rows){
+ if(!active||!referenceImg||!validDimensions(cols,rows))throw Error('Valid image and dimensions required.');
+ const s=conversionSettings();
+ const data={pixels:sampledPhotoPixels(cols,rows),cols,rows,s,paletteSize:Number($('paletteSize').value),grayCount:Number($('grayCount').value)};
+ const result=await runImageJob('convert',data,()=>buildConversion(cols,rows),'Converting image to stitches…');
+ return result?{...result,cols,rows,projectId:active.id}:null;
+}
+async function convertImage(){
   if(!active?.referenceImage){requestSourcePhoto('preview a new stitch chart');return;}
   if(!referenceImg){toast('Source photo is loading. Try previewing again in a moment.');return;}
   try{
-    status('Converting image…');
     const [cols,rows]=$('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
-    previewResult(buildConversion(cols,rows));
-  }catch(e){toast('Conversion failed: '+e.message);status('Conversion failed',true);}
+    const result=await buildConversionAsync(cols,rows);
+    if(result)previewResult(result);
+  }catch(e){toast('Conversion failed: '+e.message);refreshSaveState();}
 }
-function compareSizes(){
+
+async function compareSizes(){
   if(!active?.referenceImage){requestSourcePhoto('compare chart sizes');return;}
   if(!referenceImg){toast('Source photo is loading. Try comparing again in a moment.');return;}
   try{
-    status('Preparing comparison…');
-    comparisonResults={small:buildConversion(79,117),large:buildConversion(120,165)};
+    const small=await buildConversionAsync(79,117);if(!small)return;
+    const large=await buildConversionAsync(120,165);if(!large)return;
+    comparisonResults={small,large};
     renderComparison($('compareSmallCanvas'),comparisonResults.small);
     renderComparison($('compareLargeCanvas'),comparisonResults.large);
-    $('compareSmallLabel').textContent=`79 × 117 • 9,243 stitches • ${comparisonResults.small.palette.length} colors`;
-    $('compareLargeLabel').textContent=`120 × 165 • 19,800 stitches • ${comparisonResults.large.palette.length} colors`;
-    $('compareDialog').showModal();
-    status('Comparison only — no chart changes saved');
-  }catch(e){toast('Comparison failed: '+e.message);status('Comparison failed',true);}
+    $('compareSmallLabel').textContent=`79 × 117 • 9,243 stitches • ${small.palette.length} colors`;
+    $('compareLargeLabel').textContent=`120 × 165 • 19,800 stitches • ${large.palette.length} colors`;
+    $('compareDialog').showModal();refreshSaveState();
+  }catch(e){toast('Comparison failed: '+e.message);refreshSaveState();}
 }
+
 // Portable ZIP implementation (STORE / method 0, with CRC-32). No CDN or network dependencies.
 const textEncoder=new TextEncoder(),textDecoder=new TextDecoder();
 const CRC_TABLE=(()=>{const t=new Uint32Array(256);for(let i=0;i<256;i++){let x=i;for(let k=0;k<8;k++)x=x&1?0xedb88320^(x>>>1):x>>>1;t[i]=x>>>0;}return t;})();
@@ -1510,7 +1627,7 @@ function runPdfJob(kind){
  },40);};
  if(typeof Worker==='undefined'||!/^https?:$/.test(location.protocol)){fallback();return;}
  try{
-   worker=new Worker('./pdf-worker.js?v=1.7.2');
+   worker=new Worker('./pdf-worker.js?v=1.8.1');
    worker.onmessage=ev=>{if(ev.data?.error||!reliability.verifyPdf(ev.data?.bytes))fallback();else done(ev.data,null);};
    worker.onerror=fallback;worker.onmessageerror=fallback;
    timer=setTimeout(fallback,30000);
@@ -1567,9 +1684,9 @@ async function restoreBackup(file){
 }
 
 async function removeActiveProject(){
-  if(!active||!confirm(`Delete “${active.name}” from this device? Make a backup first. This cannot be undone.`))return;
+  if(!active||studioReadOnly||!Ops.canWrite()||!confirm(`Delete “${active.name}” from this device? Make a backup first. This cannot be undone.`))return;
   flushSave();const id=activeId;
-  if(!memoryOnly){try{await writeChain.catch(()=>{});await dbRequest('readwrite',store=>store.delete(id));}catch(e){toast('Deletion could not be saved: '+e.message);return;}}
+  if(!memoryOnly){try{await writeChain.catch(()=>{});if(!Ops.canWrite())throw Error('This tab no longer owns the editing lock');await dbRequest('readwrite',store=>store.delete(id));}catch(e){toast('Deletion could not be saved: '+e.message);return;}}
   projects.delete(id);failedWrites.delete(id);refreshSaveState();
   if(projects.size===0){const p=blankProject('My First Chart',79,117);projects.set(p.id,p);queueWrite(p);}
   selectProject(projects.keys().next().value);toast('Project deleted from local storage.');
@@ -2098,22 +2215,29 @@ function hookAdvanced(){
   $('compareSmallLabel').textContent='2 grayscale yarn colors';$('compareLargeLabel').textContent='4 grayscale yarn colors';
   $('compareDialog').showModal();
  });
- $('replaceEverywhere').addEventListener('click',()=>{
+ $('replaceEverywhere').addEventListener('click',async()=>{
   if(!active||editBlocked('replace yarn colors')||pendingConversion)return;
   const from=Number($('replaceFrom').value),to=Number($('replaceTo').value);if(from===to)return toast('Choose two different yarn colors.');
+  if(!await safeMajorCopy('color replacement'))return;
   snapshot();let n=0;active.cells=active.cells.map(v=>{if(v===from){n++;return to;}return v;});
   for(const l of active.layers||[])l.entries=l.entries.map(([i,c])=>{if(c===from){n++;return [i,to];}return [i,c];});
   scheduleSave();updateLegend();requestDraw();toast(`Replaced ${n} color assignments. Undo is available.`);
  });
  for(const id of ['sizeSwatchCols','sizeSwatchRows','sizeSwatchWidth','sizeSwatchHeight','sizeUnit'])$(id).addEventListener('input',showSize);
- $('previewCleanup').addEventListener('click',()=>{
+ $('previewCleanup').addEventListener('click',async()=>{
   if(pendingConversion)return toast('Finish the image preview before cleanup.');
-  pendingCleanup=window.DoretteAdvanced.cleanup(active.cells,active.cols,active.rows,Number($('cleanupThreshold').value),protectedCleanupCells());
-  $('cleanupInfo').textContent=`Proposed fixes: ${pendingCleanup.length} base-grid stitches. Orange areas show changes, protected area is left alone.`;
-  $('applyCleanup').disabled=pendingCleanup.length===0;requestDraw();
+  const cols=active.cols,rows=active.rows,cells=active.cells.slice(),limit=Number($('cleanupThreshold').value),protectedIndices=protectedCleanupCells();
+  try{
+   const changes=await runImageJob('cleanup',{cells,cols,rows,limit,protectedIndices},()=>window.DoretteAdvanced.cleanup(cells,cols,rows,limit,protectedIndices),'Finding isolated stitch colors…');
+   if(!changes)return;
+   pendingCleanup=changes;
+   $('cleanupInfo').textContent=`Proposed fixes: ${pendingCleanup.length} base-grid stitches. Orange areas show changes, protected area is left alone.`;
+   $('applyCleanup').disabled=pendingCleanup.length===0;requestDraw();
+  }catch(e){toast('Cleanup preview failed: '+e.message);}
  });
- $('applyCleanup').addEventListener('click',()=>{if(!pendingCleanup?.length||pendingConversion||editBlocked('clean up the pattern'))return;
+ $('applyCleanup').addEventListener('click',async()=>{if(!pendingCleanup?.length||pendingConversion||editBlocked('clean up the pattern'))return;
   const proposal=pendingCleanup;
+  if(!await safeMajorCopy('pattern cleanup'))return;
   snapshot();for(const [i,c] of proposal)active.cells[i]=c;toast(`Cleaned ${proposal.length} stitches. Undo remains available.`);
   pendingCleanup=null;$('applyCleanup').disabled=true;scheduleSave();updateLegend();requestDraw();
  });
@@ -2277,14 +2401,23 @@ function finishLayerDrag(ev){
  scheduleSave();renderLayers();updateLegend();requestDraw();toast(gesture.resize?'Layer resized as stitches.':'Layer moved.');return true;
 }
 function currentRenderedImage(){if(!referenceImg)return null;return referenceImg;}
-function handleGridDetection(){
+async function handleGridDetection(){
  const img=currentRenderedImage();if(!img)return toast('Import a reference image first.');
- const crop=currentCrop(),c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*(crop.right-crop.left)));c.height=Math.max(1,Math.round(img.height*(crop.bottom-crop.top)));
- c.getContext('2d').drawImage(img,img.width*crop.left,img.height*crop.top,img.width*(crop.right-crop.left),img.height*(crop.bottom-crop.top),0,0,c.width,c.height);
- const found=NF.detectGrid(c),cols=found.columns.count,rows=found.rows.count;
- if(cols>0&&cols<=200)$('gridCols').value=cols;if(rows>0&&rows<=300)$('gridRows').value=rows;
- $('gridResult').textContent=`Suggested: ${cols||'unknown'} columns (${Math.round(found.columns.confidence*100)}% line regularity), ${rows||'unknown'} rows (${Math.round(found.rows.confidence*100)}% line regularity). Counts are estimates, not verified. Check visible square boundaries and edit the fields before using.`;
+ const crop=currentCrop(),c=document.createElement('canvas');
+ const cw=img.width*(crop.right-crop.left),ch=img.height*(crop.bottom-crop.top);
+ const scale=Math.min(1,1000/Math.max(cw,ch));
+ c.width=Math.max(1,Math.round(cw*scale));c.height=Math.max(1,Math.round(ch*scale));
+ const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(img,img.width*crop.left,img.height*crop.top,cw,ch,0,0,c.width,c.height);
+ const pixels=g.getImageData(0,0,c.width,c.height).data;
+ try{
+   const found=await runImageJob('grid',{pixels,width:c.width,height:c.height},()=>NF.detectGrid(c),'Inspecting chart grid…');
+   if(!found)return;
+   const cols=found.columns.count,rows=found.rows.count;
+   if(cols>0&&cols<=200)$('gridCols').value=cols;if(rows>0&&rows<=300)$('gridRows').value=rows;
+   $('gridResult').textContent=`Suggested: ${cols||'unknown'} columns (${Math.round(found.columns.confidence*100)}% line regularity), ${rows||'unknown'} rows (${Math.round(found.rows.confidence*100)}% line regularity). Counts are estimates, not verified. Check visible square boundaries and edit the fields before using.`;
+ }catch(e){toast('Grid detection failed: '+e.message);}
 }
+
 function straightenReference(){
  if(!active?.referenceImage||!referenceImg)return toast('Import an image first.');
  const deg=Number($('gridRotation').value)||0;if(Math.abs(deg)<.01)return toast('Select a rotation correction first.');
@@ -2296,36 +2429,39 @@ function straightenReference(){
  const data=c.toDataURL("image/png");if(data.length>22*1024*1024)return toast("The updated source image is too large for a project backup.");
  snapshot();active.referenceImage=data;active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();requestDraw();toast('Reference source rotated; grid count can now be rechecked.');
 }
-function removeBackgroundFromSource(){
+async function removeBackgroundFromSource(){
  if(!referenceImg||!active)return toast('Import an image first.');
  if(!confirm('Remove similarly colored background regions connected to the photo edges? Original chart colors will stay unchanged. Undo can restore the image.'))return;
- try{const result=NF.backgroundRemove(referenceImg,Number($('bgTolerance').value)||35);
+ const source=referenceImg,tolerance=Number($('bgTolerance').value)||35;
+ try{const result=NF.backgroundRemove(source,tolerance);
   if(result.length>22*1024*1024)throw Error('Resulting image is too large.');
-  snapshot();active.referenceImage=result;active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Background cleaned around the edges. Preview the conversion before applying.');
+  if(!await safeMajorCopy('background cleanup'))return;snapshot();active.referenceImage=result;active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Background cleaned around the edges. Preview the conversion before applying.');
  }catch(e){toast('Background removal failed: '+e.message);}
 }
-function isolateSubjectCrop(){
+async function isolateSubjectCrop(){
  if(!referenceImg||!active)return toast('Import and crop an image first.');
  const crop=currentCrop(),w=Math.round(referenceImg.width*(crop.right-crop.left)),h=Math.round(referenceImg.height*(crop.bottom-crop.top));
  if(w<5||h<5)return toast('Select a larger subject crop.');
  if(!confirm('Keep only the rectangular crop selected in the image? This changes the reference image, but not the saved stitch colors. Undo is available.'))return;
  const c=document.createElement('canvas');c.width=w;c.height=h;
  c.getContext('2d').drawImage(referenceImg,referenceImg.width*crop.left,referenceImg.height*crop.top,referenceImg.width*(crop.right-crop.left),referenceImg.height*(crop.bottom-crop.top),0,0,w,h);
- snapshot();active.referenceImage=c.toDataURL('image/png');active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Kept the selected subject rectangle. You can now remove similar edge background colors.');
+ if(!await safeMajorCopy('subject crop'))return;snapshot();active.referenceImage=c.toDataURL('image/png');active.photoCrop={...FULL_CROP};discardPreview(false);syncImage();scheduleSave();toast('Kept the selected subject rectangle. You can now remove similar edge background colors.');
 }
-function verifyGridDimensions(){
+async function verifyGridDimensions(){
  if(!active||pendingConversion||editBlocked("apply a detected grid size"))return;
  const cols=Number($('gridCols').value),rows=Number($('gridRows').value);
  if(!validDimensions(cols,rows))return toast('Choose a valid 1–200 by 1–300 grid.');
  if(!confirm(`Use ${cols} columns and ${rows} rows? This resizes the current chart using nearest-cell canvas mapping. Back up your important project first.`))return;
+ if(!await safeMajorCopy('detected grid'))return;
  snapshot();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
 }
-function doAdvancedResize(){
+async function doAdvancedResize(){
  if(!active||editBlocked('resize the chart'))return;
  const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
  if(!validDimensions(cols,rows))return toast('Choose chart dimensions from 1–200 columns and 1–300 rows.');
  const mode=$('resizeMode').value,anchor=$('resizeAnchor').value;
  if(!confirm(`${mode==='scale'?'Scale all stitch cells':'Expand or crop without stretching'} to ${cols} × ${rows}, anchored ${anchor}? Cropped cells cannot be recovered except through Undo or a backup.`))return;
+ if(!await safeMajorCopy('advanced resize'))return;
  snapshot();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
  active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Advanced resize applied. Undo remains available.');
 }
@@ -2359,8 +2495,9 @@ function clearColorProposal(){
  nextColorProposal=null;
  $('applyColorSuggestion').disabled=true;
 }
-function applyColorChanges(){if(!nextColorProposal?.length||pendingConversion||editBlocked('apply yarn simplifications'))return;
+async function applyColorChanges(){if(!nextColorProposal?.length||pendingConversion||editBlocked('apply yarn simplifications'))return;
  const proposal=nextColorProposal;
+ if(!await safeMajorCopy('color simplification'))return;
  snapshot();for(const [i,c] of proposal)active.cells[i]=c;
  toast(proposal.length+' isolated stitches simplified. Undo is available.');scheduleSave();refreshInspector();requestDraw();
 }
@@ -2787,13 +2924,153 @@ function renderDesignHistory(){
   $('historyUndo').disabled=!undoStack.length;$('historyRedo').disabled=!redoStack.length;updateProgressUndo();
 }
 function diagnosticsPayload(){return reliability.makeDiagnostics({
- version:'1.7.2',saveState:savePhase,pendingWrites:writePending+(saveTimer?1:0),projectCount:projects.size,
+ version:'1.8.1',saveState:savePhase,pendingWrites:writePending+(saveTimer?1:0),projectCount:projects.size,
  activeProject:active,renderMetrics:{lastDrawMs:Number(drawLast.toFixed(1)),averageDrawMs:drawSamples?Number((drawTotal/drawSamples).toFixed(1)):0},
  });}
 function showDiagnostics(){
  const host=$('diagnosticSummary');if(!host)return;
  const report=diagnosticsPayload();
  host.textContent=JSON.stringify({...report,quarantinedProjects:invalidProjects.size,quarantinedChecks:[...invalidProjects.values()].map(x=>x.check)},null,2);
+}
+function setTabReadOnly(writable){
+ studioReadOnly=!writable||reloadingProjects;
+ document.body.classList.toggle('dorette-readonly',studioReadOnly);
+ $('tabLockBanner').hidden=!studioReadOnly;
+ if(studioReadOnly){$('tabLockMessage').textContent='Another browser tab or window is editing projects on this device. Close it, then retry here. No changes can be saved from this tab.';status('Read-only — another tab is editing',true);}
+ else refreshSaveState();
+}
+async function updateStorageIndicator(){
+ const host=$('storageInfo');if(!host||!Ops)return;
+ const summary=await Ops.inspectStorage(projects.values());
+ const used=Ops.formatSize(summary.used),quota=Ops.formatSize(summary.quota);
+ const estimate=Ops.formatSize(summary.totalEstimate);
+ const ratio=summary.ratio===null?'unknown':Math.round(summary.ratio*100)+'%';
+ host.textContent=`Browser storage: ${used} of ${quota} (${ratio}). Approx. project payload: ${estimate}. ${summary.large.map(p=>p.name+': '+Ops.formatSize(p.bytes)).join(' · ')}`;
+ if(summary.warning){$('storageInfo').classList.add('storage-danger');host.textContent+=' · Storage nearly full. Keep a private project ZIP backup.';}
+ else host.classList.remove('storage-danger');
+}
+async function safeMajorCopy(reason){
+ if(!active||studioReadOnly||!Ops.canWrite())return false;
+ if(!safeEditsEnabled)return true;
+ if(memoryOnly||majorCopyPending){toast('A separate copy could not be started. Check local saving and try again.');return false;}
+ const source=active,revision=renderRevision;
+ majorCopyPending=true;
+ let copy=null;
+ try{
+   await flushSave().catch(()=>{});
+   if(active!==source||renderRevision!==revision)return false;
+   if(failedWrites.has(source.id))throw Error('Save the original project before making a copy.');
+   copy=structuredClone(source);
+   copy.id=uid();copy.name=(source.name+' — '+reason+' copy').slice(0,70);
+   copy.createdAt=copy.updatedAt=new Date().toISOString();
+   await queueWrite(copy);
+   projects.set(copy.id,copy);
+   if(active!==source||renderRevision!==revision||studioReadOnly||!Ops.canWrite()){
+     refreshProjectList();toast('Copy saved. Open it to continue editing.');return false;
+   }
+   selectProject(copy.id);
+   toast('Working in a saved separate copy.');
+   return true;
+ }catch(e){
+   if(copy)failedWrites.delete(copy.id);
+   refreshSaveState();toast('Copy could not be saved: '+e.message);
+   return false;
+ }finally{majorCopyPending=false;}
+}
+function renderExportPreview(){
+ if(!active||$('exportPreviewDialog').open)return;
+ const model=compositeProject(active),check=reliability.auditExport(active,model.cells);
+ if(!check.ok){$('exportConsistency').textContent='Export data check failed: '+check.errors[0];return;}
+ const view=$('exportPreviewCanvas'),scale=Math.max(1,Math.min(4,Math.floor(460/Math.max(active.cols,active.rows))));
+ view.width=Math.max(1,Math.round(active.cols*scale));view.height=Math.max(1,Math.round(active.rows*scale));
+ const ctx=view.getContext('2d',{willReadFrequently:true,alpha:false});
+ for(let r=0;r<active.rows;r++)for(let c=0;c<active.cols;c++){
+   const col=model.palette[model.cells[r*active.cols+c]]?.hex||'#fff';ctx.fillStyle=col;ctx.fillRect(c*scale,r*scale,Math.ceil(scale),Math.ceil(scale));
+ }
+ // Compare deterministic points with the authoritative composited model.
+ let sampled=0,matched=0;
+ for(let i=0;i<Math.min(100,model.cells.length);i++){
+   const index=Math.floor(i*(model.cells.length-1)/Math.max(1,Math.min(100,model.cells.length)-1));
+   const c=index%active.cols,r=Math.floor(index/active.cols),x=Math.min(view.width-1,Math.floor((c+.5)*scale)),y=Math.min(view.height-1,Math.floor((r+.5)*scale));
+   const px=ctx.getImageData(x,y,1,1).data,expected=model.palette[model.cells[index]].hex;
+   const rgb='#'+[px[0],px[1],px[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+   if(rgb.toLowerCase()===expected.toLowerCase())matched++;sampled++;
+ }
+ const message=`${model.cols} × ${model.rows} stitches; ${model.palette.length} yarn colors. ${matched}/${sampled} sampled preview pixels match the composited chart. Printable PDF, PNG, SVG and written instructions use the saved chart model. Actual page layout should be checked separately.`;
+ $('exportPreviewReport').textContent=message;
+ $('exportConsistency').textContent=matched===sampled?'✓ Preview colors match saved chart data.':'⚠ Preview needs review before export.';
+ $('exportPreviewDialog').showModal();
+}
+function setupCommandPalette(){
+ const commands=[
+  ['Import photo','#imageFile','Create'],['Grayscale conversion','#conversionMode','Create'],['Detect imported grid','#detectGrid','Create'],
+  ['Background cleanup','#removeBackground','Create'],['Advanced chart resize','#smartResize','Edit'],['Editable layers','#layerPanel','Edit'],
+  ['Text and lettering','#textInput','Create'],['Yarn color replacement','#replaceEverywhere','Edit'],['Shapes','#shapeKind','Edit'],
+  ['Undo and redo','#undoButton','Edit'],['Pattern lock','#patternLock','Edit'],['Guided crochet','#openGuide','Crochet'],
+  ['Go to row and column','#goToCell','Crochet'],['Work sections','#workSectionSelect','Crochet'],
+  ['Printable PDF','#exportPdf','Edit'],['Written instructions PDF','#exportWrittenPdf','Edit'],['PNG image export','#exportPng','Edit'],
+  ['Project backup','#exportAll','Edit'],['Project integrity','#runIntegrityCheck','Edit'],['Storage usage','#refreshStorage','Edit'],
+  ['Export preview','#previewExport','Edit'],['Project gallery','#projectSearch','Edit']
+ ];
+ const results=$('commandResults'),query=$('commandQuery'),dialog=$('commandDialog');
+ let jumping=false;
+ function update(){
+  results.replaceChildren();const q=query.value.trim().toLowerCase();let count=0;
+  for(const [label,selector,mode] of commands.filter(([label,,mode])=>!q||label.toLowerCase().includes(q)||mode.toLowerCase().includes(q)).slice(0,16)){
+   const node=document.querySelector(selector);if(!node)continue;count++;
+   const btn=document.createElement('button');btn.type='button';btn.className='command-result';
+   const name=document.createElement('strong');name.textContent=label;const where=document.createElement('small');where.textContent=mode;
+   btn.append(name,where);
+   btn.addEventListener('click',()=>{
+    jumping=true;dialog.close();setStudioMode(mode.toLowerCase());
+    const root=node.closest('.inspector');if(root){$('toggleSettings').dataset.hidden='0';refreshWorkspaceLayout();}
+    for(let el=node.parentElement;el;el=el.parentElement)if(el.tagName==='DETAILS')el.open=true;
+    if(node.id==='imageFile'){node.click();return;}
+    node.scrollIntoView({behavior:'auto',block:'center'});
+    if(node.tabIndex<0)node.tabIndex=-1;
+    node.focus({preventScroll:true});
+   });results.append(btn);
+  }
+  if(!count){const msg=document.createElement('p');msg.textContent='No matching Studio tools.';results.append(msg);}
+ }
+ function open(){if(dialog.open)return;jumping=false;dialog.showModal();query.value='';update();query.focus();}
+ $('openCommandSearch').addEventListener('click',open);
+ $('closeCommandSearch').addEventListener('click',()=>dialog.close());
+ dialog.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();dialog.close();}else if(e.key==='ArrowDown'||e.key==='ArrowUp'){const controls=[...results.querySelectorAll('button')];if(!controls.length)return;const n=controls.indexOf(document.activeElement);if(n>=0){e.preventDefault();controls[(n+(e.key==='ArrowDown'?1:-1)+controls.length)%controls.length].focus();}else if(e.key==='ArrowDown'){e.preventDefault();controls[0].focus();}}});
+ dialog.addEventListener('close',()=>{if(!jumping)$('openCommandSearch').focus({preventScroll:true});});
+ query.addEventListener('input',update);
+ query.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();dialog.close();return;}if(e.key==='Enter'){const first=results.querySelector('button');if(first){e.preventDefault();first.click();}}});
+ window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();}});
+}
+function setupPolishTools(){
+ // Read-only tabs remain viewable, but design, progress and backup UI actions cannot write.
+ const blockReadonly=e=>{
+   if(!studioReadOnly)return;
+   const target=e.target.closest?.('button, input, select, textarea, summary, a');
+   if(!target||target.closest('#tabLockBanner')||target.classList.contains('gallery-choose')||(target.tagName==='A'&&target.hasAttribute('download')&&target.protocol==='blob:')||['headerExport','exportProject','exportAll','singleChart','dualChart','fitChart','zoomIn','zoomOut','resetView'].includes(target.id))return;
+   e.preventDefault();e.stopImmediatePropagation();
+   toast('This tab is read-only. Close the editing tab, then choose Retry editing.');
+ };
+ document.addEventListener('click',blockReadonly,true);
+ document.addEventListener('change',blockReadonly,true);
+ document.addEventListener('submit',e=>{if(studioReadOnly){e.preventDefault();e.stopImmediatePropagation();}},true);
+ document.addEventListener('pointerdown',e=>{if(studioReadOnly&&(e.target===canvas||e.target===overviewCanvas)){e.preventDefault();e.stopImmediatePropagation();}},true);
+ window.addEventListener('keydown',e=>{
+   if(!studioReadOnly)return;
+   if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())||(e.target===canvas&&e.key===' ')){e.preventDefault();e.stopImmediatePropagation();}
+ },true);
+ $('cancelBackgroundJob').addEventListener('click',cancelImageJob);
+ safeEditsEnabled=(()=>{try{return localStorage.getItem('dorette-safe-edits')!=='false';}catch{return true;}})();
+ $('safeEdits').checked=safeEditsEnabled;
+ $('safeEdits').addEventListener('change',e=>{safeEditsEnabled=e.target.checked;try{localStorage.setItem('dorette-safe-edits',String(safeEditsEnabled));}catch{}});
+ $('retryEditing').addEventListener('click',retryEditing);
+ $('refreshStorage').addEventListener('click',updateStorageIndicator);
+ $('previewExport').addEventListener('click',renderExportPreview);
+ $('closeExportPreview').addEventListener('click',()=>$('exportPreviewDialog').close());
+ $('exportPreviewDialog').addEventListener('close',()=>$('previewExport').focus({preventScroll:true}));
+ setupCommandPalette();
+ updateStorageIndicator();
+ storageRefreshTimer=setInterval(()=>{if(!document.hidden)updateStorageIndicator();},90000);
 }
 function setupReliabilityTools(){
  const run=$('runIntegrityCheck');if(!run)return;
@@ -2951,20 +3228,20 @@ function hookEvents(){
   $('applyConversion').addEventListener('click',()=>{
     if(!active||pendingConversion?.projectId!==active.id||editBlocked("apply a photo conversion"))return;
     const result=pendingConversion;
-    if(active.layers?.length&&!confirm('Replacing the photo palette will remove editable layers in this project. Continue? Make a project backup first.'))return;
-    if(result.cols!==active.cols||result.rows!==active.rows){
-      const fresh=blankProject(`${active.name} — ${result.cols}x${result.rows}`,result.cols,result.rows);
+    if(!safeEditsEnabled&&active.layers?.length&&!confirm('Replacing the photo palette will remove editable layers in this project. Continue? Make a project backup first.'))return;
+    if(result.cols!==active.cols||result.rows!==active.rows||safeEditsEnabled){
+      const fresh=blankProject(`${active.name} — converted ${result.cols}x${result.rows}`,result.cols,result.rows);
       fresh.referenceImage=active.referenceImage;fresh.referenceMirrored=!!active.referenceMirrored;fresh.photoCrop={...currentCrop()};
       fresh.imagePlacement=active.imagePlacement;fresh.conversionSettings={...conversionSettings()};
       fresh.palette=result.palette.map(c=>({...c}));fresh.cells=result.cells.slice();fresh.converted=true;fresh.opacity=0;
       projects.set(fresh.id,fresh);queueWrite(fresh);selectProject(fresh.id);
-      toast(`Created ${result.cols} × ${result.rows} chart as a NEW project. The original is untouched.`);
+      toast(`Created ${result.cols} × ${result.rows} conversion as a NEW project. The original is untouched.`);
     }else{
       snapshot();active.palette=result.palette.map(c=>({...c}));active.cells=result.cells.slice();active.layers=[];selectedLayerId=null;active.yarnInfo=[];active.converted=true;active.opacity=0;
       discardPreview(false);scheduleSave();refreshInspector();toast('Converted chart applied and saved. Review fine text and colors.');
     }
   });
-  $('cancelConversion').addEventListener('click',()=>{discardPreview();status(memoryOnly?'Storage blocked — export backups':'✓ Saved on this device',memoryOnly);toast('Preview discarded; original project unchanged.');});
+  $('cancelConversion').addEventListener('click',()=>{discardPreview();refreshSaveState();toast('Preview discarded; original project unchanged.');});
   $('imageOpacity').addEventListener('input',ev=>{if(!active)return;active.opacity=Number(ev.target.value)/100;$('opacityText').textContent=ev.target.value+'%';requestDraw();scheduleSave();});
   $('convertPhoto').addEventListener('click',convertImage);
   $('compareSizes').addEventListener('click',compareSizes);
@@ -3050,10 +3327,35 @@ function hookEvents(){
   $('deleteProject').addEventListener('click',removeActiveProject);
   new ResizeObserver(resizeCanvas).observe($('canvasWrap'));
   new ResizeObserver(requestDraw).observe(overviewCanvas);
-  window.addEventListener('pagehide',()=>{flushSave();});
+  window.addEventListener('pagehide',()=>{pageClosing=Promise.resolve(flushSave()).then(()=>Ops.release(),()=>Ops.release());});
+  window.addEventListener('pageshow',ev=>{if(ev.persisted)void retryEditing();});
   window.addEventListener('beforeunload',ev=>{if(needsSave()){flushSave();ev.preventDefault();ev.returnValue='';}});
 }
+async function retryEditing(){
+ if(reloadingProjects)return;
+ if(needsSave())return toast('This tab has unsaved changes. Export a backup before reopening it.');
+ reloadingProjects=true;
+ try{
+   await pageClosing;
+   if(!await Ops.acquire())return toast('The other Studio tab is still editing. Close it first, then retry.');
+   const preferred=activeId;
+   const items=await loadProjects();
+   projects.clear();invalidProjects.clear();
+   for(const p of items){
+     const check=reliability.auditProject(p);
+     if(check.ok)projects.set(p.id,p);
+     else invalidProjects.set(String(p?.id||'invalid-'+invalidProjects.size),{raw:p,check});
+   }
+   reloadingProjects=false;setTabReadOnly(true);
+   if(!projects.size){
+     const p=blankProject('My First Chart',79,117);projects.set(p.id,p);await queueWrite(p);
+   }
+   selectProject(projects.has(preferred)?preferred:projects.keys().next().value);
+ }catch(e){Ops.release();toast('Could not reopen editing: '+e.message);}
+ finally{reloadingProjects=false;setTabReadOnly(Ops.canWrite());}
+}
 async function initialize(){
+  await Ops.init(setTabReadOnly);
   hookEvents();v16Hook();
   $('singleChart').addEventListener('click',()=>setChartLayout('single'));
   $('dualChart').addEventListener('click',()=>setChartLayout('dual'));
@@ -3063,13 +3365,15 @@ async function initialize(){
     db=await openDatabase();const items=await loadProjects();
     for(const p of items){const check=reliability.auditProject(p);if(check.ok)projects.set(p.id,p);else invalidProjects.set(String(p?.id||'invalid-'+invalidProjects.size),{raw:p,check});}
   }catch(e){memoryOnly=true;setSavePhase('blocked',e.message);toast('Local saving is unavailable. Keep private backups in a normal browser window.');}
-  if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);if(!memoryOnly)await queueWrite(sample).catch(()=>{});}
+  if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);if(!memoryOnly&&!studioReadOnly)await queueWrite(sample).catch(()=>{});}
   let preferred=null;try{preferred=localStorage.getItem('dorette-active-project');}catch{}
   resizeCanvas();selectProject(projects.has(preferred)?preferred:projects.keys().next().value);
   if(!memoryOnly&&!needsSave())setSavePhase('saved');
   if(invalidProjects.size)saveAlert(`${invalidProjects.size} stored project(s) failed validation. Originals remain untouched. Open Studio Diagnostics to export the raw record.`);
   setupReliabilityTools();
   setupServiceWorkerUpdates();
+  setupPolishTools();
+  if(studioReadOnly)setTabReadOnly(false);
 }
 initialize().catch(e=>{status('Unable to open workspace',true);toast(e.message);});
 })();
