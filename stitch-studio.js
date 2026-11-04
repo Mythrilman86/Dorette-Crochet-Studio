@@ -475,7 +475,13 @@
   };
   get('Add').onclick = () => {
     if (marks.length >= 100 && mode.value === 'chart') { status('Remove a mark before adding another.'); return; }
-    if (mode.value === 'symbol') marks = [];
+    if (mode.value === 'symbol') {
+      if (marks.some(mark => mark.confirmed)) {
+        status('Remove the confirmed mark before replacing it with a manual mark.');
+        return;
+      }
+      marks = [];
+    }
     marks.push({box:{...crop}, matches:[], id:'', confirmed:false});
     showMarks();
   };

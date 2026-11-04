@@ -55,3 +55,5 @@ An isolated Tesseract.js 7.0.0 prototype used a local English tessdata_fast file
 Cloudflare remains a bounded trial candidate on its Free plan. No provider account, image upload, API credential or paid resource was added. Keep recognition suggestions separate from project data and from confirmed stitch labels.
 
 [Local Tesseract.js assets](https://github.com/naptha/tesseract.js/blob/master/docs/local-installation.md) · [Tesseract training data](https://github.com/tesseract-ocr/tessdata_fast) · [Android ML Kit OCR](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) · [Apple Vision OCR](https://developer.apple.com/documentation/vision/recognizing-text-in-images)
+
+A real [CC0 single-crochet swatch photographed by Kawan856](https://commons.wikimedia.org/wiki/File:Single_crochet_swatch.jpg) was imported into the offline browser test. Fabric mode enlarged the sample and returned Uncertain as designed. The photograph was used as a local test asset. This confirms safe handling of one real swatch. It does not measure classifier accuracy or replace a labeled chart and fabric benchmark.
