@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {stitchEntries, searchStitches} = require('../stitch-library.js');
-const {inkMask, components, normalizedMask, rankSymbols, matchConfidence} = require('../stitch-match.js');
+const {inkMask, components, normalizedMask, rankSymbols, matchConfidence, adjustScanPixels, sameScanRegion} = require('../stitch-match.js');
 
 test('search respects terminology when an abbreviation changes meaning', () => {
   assert.equal(searchStitches('dc', 'us').find(entry => entry.id === 'dc').us, 'Double crochet');
@@ -41,4 +41,27 @@ test('shape ranking deduplicates variants and abstains on a tie', () => {
   assert.equal(matchConfidence(scores), 'Clear shape match');
   assert.equal(matchConfidence([{score:.9},{score:.88}]), 'Uncertain');
   assert.equal(matchConfidence([]), 'Uncertain');
+});
+
+test('local contrast can recover a faint foreground and preserves transparency', () => {
+  const pixels = Uint8ClampedArray.from([95,95,95,255,125,125,125,255,0,0,0,0]);
+  assert.deepEqual([...inkMask(pixels.subarray(0,8), 2, 1)], [0,0]);
+  adjustScanPixels(pixels, 5, 100);
+  assert.deepEqual([...inkMask(pixels.subarray(0,8), 2, 1)], [1,0]);
+  assert.equal(pixels[11], 0);
+});
+
+test('rescans recognize an existing box without swallowing adjacent regions', () => {
+  const box = {x:10,y:10,w:15,h:20};
+  assert.equal(sameScanRegion(box, {x:11,y:11,w:14,h:18}), true);
+  assert.equal(sameScanRegion(box, {x:24,y:11,w:14,h:18}), false);
+});
+
+test('illustrated encyclopedia additions are searchable by terminology and category', () => {
+  assert.equal(searchStitches('increase', 'uk', 'Shaping')[0].id, 'inc');
+  assert.equal(searchStitches('bobble', 'both', 'Foundations').length, 0);
+  for (const id of ['inc','v-st','bobble','mr']) {
+    const entry = stitchEntries.find(item => item.id === id);
+    assert.ok(entry.path && entry.steps.length >= 2 && entry.example);
+  }
 });

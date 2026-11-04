@@ -1,7 +1,7 @@
 (() => {
   let exporting = false;
 
-  async function save(blob, name) {
+  async function exportFile(blob, name, method) {
     const files = window.Capacitor.Plugins.StudioFiles;
     if (exporting) throw new Error('Finish the current export first.');
     exporting = true;
@@ -20,7 +20,7 @@
         });
         await files.append({ data });
       }
-      const result = await files.save({ name, mime: blob.type || 'application/octet-stream' });
+      const result = await files[method]({ name, mime: blob.type || 'application/octet-stream' });
       return result.saved;
     } finally {
       try {
@@ -35,7 +35,8 @@
     get nativeFiles() {
       return window.Capacitor?.isPluginAvailable('StudioFiles') === true;
     },
-    save,
+    save: (blob, name) => exportFile(blob, name, 'save'),
+    share: (blob, name) => exportFile(blob, name, 'share'),
     openGuide: () => window.Capacitor.Plugins.StudioFiles.openGuide()
   };
 })();

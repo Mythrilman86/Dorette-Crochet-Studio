@@ -1648,9 +1648,9 @@ function runPdfJob(kind){
  }catch(e){if(worker){worker.terminate();worker=null;}fallback();}
 }
 function exportPdf(){runPdfJob('chart');}
-function exportBackup(all=false){
+async function exportBackup(all=false, share=false){
   flushSave();const items=all?[...projects.values()]:[active];
-  if(!items.length)return;
+  if(!items.length||!items[0])return;
   const bad=items.map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
   if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
   const payload=JSON.stringify(backupPayload(items));
@@ -1658,7 +1658,18 @@ function exportBackup(all=false){
   const bytes=makeZip({'README.txt':readme,'backup.json':payload});
   const date=new Date().toISOString().slice(0,10);
   const filename=`Dorette-${all?'All-Projects':slug(active.name)}-${date}.zip`;
-  download(new Blob([bytes],{type:'application/zip'}),filename);
+  const blob=new Blob([bytes],{type:'application/zip'});
+  if(share){
+    const file=new File([blob],filename,{type:blob.type});
+    try{
+      if(window.StudioMobile?.nativeFiles){await window.StudioMobile.share(blob,filename);return;}
+      if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}
+    }catch(error){
+      if(error.name!=='AbortError')toast('Could not share the ZIP. Use Back up this project to save a copy.');
+      return;
+    }
+  }
+  download(blob,filename);
   if(!window.StudioMobile?.nativeFiles)toast(`Backup downloaded (${items.length} project${items.length===1?'':'s'}). Upload the ZIP to Google Drive.`);
 }
 function validateBackup(p){
@@ -1837,6 +1848,9 @@ function renderGuide(){
   const {guide:g}=active,row=g.row,pos=g.position;
   const dir=Pattern.direction(active,row),runs=Pattern.runs(compositeProject(active),row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(compositeProject(active),row,pos);
   const completed=!!active.done[idx]||!!active.rowDone[row-1];
+  $('focusFirstDirection').value=active.workDirection.first;
+  $('focusAlternateRows').checked=active.workDirection.alternate;
+  $('focusHighContrast').checked=!!v16Prefs.highContrast;
   $('guideTitle').textContent=`Row ${row} of ${active.rows} — ${dir==='rtl'?'Right to left':'Left to right'}`;
   $('guideStatus').textContent=`Stitch ${pos+1} / ${active.cols} • Column ${col} • ${completed?'Already completed':'Not yet completed'}${g.finished?' • CHART FINISHED':''}`;
   $('guideCurrent').textContent=g.finished?'All stitches reached!':'Stitch '+(pos+1)+' — '+active.palette[run.color].symbol+' • '+active.palette[run.color].name+' ('+run.count+' consecutive)';
@@ -1955,6 +1969,7 @@ function setCrochetView(enabled){
   if(enabled===inCrochetView())return;
   document.body.classList.toggle('crochet-view',enabled);
   $('focusGuideDetails').hidden=!enabled;
+  $('focusGuideSettings').hidden=!enabled;
   void updateWakeLock();
   $('crochetView').setAttribute('aria-pressed',String(enabled));
   $('crochetView').textContent=enabled?'Exit Crochet View':'Crochet View';
@@ -2098,8 +2113,25 @@ function hookPatternEvents(){
     if(m&&confirm('Remove “'+m.name+'” from this device’s motif library?'))saveMotifs(motifs.filter(item=>item.id!==m.id));
   });
   renderMotifs();
-  $('rowFirstDirection').addEventListener('change',ev=>{snapshot();active.workDirection.first=ev.target.value==='ltr'?'ltr':'rtl';scheduleSave();renderRowSequence();renderGuide();});
-  $('rowAlternate').addEventListener('change',ev=>{snapshot();active.workDirection.alternate=ev.target.checked;scheduleSave();renderRowSequence();renderGuide();});
+  const changeDirection=(key,value)=>{
+    if(!active||pendingConversion||studioReadOnly||active.workDirection[key]===value)return;
+    const guide=active.guide;
+    const col=Pattern.colAt(active,guide.row,guide.position);
+    snapshot({label:'Progress: row direction'});
+    active.workDirection[key]=value;
+    guide.position=Pattern.direction(active,guide.row)==='rtl'?active.cols-col:col-1;
+    scheduleSave();renderRowSequence();renderGuide();requestDraw();
+  };
+  for(const id of ['rowFirstDirection','focusFirstDirection']){
+    $(id).addEventListener('change',ev=>changeDirection('first',ev.target.value==='ltr'?'ltr':'rtl'));
+  }
+  for(const id of ['rowAlternate','focusAlternateRows']){
+    $(id).addEventListener('change',ev=>changeDirection('alternate',ev.target.checked));
+  }
+  $('focusHighContrast').addEventListener('change',ev=>{
+    $('highContrastGrid').checked=ev.target.checked;
+    $('highContrastGrid').dispatchEvent(new Event('change'));
+  });
   $('instructionRow').addEventListener('change',ev=>setInstructionRow(ev.target.value));
   $('rowPrev').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)-1));
   $('rowNext').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)+1));
@@ -3099,7 +3131,7 @@ function setupPolishTools(){
  const blockReadonly=e=>{
    if(!studioReadOnly)return;
    const target=e.target.closest?.('button, input, select, textarea, summary, a');
-   if(!target||target.closest('#tabLockBanner')||target.classList.contains('gallery-choose')||(target.tagName==='A'&&target.hasAttribute('download')&&target.protocol==='blob:')||['headerExport','exportProject','exportAll','singleChart','dualChart','fitChart','zoomIn','zoomOut','resetView'].includes(target.id))return;
+   if(!target||target.closest('#tabLockBanner')||target.classList.contains('gallery-choose')||(target.tagName==='A'&&target.hasAttribute('download')&&target.protocol==='blob:')||['headerExport','exportProject','shareProject','exportAll','singleChart','dualChart','fitChart','zoomIn','zoomOut','resetView'].includes(target.id))return;
    e.preventDefault();e.stopImmediatePropagation();
    toast('This tab is read-only. Close the editing tab, then choose Retry editing.');
  };
@@ -3377,6 +3409,7 @@ function hookEvents(){
   $('textUp').addEventListener('click',()=>nudgeText(0,1));
   $('textDown').addEventListener('click',()=>nudgeText(0,-1));
   hookPatternEvents();hookAdvanced();
+  $('shareProject').addEventListener('click',()=>exportBackup(false,true));
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());

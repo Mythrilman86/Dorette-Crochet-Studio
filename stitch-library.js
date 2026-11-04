@@ -31,18 +31,44 @@ const stitchEntries = [
   ['fpdc','Front post double crochet','fptr','Front post treble crochet','M12 5h24M24 5v30q0 12 12 7m-20-20 16-6',
     ['Yarn over and insert front to back beside the post, then back to front on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Work around a tall stitch in the previous row to raise a ridge.'],
   ['bpdc','Back post double crochet','bptr','Back post treble crochet','M12 5h24M24 5v30q0 12-12 7m4-20 16-6',
-    ['Yarn over and insert back to front beside the post, then front to back on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Alternate with front post stitches to practice textured ribbing.']
-].map(([id,us,ukCode,uk,path,steps,example]) => ({id,us,ukCode,uk,path,steps,example}));
+    ['Yarn over and insert back to front beside the post, then front to back on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Alternate with front post stitches to practice textured ribbing.'],
+  ['inc','Single crochet increase','inc','Double crochet increase','M24 41L11 10m13 31L37 10m-31 0h10m16 0h10',
+    ['Work one US single crochet in the indicated stitch.','Insert the hook into that same stitch again and work a second single crochet.','Count two stitches above the one base stitch.'], 'Work one increase at each edge to widen a practice swatch.'],
+  ['v-st','Double crochet V-stitch','v-st','Treble crochet V-stitch','M24 41L9 7m15 34L39 7M4 7h10m20 0h10M19 15q5-8 10 0',
+    ['Work a US double crochet in the marked stitch or space.','Chain the number shown in the pattern.','Work another double crochet into the same stitch or space.'], 'On the next practice row, find the chain space between the two posts.'],
+  ['bobble','Double crochet bobble','bobble','Treble crochet bobble','M24 42Q1 27 24 7q23 20 0 35m0-35v35m-13-35h26',
+    ['Start several US double crochets in the same stitch. Stop each one before the final yarn-over.','Keep the unfinished loops on the hook.','Yarn over and pull through the remaining loops as the pattern directs.'], 'Practice from the wrong side and compare the raised bump on the right side.'],
+  ['mr','Magic ring','mr','Magic ring','M31 27q1-9-8-9q-11 0-11 11q0 13 14 13q16-1 16-16q0-19-20-19q-15 0-17 14m32 17 8 7',
+    ['Make an adjustable loop with the yarn tail free.','Draw the working yarn through the loop and secure it as your pattern directs.','Work the first round around the loop and tail, then pull the tail to close the center.'], 'Count the stitches in the first round before closing the center. Secure the tail when finishing.']
+].map(([id,us,ukCode,uk,path,steps,example]) => ({
+  id,us,ukCode,uk,path,steps,example,
+  category: ['sc2tog','dc2tog','inc'].includes(id) ? 'Shaping' :
+    ['shell','puff','picot','v-st','bobble'].includes(id) ? 'Texture' :
+    ['flo','blo','fpdc','bpdc'].includes(id) ? 'Placement' : 'Foundations'
+}));
 
-function searchStitches(query, terms = 'both') {
+function searchStitches(query, terms = 'both', category = '') {
   const words = query.trim().toLowerCase().split(/\s+/);
   return stitchEntries.filter(stitch => {
+    if (category && stitch.category !== category) return false;
     const fields = terms === 'us' ? [stitch.id, stitch.us] :
       terms === 'uk' ? [stitch.ukCode, stitch.uk] :
         [stitch.id, stitch.us, stitch.ukCode, stitch.uk];
+    fields.push(stitch.category);
     if (stitch.id === 'sl' && terms !== 'uk') fields.push('sl st', 'slip st');
     return words.every(word => fields.some(field => field.toLowerCase().includes(word)));
   });
 }
 
-if (typeof module !== 'undefined') module.exports = {stitchEntries, searchStitches};
+const crochetHelp = [
+  {title:'Uneven or narrowing edges', match:/uneven|narrow|edge|missing stitch/i,
+    text:'Mark the first and last stitches before turning. Count the stitches after each row. Check whether the turning chain counts as a stitch in your pattern, and look for a skipped end stitch or an extra stitch in the chain.'},
+  {title:'Curling fabric', match:/curl|curling|wavy/i,
+    text:'Check whether the foundation is tighter than the rows above it. Make a small test swatch with a looser foundation and relaxed tension. Follow the yarn label before washing or blocking.'},
+  {title:'Increasing and decreasing', match:/increas|decreas|shap/i,
+    text:'An increase makes more than one stitch in a single base. A decrease joins multiple bases into one stitch. Check the pattern for the stitch type, placement, and expected count.'},
+  {title:'Reading a chart or written pattern', match:/chart|legend|symbol|pattern|abbreviat|read.*row/i,
+    text:'Start with the pattern legend and check its US or UK terminology. Follow the row or round numbers and arrows. Count the stitches in a repeat before working it across the chart.'}
+];
+
+if (typeof module !== 'undefined') module.exports = {stitchEntries, searchStitches, crochetHelp};

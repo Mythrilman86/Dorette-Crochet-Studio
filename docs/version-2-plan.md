@@ -43,3 +43,15 @@ Sources
 - [Hugging Face inference pricing](https://huggingface.co/docs/inference-providers/pricing) and [Openverse licensing guidance](https://docs.openverse.org/api/reference/made_with_ov.html)
 
 The app can remain free for charting, offline templates, the library, structured help, project transfer and updates. Dependable, unrestricted hosted image inference for every user is outside the verified no-cost envelope. The baseline fallback is improved offline scanning plus curated references and manual review. Before enabling any cloud trial, disclose the provider, exact cropped image, retention and purpose, require confirmation for each upload, and omit project metadata. Disable the online option on quota or service failure. This stage adds no recurring operating expense or paid service.
+
+## Development checkpoint · Offline scanner, help and sharing
+
+The draft adds local straightening and quarter-turn rotation, exposure and contrast adjustments, and single-region comparison. Rotation asks before clearing marks. Exposure and contrast preserve manual labels and confirmations while clearing old shape scores. Repeated chart scans preserve marked regions. Basic template matching remains the default. Perspective correction, sharpening, noise reduction, and broader validated template coverage remain follow-up work.
+
+The encyclopedia now includes original paths and instructions for an increase, V-stitch, bobble, and magic ring. It supports categories and links from corrected scan marks. Offline crochet help provides bundled instructions and troubleshooting. It uses keyword matching. Online references are curated links with local bookmarks. They do not run a general web search or send the entered question. Project sharing uses the existing ZIP format and native share sheets, with browser download as a fallback.
+
+An isolated Tesseract.js 7.0.0 prototype used a local English tessdata_fast file and an original four-line legend rendered in Arial. It read three abbreviations exactly and read dc as de. The run took about 180 ms including worker initialization on the development computer. This is a smoke test, with no accuracy or mobile performance claim. The app does not bundle the OCR engine yet. A browser build needs pinned local worker, WASM and language files. Native alternatives include bundled ML Kit on Android and Apple Vision on iOS. Validate against printed legends with abbreviations, line breaks, skew and shadows before enabling OCR suggestions.
+
+Cloudflare remains a bounded trial candidate on its Free plan. No provider account, image upload, API credential or paid resource was added. Keep recognition suggestions separate from project data and from confirmed stitch labels.
+
+[Local Tesseract.js assets](https://github.com/naptha/tesseract.js/blob/master/docs/local-installation.md) · [Tesseract training data](https://github.com/tesseract-ocr/tessdata_fast) · [Android ML Kit OCR](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) · [Apple Vision OCR](https://developer.apple.com/documentation/vision/recognizing-text-in-images)

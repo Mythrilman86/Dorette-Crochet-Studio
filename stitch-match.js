@@ -94,4 +94,21 @@ function matchConfidence(matches) {
     ? 'Clear shape match' : 'Uncertain';
 }
 
-if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence};
+function adjustScanPixels(rgba, exposure, contrast) {
+  const factor = 1 + contrast / 100;
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    for (let channel = 0; channel < 3; channel++) {
+      const index = offset + channel;
+      rgba[index] = (rgba[index] - 128) * factor + 128 + exposure;
+    }
+  }
+  return rgba;
+}
+
+function sameScanRegion(a, b) {
+  const width = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const height = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return width * height >= .75 * Math.min(a.w * a.h, b.w * b.h);
+}
+
+if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence, adjustScanPixels, sameScanRegion};

@@ -53,7 +53,7 @@ class StudioViewController: CAPBridgeViewController {
 class StudioFilesPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate {
     let identifier = "StudioFilesPlugin"
     let jsName = "StudioFiles"
-    let pluginMethods: [CAPPluginMethod] = ["begin", "append", "discard", "save", "openGuide"].compactMap {
+    let pluginMethods: [CAPPluginMethod] = ["begin", "append", "discard", "save", "share", "openGuide"].compactMap {
         CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise)
     }
 
@@ -133,6 +133,32 @@ class StudioFilesPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate {
     private func finishPicker(saved: Bool) {
         exportCall?.resolve(["saved": saved])
         exportCall = nil
+    }
+
+    @objc func share(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let folder = self.folder, let name = call.getString("name"),
+                  name.range(of: #"^[A-Za-z0-9_-]{1,90}\.zip$"#, options: .regularExpression) != nil,
+                  let presenter = self.bridge?.viewController, presenter.presentedViewController == nil else {
+                call.reject("No valid ZIP is available to share.")
+                return
+            }
+            do {
+                let destination = folder.appendingPathComponent(name)
+                try FileManager.default.moveItem(at: folder.appendingPathComponent("export"), to: destination)
+                let sheet = UIActivityViewController(activityItems: [destination], applicationActivities: nil)
+                sheet.popoverPresentationController?.sourceView = presenter.view
+                sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX,
+                    y: presenter.view.bounds.midY, width: 1, height: 1)
+                sheet.completionWithItemsHandler = { _, completed, _, error in
+                    if let error { call.reject("Could not share the ZIP.", nil, error) }
+                    else { call.resolve(["saved": completed]) }
+                }
+                presenter.present(sheet, animated: true)
+            } catch {
+                call.reject("Could not prepare the ZIP for sharing.", nil, error)
+            }
+        }
     }
 
     @objc func openGuide(_ call: CAPPluginCall) {

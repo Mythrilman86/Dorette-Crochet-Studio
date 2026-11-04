@@ -104,6 +104,11 @@
     <div id="guideRowStripe" class="guide-row-stripe" aria-label="Current row colorwork"></div>
     <div id="guideCurrent" class="guide-current"></div>
     <div id="guideNextColor" class="guide-next muted"></div><div class="next-technique"><label>Technique<select id="techniquePreset"><option value="rows">Standard colorwork (rows)</option><option value="tapestry">Tapestry colorwork</option><option value="single">Single-crochet graph</option><option value="c2c">Corner-to-corner (diagonal chart cells)</option></select></label><div id="techniqueHint" class="muted">Presets adjust the guide workflow; always follow your specific crochet pattern for stitch technique.</div><div class="pair"><button id="diagonalBack" type="button" class="button ghost">← Previous diagonal cell</button><button id="diagonalNext" type="button" class="button secondary">Complete diagonal cell →</button></div><span id="diagonalStatus" class="muted"></span></div>
+    <div class="instruction-config" id="focusGuideSettings" hidden>
+      <label>First row direction <select id="focusFirstDirection"><option value="rtl">Right to left</option><option value="ltr">Left to right</option></select></label>
+      <label class="toggle"><input id="focusAlternateRows" type="checkbox"> Alternate row direction</label>
+      <label class="toggle"><input id="focusHighContrast" type="checkbox"> High contrast</label>
+    </div>
     <label class="toggle"><input type="checkbox" id="spotlightMode"> Row spotlight <span class="muted">(dim other rows)</span></label>
     <div class="guide-buttons"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
     <div class="guide-buttons"><button id="guideRun" class="button primary" type="button">Complete color run</button></div><div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row →</button></div>
@@ -324,7 +329,7 @@
         <p class="muted">Creates a real PDF on this device. Your saved project and backup ZIPs are not changed. It does not print the source photograph.</p>
       </div>
       <div class="section-divider"></div>
-      <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
+      <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="shareProject" class="button ghost block" type="button">Share this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
       <div class="section-divider"></div>
       <button id="deleteProject" class="text-button danger">Delete current project</button>
     </aside>
@@ -362,11 +367,11 @@
 <dialog id="stitchStudio" aria-labelledby="stitchTitle">
   <header><h2 id="stitchTitle">Stitch Scanner &amp; Encyclopedia</h2><form method="dialog"><button>Close</button></form></header>
   <label>Tool <select id="stitchMode">
-    <option value="library">Encyclopedia</option><option value="symbol">Single chart symbol</option>
+    <option value="library">Encyclopedia</option><option value="help">Crochet help and references</option><option value="symbol">Single chart symbol</option>
     <option value="chart">Multi-symbol chart</option><option value="fabric">Fabric comparison (experimental)</option>
   </select></label>
   <section id="stitchPhoto" hidden>
-    <p>Photos stay on this device. Use a sharp, upright photo with dark symbols on a light background.</p>
+    <p>Offline scan · Photos stay on this device. For charts, dark symbols on a light background work best.</p>
     <div class="stitch-controls">
       <label>Open photo <input id="stitchFile" type="file" accept="image/*"></label>
       <label>Take photo on phone <input id="stitchCapture" type="file" accept="image/*" capture="environment"></label>
@@ -375,6 +380,17 @@
     <div id="stitchLive" hidden><video autoplay muted playsinline></video><button id="stitchSnap">Take photo</button> <button id="stitchStop">Stop camera</button></div>
     <p id="stitchStatus" role="status">Choose an image to start.</p>
     <div id="stitchPreview" hidden>
+      <details><summary>Adjust photo</summary>
+        <div class="stitch-controls">
+          <label>Straighten (degrees) <input id="stitchAngle" type="number" min="-180" max="180" step="1" value="0"></label>
+          <button id="stitchRotateLeft" type="button">Rotate left 90°</button>
+          <button id="stitchRotateRight" type="button">Rotate right 90°</button>
+          <label>Exposure <input id="stitchExposure" type="range" min="-100" max="100" value="0"></label>
+          <label>Contrast <input id="stitchContrast" type="range" min="-50" max="100" value="0"></label>
+          <button id="stitchResetPhoto" type="button">Reset photo adjustments</button>
+        </div>
+        <p>Rotation resets the crop. If marks exist, Studio asks before clearing them.</p>
+      </details>
       <p>Drag over the image to select a crop, or edit the crop in pixels. The orange outline marks the crop.</p>
       <canvas id="stitchImage" aria-label="Photo with crop and numbered chart markers"></canvas>
       <div class="stitch-controls" id="stitchCrop">
@@ -388,14 +404,28 @@
       <div class="stitch-controls">
         <button id="stitchAnalyze">Scan crop</button>
         <button id="stitchAdd">Mark crop manually</button>
+        <button id="stitchAnalyzeRegion" type="button">Compare crop as one symbol</button>
       </div>
     </div>
     <div id="stitchResults" aria-live="polite"></div>
+  </section>
+  <section id="stitchHelp" hidden>
+    <h3>Offline crochet help</h3>
+    <p>Find bundled instructions and troubleshooting. Results are reference matches.</p>
+    <label>Question or stitch <input id="stitchQuestion" type="search" maxlength="160" placeholder="Try uneven edges or how to make a magic ring"></label>
+    <div id="stitchAnswers" aria-live="polite"></div>
+    <h3>Online references</h3>
+    <p>These sources open when you choose a link. Studio does not send your question, photos, or projects.</p>
+    <ul id="stitchLinks"></ul>
+    <h3>Saved references</h3>
+    <ul id="stitchBookmarks"></ul>
+    <p id="stitchReferenceStatus" role="status"></p>
   </section>
   <section id="stitchReference">
     <h3>Compare with the pattern legend</h3>
     <div class="stitch-controls">
       <label>Search stitches <input id="stitchSearch" type="search" placeholder="Try hdc or treble"></label>
+      <label>Category <select id="stitchCategory"><option value="">All categories</option><option>Foundations</option><option>Shaping</option><option>Texture</option><option>Placement</option></select></label>
       <label>Search terms <select id="stitchTerms"><option value="both">US and UK</option><option value="us">US</option><option value="uk">UK</option></select></label>
     </div>
     <div id="stitchEntries"></div>

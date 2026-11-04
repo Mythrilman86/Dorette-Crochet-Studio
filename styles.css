@@ -301,3 +301,5 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .crochet-view:not(.unpinned-dock) #guideDialog{max-height:30dvh;overflow:auto;flex:none}
 .crochet-view .crochet-view-actions .button,.crochet-view .toolbar .button,.crochet-view .toolbar .icon-button{min-height:44px}
 @media(max-width:640px){.crochet-view:not(.unpinned-dock) .crochet-dock-summary{flex-basis:100%}.crochet-view:not(.unpinned-dock) .crochet-dock .button{flex:1 1 27%}}
+
+#focusGuideSettings[hidden]{display:none}
