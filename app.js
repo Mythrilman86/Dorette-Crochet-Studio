@@ -37,7 +37,7 @@ function uid() { return crypto.randomUUID ? crypto.randomUUID() : 'p-'+Date.now(
 function blankProject(name, cols, rows) {
   return {id:uid(),name:name.trim()||'Untitled Chart', cols,rows, cells:Array(cols*rows).fill(0),
     done:Array(cols*rows).fill(0), rowDone:Array(rows).fill(0), palette:DEFAULT_COLORS.map(c=>({...c})),
-    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],layers:[],technique:'rows',sectionSize:25,category:'Other',favorite:false,notes:'',ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    referenceImage:null,opacity:0.35,photoCrop:{...FULL_CROP},imagePlacement:'contain',conversionSettings:{...DEFAULT_CONVERSION},converted:false,workDirection:{first:'rtl',alternate:true},guide:{row:1,position:0},gauge:{swatchStitches:100,swatchYards:0,overage:10},yarnInfo:[],checkpoints:[],layers:[],technique:'rows',sectionSize:25,category:'Other',favorite:false,notes:'',versions:[],annotations:[],ui:{showProgress:true,patternLock:false,stylusOnly:false,largeTouch:false},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
@@ -151,6 +151,7 @@ function refreshProjectList(){
 }
 
 function selectProject(id) {
+  v16ShapeProposal=null;
   clearColorProposal();
   $("grayTrio").replaceChildren();
   layerGesture=null;layerDragPreview=null;
@@ -191,12 +192,12 @@ function refreshInspector(){
   $('imageOpacity').value=Math.round(active.opacity*100);$('opacityText').textContent=Math.round(active.opacity*100)+'%';
   updateReferenceActions();
   updateCropControls();updateConversionControls();
-  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();renderLayers();refreshNextPanels();updatePdfEstimate();refreshPatternPanels();requestDraw();
+  updateSelection();updateProgress();updateDashboard();updateLegend();updateTabletControls();updateTextControls();renderLayers();refreshNextPanels();updatePdfEstimate();refreshPatternPanels();v16RestoreUI();requestDraw();
 }
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
-    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',ui:{...uiSettings(active)}};
+    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',annotations:structuredClone(active.annotations||[]),ui:{...uiSettings(active)}};
 }
 const progressHistory=[];
 const PROGRESS_HISTORY_LIMIT=30;
@@ -521,6 +522,8 @@ function mirrorChart(){
   for(const layer of active.layers||[])layer.entries=layer.entries.map(([i,color])=>{
     const x=i%cols,y=Math.floor(i/cols);return [y*cols+(cols-1-x),color];
   });
+  active.annotations=(active.annotations||[]).map(note=>note.scope==='row'?note:
+    DoretteNext.locateNote({...note,col:cols+1-note.col},active));
   active.referenceMirrored=!active.referenceMirrored;
   if(selected)selected={...selected,col:cols+1-selected.col};
   active.guide.position=cols-1-active.guide.position;
@@ -900,7 +903,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   if(!active)return;
   const s=view.scale,{cols,rows}=displayDimensions(),bw=cols*CELL,bh=rows*CELL;
   ctx.save();ctx.translate(view.x,view.y);ctx.scale(s,s);
-  const labelMargin=Math.max(42,32/s);
+  const labelMargin=Math.max(42,32*(Number(v16Prefs.numberScale)||1)/s);
   ctx.fillStyle='#fff';ctx.fillRect(M-labelMargin,M-labelMargin,bw+labelMargin*2,bh+labelMargin*2);
   const minCol=clamp(Math.floor(((-view.x/s)-M)/CELL),0,cols),maxCol=clamp(Math.ceil(((canvasWidth-view.x)/s-M)/CELL),0,cols);
   const minRow=clamp(Math.floor(((-view.y/s)-M)/CELL),0,rows),maxRow=clamp(Math.ceil(((canvasHeight-view.y)/s-M)/CELL),0,rows);
@@ -968,7 +971,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   }
   if(nextColorProposal?.length&&!displayedConversion){ctx.fillStyle='rgba(255,188,51,.5)';for(const [i] of nextColorProposal){const col=i%cols,row=Math.floor(i/cols);ctx.fillRect(M+col*CELL,M+row*CELL,CELL,CELL);}}
   // Every grid boundary continues through the row/column-number margins.
-  ctx.strokeStyle='#9c8ea7';ctx.lineWidth=0.75/s;ctx.beginPath();
+  ctx.strokeStyle=v16Prefs.highContrast?'#241331':'#9c8ea7';ctx.lineWidth=(v16Prefs.highContrast?1.5:.75)/s;ctx.beginPath();
   for(let c=minCol;c<=maxCol;c++){
     const x=M+c*CELL;ctx.moveTo(x,M-35);ctx.lineTo(x,M+bh+35);
   }
@@ -976,9 +979,10 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     const y=M+r*CELL;ctx.moveTo(M-35,y);ctx.lineTo(M+bw+35,y);
   }
   ctx.stroke();
-  ctx.strokeStyle='#6d578e';ctx.lineWidth=1.8/s;ctx.strokeRect(M,M,bw,bh);
+  ctx.strokeStyle=v16Prefs.highContrast?'#1b0e2e':'#6d578e';ctx.lineWidth=(v16Prefs.highContrast?2.5:1.8)/s;ctx.strokeRect(M,M,bw,bh);
   drawNextChartOverlays(ctx,cols,rows,s);
-  if((active.converted||displayedConversion||active.layers?.length) && CELL*s>=16){
+  v16DrawOverlays(ctx,cols,rows,s,minCol,maxCol,minRow,maxRow);
+  if((active.converted||displayedConversion||active.layers?.length) && CELL*s>=(v16Prefs.symbols?9:16)){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
@@ -1001,23 +1005,25 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     ctx.strokeStyle='#a04aea';ctx.lineWidth=2/s;ctx.setLineDash([6/s,3/s]);ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
   }
   // At large zoom, show EVERY number. At fit-scale, space labels to keep them legible.
-  const interval=Math.max(1,Math.ceil(15/(CELL*s))),columnInterval=Math.max(1,Math.ceil(32/(CELL*s)));
-  const fontWorld=10/s;ctx.font=`bold ${fontWorld}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
+  const numberScale=[1,1.5,2].includes(Number(v16Prefs.numberScale))?Number(v16Prefs.numberScale):1;
+  const interval=Math.max(1,Math.ceil(15*numberScale/(CELL*s))),columnInterval=Math.max(1,Math.ceil(32*numberScale/(CELL*s)));
+  const fontWorld=10*numberScale/s;ctx.font=`bold ${fontWorld}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';
   const highlightedX=selected&&!pendingConversion?selected.col-1:-1, highlightedY=selected&&!pendingConversion?rows-selected.row:-1;
   for(let c=minCol;c<maxCol;c++){
     if(c%columnInterval!==0&&c!==highlightedX&&c!==cols-1)continue;
-    if(c!==highlightedX&&highlightedX>=0&&Math.abs(c-highlightedX)*CELL*s<28)continue;
-    if(c!==cols-1&&c!==highlightedX&&(cols-1-c)*CELL*s<28)continue;
+    if(c!==highlightedX&&highlightedX>=0&&Math.abs(c-highlightedX)*CELL*s<28*numberScale)continue;
+    if(c!==cols-1&&c!==highlightedX&&(cols-1-c)*CELL*s<28*numberScale)continue;
     const x=M+(c+.5)*CELL,num=String(c+1),chosen=c===highlightedX;
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(x-11/s,M-22/s,22/s,20/s);ctx.fillRect(x-11/s,M+bh+2/s,22/s,20/s);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,x,M-12/s);ctx.fillText(num,x,M+bh+12/s);
+    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(x-11*numberScale/s,M-22*numberScale/s,22*numberScale/s,20*numberScale/s);ctx.fillRect(x-11*numberScale/s,M+bh+2*numberScale/s,22*numberScale/s,20*numberScale/s);}
+    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,x,M-12*numberScale/s);ctx.fillText(num,x,M+bh+12*numberScale/s);
   }
   for(let r=minRow;r<maxRow;r++){
     const row=rows-r,chosen=r===highlightedY;
     if((row-1)%interval!==0&&!chosen&&row!==rows)continue;
+    if(!chosen&&highlightedY>=0&&Math.abs(r-highlightedY)*CELL*s<13*numberScale)continue;
     const y=M+(r+.5)*CELL,num=String(row);
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(M-31/s,y-10/s,27/s,20/s);ctx.fillRect(M+bw+4/s,y-10/s,27/s,20/s);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,M-18/s,y);ctx.fillText(num,M+bw+18/s,y);
+    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(M-31*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);ctx.fillRect(M+bw+4*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);}
+    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,M-18*numberScale/s,y);ctx.fillText(num,M+bw+18*numberScale/s,y);
   }
   ctx.restore();
 }
@@ -1042,7 +1048,8 @@ function draw(){
   const dpr=Math.min(devicePixelRatio||1,2);
   overviewCanvas.width=Math.round(w*dpr);overviewCanvas.height=Math.round(h*dpr);
   const dims=displayDimensions();
-  const s=Math.min((w-24)/boardWidth(),(h-24)/boardHeight(),(w-64)/(dims.cols*CELL),(h-64)/(dims.rows*CELL));
+  const margin=64*(Number(v16Prefs.numberScale)||1);
+  const s=Math.min((w-24)/boardWidth(),(h-24)/boardHeight(),Math.max(1,w-margin)/(dims.cols*CELL),Math.max(1,h-margin)/(dims.rows*CELL));
   overviewView={scale:s,x:(w-boardWidth()*s)/2,y:(h-boardHeight()*s)/2};
   const g=overviewCanvas.getContext('2d');drawScene(g,w,h,overviewView);
   if(!active)return;
@@ -1415,7 +1422,7 @@ function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/
 function download(blob,name){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function pdfSettings(){
   return {paper:$('pdfPaper').value,orientation:$('pdfOrientation').value,
-    extraPages:$('pdfExtraPages').checked,sectionSize:Number($('workSectionSize').value)||25,notes:active?.notes||'',
+    extraPages:$('pdfExtraPages').checked,sectionSize:Number($('workSectionSize').value)||25,notes:[active?.notes||'',...(active?.annotations||[]).map(n=>`${v16NoteLocation(n)}: ${n.text}`)].filter(Boolean).join('\n').slice(0,1500),
     detail:$('pdfDetail').value,overlap:Number($('pdfOverlap').value),monochrome:$('pdfMonochrome').checked,completed:$('pdfCompleted').checked};
 }
 function updatePdfEstimate(){
@@ -1587,6 +1594,9 @@ function renderCheckpoints(){
   $('restoreCheckpoint').disabled=active.checkpoints.length===0;
 }
 function updateAreaStatus(){
+  v16ShapeProposal=null;
+  $('shapeInfo').textContent='Preview the current selection before applying a shape.';
+  v16MeasureArea();
   const status=$('areaStatus');
   if(!areaSelection){status.textContent='Drag with Select area to choose stitches for Copy or Fill.';return;}
   const {start,end}=areaSelection;
@@ -1670,6 +1680,30 @@ function exportWrittenPdf(){
     finally{btn.disabled=false;btn.textContent='⇩ Download written instructions PDF';}
   },50);
 }
+function v16ValidateVersions(p){
+  const arr=p.versions??[];
+  if(!Array.isArray(arr)||arr.length>V16_MAX_VERSIONS)throw Error('Invalid saved project version history');
+  return arr.map(entry=>{
+    if(!entry||typeof entry.label!=='string'||entry.label.length>70||typeof entry.at!=='string'||!entry.data)throw Error('Invalid saved design version');
+    const d=entry.data;
+    if(!validDimensions(d.cols,d.rows)||!Array.isArray(d.cells)||d.cells.length!==d.cols*d.rows||
+      !Array.isArray(d.done)||d.done.length!==d.cells.length||!Array.isArray(d.rowDone)||d.rowDone.length!==d.rows||
+      !Array.isArray(d.palette)||d.palette.length<1||d.palette.length>12||
+      d.palette.some(c=>!c||!/^#[0-9a-f]{6}$/i.test(c.hex)||typeof c.name!=='string'||c.name.length>80||typeof c.symbol!=='string'||c.symbol.length>3)||
+      d.cells.some(x=>!Number.isInteger(x)||x<0||x>=d.palette.length)||d.done.some(x=>x!==0&&x!==1)||d.rowDone.some(x=>x!==0&&x!==1))throw Error('Invalid saved version chart data');
+    const layers=validateLayers({...d, layers:d.layers||[]});
+    return {id:String(entry.id||uid()).slice(0,80),label:entry.label,at:entry.at.slice(0,40),data:{cols:d.cols,rows:d.rows,cells:d.cells.slice(),done:d.done.slice(),rowDone:d.rowDone.slice(),palette:structuredClone(d.palette),layers,annotations:v16ValidateNotes(d),converted:!!d.converted}};
+  });
+}
+function v16ValidateNotes(p){
+  const arr=p.annotations??[];
+  if(!Array.isArray(arr)||arr.length>V16_MAX_NOTES)throw Error('Invalid saved stitch notes');
+  return arr.map(n=>{
+    if(!n||!['stitch','row','section'].includes(n.scope)||!Number.isInteger(n.row)||n.row<1||n.row>300||
+      !Number.isInteger(n.col)||n.col<1||n.col>200||typeof n.text!=='string'||n.text.length>280)throw Error('Invalid stitch note');
+    return {id:String(n.id||uid()).slice(0,80),scope:n.scope,row:clamp(n.row,1,p.rows),col:clamp(n.col,1,p.cols),section:Number.isInteger(n.section)?n.section:null,text:n.text,at:String(n.at||'').slice(0,40)};
+  });
+}
 function validatePatternExtras(p){
   const direction=p.workDirection&&typeof p.workDirection==='object'?p.workDirection:{};
   const guide=p.guide&&typeof p.guide==='object'?p.guide:{};
@@ -1692,10 +1726,11 @@ function validatePatternExtras(p){
       snap.done.some(x=>x!==0&&x!==1)||snap.rowDone.some(x=>x!==0&&x!==1)||
       typeof snap.name!=='string'||snap.name.length>65)throw Error('Invalid saved snapshot');
   }
+  const savedVersions=v16ValidateVersions(p),savedNotes=v16ValidateNotes(p);
   const safe={workDirection:{first:direction.first==='ltr'?'ltr':'rtl',alternate:direction.alternate!==false},
     guide:{row:clamp(Math.round(Number(guide.row)||1),1,p.rows),position:clamp(Math.round(Number(guide.position)||0),0,p.cols-1),finished:!!guide.finished},
     gauge:{swatchStitches:Math.max(1,Number(gauge.swatchStitches)||100),swatchYards:Math.max(0,Number(gauge.swatchYards)||0),overage:clamp(Number(gauge.overage)||0,0,100)},
-    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),technique:['rows','tapestry','single','c2c'].includes(p.technique)?p.technique:'rows',diagonalIndex:clamp(Math.floor(Number(p.diagonalIndex)||0),0,p.cols*p.rows-1),sectionSize:[20,25,30,40].includes(p.sectionSize)?p.sectionSize:25,category:['Other','Blankets','Garments','Gifts','Practice'].includes(p.category)?p.category:'Other',favorite:!!p.favorite,notes:String(p.notes||'').slice(0,1500),ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
+    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),technique:['rows','tapestry','single','c2c'].includes(p.technique)?p.technique:'rows',diagonalIndex:clamp(Math.floor(Number(p.diagonalIndex)||0),0,p.cols*p.rows-1),sectionSize:[20,25,30,40].includes(p.sectionSize)?p.sectionSize:25,category:['Other','Blankets','Garments','Gifts','Practice'].includes(p.category)?p.category:'Other',favorite:!!p.favorite,notes:String(p.notes||'').slice(0,1500),versions:savedVersions,annotations:savedNotes,ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
   return safe;
 }
 function setCrochetView(enabled){
@@ -1938,9 +1973,9 @@ function setStudioMode(mode){
  studioMode=mode;document.body.dataset.studioMode=mode;
  const classify=(el,names)=>names.some(name=>el.querySelector(`[id="${name}"]`));
  document.querySelectorAll('.inspector-section').forEach(el=>{
-  const txt=el.textContent.toLowerCase();el.classList.toggle('always-section',el.id==='sizePanel'||txt.includes('save & back up'));
-  el.classList.toggle('create-section',el.id==='yarnLibraryPanel'||el.id==='layerPanel'||txt.includes('image to chart')||txt.includes('crochet mode')||txt.includes('text to chart')||txt.includes('yarn color legend'));
-  el.classList.toggle('edit-section',el.id==='patternHealth'||el.id==='layerPanel'||txt.includes('yarn color legend')||txt.includes('text to chart')||txt.includes('yarn inventory')||txt.includes('printable pdf')||txt.includes('stitch progress')||txt.includes('crochet mode')||txt.includes('project dashboard'));
+  const txt=el.textContent.toLowerCase();el.classList.toggle('always-section',el.id==='sizePanel'||el.id==='annotationsPanel'||txt.includes('save & back up'));
+  el.classList.toggle('create-section',el.id==='yarnLibraryPanel'||el.id==='layerPanel'||el.id==='texturePanel'||txt.includes('image to chart')||txt.includes('crochet mode')||txt.includes('text to chart')||txt.includes('yarn color legend'));
+  el.classList.toggle('edit-section',el.id==='patternHealth'||el.id==='layerPanel'||['versionHistoryPanel','measurementPanel','shapesPanel','texturePanel'].includes(el.id)||txt.includes('yarn color legend')||txt.includes('text to chart')||txt.includes('yarn inventory')||txt.includes('printable pdf')||txt.includes('stitch progress')||txt.includes('crochet mode')||txt.includes('project dashboard'));
   el.classList.toggle('crochet-section',txt.includes('stitch progress')||txt.includes('crochet mode')||txt.includes('printable pdf')||txt.includes('yarn inventory'));
  });
  for(const [m,id] of [['create','modeCreate'],['edit','modeEdit'],['crochet','modeCrochet']])$(id).setAttribute('aria-pressed',String(mode===m));
@@ -1962,6 +1997,9 @@ const tutorialSteps=[
  ['Layers and lettering','Type text, adjust font style and spacing, then apply to a new layer. Select a layer to reorder, hide, duplicate or flatten it.','TEXT  +  MOTIF  =  LAYERS'],
  ['Smart cleanup','Select any artwork needing protection, preview the small-area fixes, and apply only after checking the orange highlights.','PREVIEW FIRST  ✓'],
  ['Crochet with confidence','Use Guided Mode, Row Spotlight and the progress brush. Pattern lock prevents accidental recoloring.','ROW 1  •  STITCH 1  ✓'],
+ ['Design versions and stitch notes','In Edit, save a named version before redesigning. Add notes to stitches, rows or work sections. Saved versions can be restored as a NEW project.','SAVE  →  COMPARE  →  RESTORE'],
+ ['Drawing and measuring','Use Select area, then preview lines, borders and circles. Measure the selected rectangle using your real swatch gauge.','SELECT  →  PREVIEW  →  APPLY'],
+ ['Visual options','Switch Beginner or Advanced, increase number sizes, add high-contrast grids and yarn shape cues, or preview simulated stitches.','EASIER TO SEE  •  EASIER TO USE'],
  ['Share safely','Download a project ZIP using Back up all, and keep private backups. The program ZIP is not the project backup.','BACK UP  →  GOOGLE DRIVE']
 ];
 let tutorialIndex=0;
@@ -2371,6 +2409,259 @@ function hookNextEvents(){
  refreshWorkspaceLayout();
 }
 
+// v1.6.0: project milestones, annotations, accessibility, measurements, shapes and previews.
+// New project data is additive. The existing IndexedDB and project ZIP envelope remain version 1.
+const V16_PREF_KEY='dorette-display-v16';
+const V16_MAX_VERSIONS=8, V16_MAX_NOTES=200;
+let v16ShapeProposal=null;
+let v16Prefs=(()=>{try{return {...{mode:'advanced',highContrast:false,cues:false,symbols:false,numberScale:1,ruler:false},...JSON.parse(localStorage.getItem(V16_PREF_KEY)||'{}')};}catch{return {mode:'advanced',highContrast:false,cues:false,symbols:false,numberScale:1,ruler:false};}})();
+function v16SavePrefs(){try{localStorage.setItem(V16_PREF_KEY,JSON.stringify(v16Prefs));}catch{toast('Display preferences cannot be saved in this browser.');}}
+function v16ApplyPrefs(){
+  const beginner=v16Prefs.mode==='beginner';
+  document.body.classList.toggle('beginner-mode',beginner);
+  if(beginner&&active&&!['select','paint','erase','pan'].includes(editorTool))setTool('select');
+  if(beginner&&motifPreview)clearMotifPreview();
+  document.body.classList.toggle('accessible-contrast',!!v16Prefs.highContrast);
+  $('skillMode').value=v16Prefs.mode==='beginner'?'beginner':'advanced';
+  $('highContrastGrid').checked=!!v16Prefs.highContrast;
+  $('colorCueMode').checked=!!v16Prefs.cues;
+  $('alwaysSymbols').checked=!!v16Prefs.symbols;
+  $('showMeasurementRuler').checked=!!v16Prefs.ruler;
+  $('numberScale').value=['1','1.5','2'].includes(String(v16Prefs.numberScale))?String(v16Prefs.numberScale):'1';
+  requestDraw();
+}
+function v16VersionPayload(p){
+  return {cols:p.cols,rows:p.rows,cells:p.cells.slice(),done:p.done.slice(),rowDone:p.rowDone.slice(),
+    palette:structuredClone(p.palette),layers:structuredClone(p.layers||[]),annotations:structuredClone(p.annotations||[]),converted:!!p.converted};
+}
+function v16DisplayCells(p){return window.DoretteAdvanced.compose(p);}
+function v16PaintMini(canvas,project){
+  const g=canvas.getContext('2d',{alpha:false}),w=canvas.width,h=canvas.height;
+  g.fillStyle='#fff';g.fillRect(0,0,w,h);
+  if(!project?.cells?.length||!project.cols||!project.rows)return;
+  const values=v16DisplayCells(project),scale=Math.min((w-8)/project.cols,(h-8)/project.rows),ox=(w-project.cols*scale)/2,oy=(h-project.rows*scale)/2;
+  // Pixel output sampling caps work for large 200 x 300 patterns.
+  for(let py=Math.max(0,Math.floor(oy));py<Math.min(h,Math.ceil(oy+project.rows*scale));py++)for(let px=Math.max(0,Math.floor(ox));px<Math.min(w,Math.ceil(ox+project.cols*scale));px++){
+    const c=clamp(Math.floor((px-ox)/scale),0,project.cols-1),r=clamp(Math.floor((py-oy)/scale),0,project.rows-1);
+    g.fillStyle=project.palette[values[r*project.cols+c]]?.hex||'#fff';g.fillRect(px,py,1,1);
+  }
+}
+function v16RefreshVersions(){
+  if(!active)return;
+  const choice=$('versionChoice'),previous=choice.value;
+  choice.replaceChildren();
+  const versions=active.versions||[];
+  if(!versions.length)choice.add(new Option('No versions saved',''));
+  versions.forEach((v,i)=>choice.add(new Option(`${v.label} · ${new Date(v.at).toLocaleDateString()} · ${v.data.cols}×${v.data.rows}`,String(i))));
+  if(versions.length)choice.value=previous!==''&&versions[Number(previous)]?previous:'0';
+  $('compareVersion').disabled=!versions.length;$('restoreVersion').disabled=!versions.length;
+  $('versionCompare').hidden=true;
+}
+function v16SaveVersion(){
+  if(!active||pendingConversion)return toast('Finish or discard the temporary conversion preview first.');
+  const label=String($('versionName').value||'').trim()||`Design ${new Date().toLocaleDateString()}`;
+  active.versions??=[];
+  active.versions.unshift({id:uid(),label:label.slice(0,70),at:new Date().toISOString(),data:v16VersionPayload(active)});
+  if(active.versions.length>V16_MAX_VERSIONS)active.versions.length=V16_MAX_VERSIONS;
+  scheduleSave();v16RefreshVersions();$('versionChoice').value='0';toast('Named version saved inside this project and its project-backup ZIP.');
+}
+function v16ChosenVersion(){return active?.versions?.[Number($('versionChoice').value)]||null;}
+function v16CompareVersion(){
+  const v=v16ChosenVersion();if(!v)return toast('Save a version first.');
+  v16PaintMini($('savedVersionPreview'),v.data);v16PaintMini($('currentVersionPreview'),active);
+  let changed=0;
+  const a=v16DisplayCells(v.data),b=v16DisplayCells(active),w=Math.max(v.data.cols,active.cols),h=Math.max(v.data.rows,active.rows);
+  for(let r=1;r<=h;r++)for(let c=1;c<=w;c++){
+    const old=r<=v.data.rows&&c<=v.data.cols?v.data.palette[a[(v.data.rows-r)*v.data.cols+c-1]]?.hex:null;
+    const now=r<=active.rows&&c<=active.cols?active.palette[b[(active.rows-r)*active.cols+c-1]]?.hex:null;
+    if(old!==now)changed++;
+  }
+  $('versionCompare').hidden=false;
+  $('versionDiff').textContent=`${format(changed)} different or added/removed stitch positions across the compared chart dimensions. This is a color-and-placement comparison, not a yarn usage estimate.`;
+}
+function v16RestoreVersion(){
+  const v=v16ChosenVersion();if(!v)return;
+  if(!confirm(`Create a NEW project from saved version “${v.label}”? The current project will remain unchanged.`))return;
+  flushSave();
+  const data=structuredClone(v.data),copy=structuredClone(active);
+  Object.assign(copy,data);
+  copy.id=uid();copy.name=`${active.name} — ${v.label}`.slice(0,70);
+  copy.createdAt=new Date().toISOString();copy.updatedAt=copy.createdAt;
+  copy.versions=[];
+  copy.annotations=(data.annotations||[]).map(note=>DoretteNext.locateNote(note,copy));
+  copy.yarnInfo=data.palette.map(color=>{
+    const index=active.palette.findIndex(yarn=>yarn.hex.toLowerCase()===color.hex.toLowerCase());
+    return structuredClone(active.yarnInfo?.[index]||{});
+  });
+  copy.guide={row:1,position:0,finished:false};copy.diagonalIndex=0;
+  copy.checkpoints=[];
+  projects.set(copy.id,copy);queueWrite(copy);selectProject(copy.id);
+  toast('Saved version restored as a separate project; the original remains untouched.');
+}
+function v16NoteLocation(note){
+  if(note.scope==='section')return `Section ${DoretteNext.locateNote(note,active).section} · R${note.row}, C${note.col}`;
+  if(note.scope==='row')return `Row ${note.row}`;
+  return `R${note.row}, C${note.col}`;
+}
+function v16RefreshNotes(){
+  if(!active)return;
+  const host=$('annotationList');host.replaceChildren();
+  const notes=active.annotations||[];
+  if(!notes.length){const msg=document.createElement('span');msg.className='muted';msg.textContent='No reminders yet.';host.append(msg);return;}
+  notes.slice().reverse().forEach(note=>{
+    const row=document.createElement('div');row.className='v16-note';
+    const jump=document.createElement('button');jump.type='button';jump.className='button ghost';
+    jump.textContent=`${v16NoteLocation(note)}: ${note.text}`;
+    jump.title='Go to this note on the chart';
+    jump.addEventListener('click',()=>{
+      selected={row:clamp(note.row,1,active.rows),col:clamp(note.col,1,active.cols)};
+      view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;
+      view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;
+      updateSelection();requestDraw();
+    });
+    const del=document.createElement('button');del.type='button';del.className='button ghost v16-remove';del.textContent='Remove';
+    del.setAttribute('aria-label',`Remove note at ${v16NoteLocation(note)}`);
+    del.addEventListener('click',()=>{active.annotations=active.annotations.filter(x=>x.id!==note.id);scheduleSave();v16RefreshNotes();requestDraw();updatePdfEstimate();});
+    row.append(jump,del);host.append(row);
+  });
+}
+function v16AddNote(){
+  if(!active)return;
+  const text=String($('annotationText').value||'').trim();if(!text)return toast('Type a reminder first.');
+  if((active.annotations||[]).length>=V16_MAX_NOTES)return toast('This project already has 200 reminders. Remove one to add another.');
+  const scope=$('annotationScope').value;
+  if(scope!=='section'&&!selected)return toast('Select a stitch or row before attaching a reminder.');
+  let col=selected?.col||1,row=selected?.row||1,section=null;
+  if(scope==='section'){
+    const sec=window.DoretteNext.sections(active,active.sectionSize||25)[Number($('workSectionSelect')?.value||1)-1];
+    if(sec){col=sec.c0;row=sec.r0;section=sec.id;}
+  }
+  active.annotations??=[];
+  active.annotations.push({id:uid(),scope,col,row,section,text:text.slice(0,280),at:new Date().toISOString()});
+  $('annotationText').value='';scheduleSave();v16RefreshNotes();requestDraw();updatePdfEstimate();
+  toast('Reminder attached to the project.');
+}
+function v16MeasureArea(){
+  if(!active||!areaSelection)return $('measurementResult').textContent='Choose Select area, then drag across stitches before measuring.';
+  const a=areaSelection,w=Math.abs(a.start.col-a.end.col)+1,h=Math.abs(a.start.row-a.end.row)+1;
+  const fields=['sizeSwatchCols','sizeSwatchRows','sizeSwatchWidth','sizeSwatchHeight'].map(id=>Number($(id).value));
+  let desc=`${w} columns × ${h} rows = ${format(w*h)} stitches in the selected rectangular area.`;
+  const gauge=window.DoretteAdvanced.gauge(w,h,...fields);
+  if(gauge)desc+=` Approx. ${gauge.width.toFixed(2)} × ${gauge.height.toFixed(2)} ${$('sizeUnit').value} from the measured swatch.`;
+  $('measurementResult').textContent=desc;
+}
+function v16ShapeCells(){
+  if(!areaSelection||!active)return null;
+  const a=areaSelection,left=Math.min(a.start.col,a.end.col),right=Math.max(a.start.col,a.end.col),
+    bottom=Math.min(a.start.row,a.end.row),top=Math.max(a.start.row,a.end.row);
+  const kind=$('shapeKind').value,w=right-left+1,h=top-bottom+1,positions=[];
+  if(kind==='line'){
+    let x=a.start.col,y=a.start.row,dx=Math.abs(a.end.col-x),dy=Math.abs(a.end.row-y),sx=x<a.end.col?1:-1,sy=y<a.end.row?1:-1,err=dx-dy;
+    for(let count=0;count<Math.max(w,h)*2+2;count++){
+      positions.push([x,y]);if(x===a.end.col&&y===a.end.row)break;
+      const e2=2*err;if(e2>-dy){err-=dy;x+=sx;}if(e2<dx){err+=dx;y+=sy;}
+    }
+  }else{
+    const ellipse=kind.includes('ellipse')||kind.includes('circle'),fill=kind.startsWith('filled'),circle=kind.includes('circle');
+    const rx=(circle?Math.min(w,h):w)/2,ry=(circle?Math.min(w,h):h)/2,cx=(left+right)/2,cy=(bottom+top)/2;
+    const inside=(col,row)=>((col-cx)/rx)**2+((row-cy)/ry)**2<=1;
+    for(let row=bottom;row<=top;row++)for(let col=left;col<=right;col++){
+      if(!ellipse){
+        if(fill||row===bottom||row===top||col===left||col===right)positions.push([col,row]);
+      }else if(inside(col,row)&&(fill||!inside(col-1,row)||!inside(col+1,row)||!inside(col,row-1)||!inside(col,row+1))){
+        positions.push([col,row]);
+      }
+    }
+  }
+  return [...new Map(positions.map(([c,r])=>[`${c},${r}`,indexFor(c,r)])).values()];
+}
+function v16PreviewShape(){
+  if(pendingConversion)return toast('Finish or discard the image conversion preview first.');
+  const values=v16ShapeCells();if(!values?.length){v16ShapeProposal=null;requestDraw();return toast('Use Select area and drag the shape boundaries first.');}
+  v16ShapeProposal=values;
+  $('shapeInfo').textContent=`Preview: ${format(values.length)} stitches. Press Apply shape to paint with the currently selected yarn.`;
+  requestDraw();
+}
+function v16ApplyShape(){
+  if(!active||pendingConversion||editBlocked('draw a shape'))return;
+  const values=v16ShapeCells();if(!values?.length)return toast('Select an area before drawing a shape.');
+  const color=Number($('paintColor').value);if(!Number.isInteger(color)||!active.palette[color])return toast('Select a yarn color.');
+  const changes=values.filter(i=>active.cells[i]!==color);
+  if(!changes.length)return toast('No stitches would change.');
+  snapshot();for(const i of changes)active.cells[i]=color;
+  active.converted=true;v16ShapeProposal=null;scheduleSave();updateLegend();requestDraw();
+  $('shapeInfo').textContent=`Applied ${format(changes.length)} stitches to the base chart. Undo is available.`;
+}
+function v16DrawTexture(){
+  if(!active)return;
+  const source=v16DisplayCells(active),cols=active.cols,rows=active.rows,pixel=Math.max(3,Math.min(18,Math.floor(600/Math.max(cols,rows))));
+  const a=$('textureOriginal'),b=$('textureSimulated');a.width=b.width=cols*pixel;a.height=b.height=rows*pixel;
+  const ac=a.getContext('2d',{alpha:false}),bc=b.getContext('2d',{alpha:false});
+  const density=$('textureDensity').value,shade=density==='high'?.24:density==='low'?.10:.17;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    const col=active.palette[source[r*cols+c]]?.hex||'#fff',x=c*pixel,y=r*pixel;
+    ac.fillStyle=bc.fillStyle=col;ac.fillRect(x,y,pixel,pixel);bc.fillRect(x,y,pixel,pixel);
+    if(pixel>=3){bc.strokeStyle=`rgba(0,0,0,${shade})`;bc.lineWidth=Math.max(.5,pixel/8);bc.beginPath();
+      bc.ellipse(x+pixel*.5,y+pixel*.56,pixel*.42,pixel*.23,0,Math.PI*.12,Math.PI*1.05);bc.stroke();
+      bc.strokeStyle=`rgba(255,255,255,${Math.min(.65,shade*2)})`;bc.beginPath();bc.moveTo(x+pixel*.26,y+pixel*.25);bc.quadraticCurveTo(x+pixel*.53,y+pixel*.12,x+pixel*.76,y+pixel*.33);bc.stroke();
+    }
+  }
+}
+function v16DrawOverlays(g,cols,rows,s,minCol=0,maxCol=cols,minRow=0,maxRow=rows){
+  if(!active||pendingConversion)return;
+  if(v16ShapeProposal?.length){g.fillStyle='rgba(233,120,36,.48)';for(const i of v16ShapeProposal){g.fillRect(M+(i%cols)*CELL+1,M+Math.floor(i/cols)*CELL+1,CELL-2,CELL-2);}}
+  if(v16Prefs.ruler){
+    g.strokeStyle='#3a2558';g.lineWidth=1.3/s;g.beginPath();
+    for(let c=0;c<=cols;c+=5){const x=M+c*CELL;g.moveTo(x,M-40);g.lineTo(x,M-(c%10===0?21:29));}
+    for(let row=0;row<=rows;row+=5){const y=M+row*CELL;g.moveTo(M-40,y);g.lineTo(M-(row%10===0?21:29),y);}
+    g.stroke();
+  }
+  for(const note of active.annotations||[]){
+    if(note.row<1||note.row>rows||note.col<1||note.col>cols)continue;
+    const c=note.scope==='row'?0:note.col-1,r=rows-note.row,
+      x=M+c*CELL+CELL*.76,y=M+r*CELL+CELL*.21;
+    g.fillStyle='#f59b25';g.strokeStyle='#523060';g.lineWidth=.8/s;
+    g.beginPath();g.arc(x,y,CELL*.15,0,Math.PI*2);g.fill();g.stroke();
+  }
+  if(v16Prefs.cues){
+    const pixels=CELL*s;if(pixels>=8){
+      const viewW=g.canvas?.width||0,viewH=g.canvas?.height||0;
+      const items=v16DisplayCells(active),palette=active.palette;
+      const minC=minCol,maxC=maxCol,minR=minRow,maxR=maxRow;
+      for(let r=minR;r<maxR;r++)for(let c=minC;c<maxC;c++){
+        const i=r*cols+c,color=items[i];if(color===0)continue;
+        const x=M+c*CELL,y=M+r*CELL,pattern=color%4;
+        const hex=palette[color]?.hex||'#ffffff';
+        const luma=.299*parseInt(hex.slice(1,3),16)+.587*parseInt(hex.slice(3,5),16)+.114*parseInt(hex.slice(5,7),16);
+        g.strokeStyle=g.fillStyle=luma<140?'#ffffff':'#2e2455';g.lineWidth=1.25/s;
+        if(pattern===0){g.beginPath();g.moveTo(x+5,y+CELL-5);g.lineTo(x+CELL-5,y+5);g.stroke();}
+        if(pattern===1){g.beginPath();g.arc(x+CELL/2,y+CELL/2,2.5/s,0,2*Math.PI);g.fill();}
+        if(pattern===2){g.strokeRect(x+CELL*.29,y+CELL*.29,CELL*.42,CELL*.42);}
+        if(pattern===3){g.beginPath();g.moveTo(x+CELL*.2,y+CELL*.5);g.lineTo(x+CELL*.8,y+CELL*.5);g.stroke();}
+      }
+    }
+  }
+}
+function v16RestoreUI(){
+  v16ShapeProposal=null;
+  v16RefreshVersions();v16RefreshNotes();v16ApplyPrefs();
+}
+function v16Hook(){
+  for(const [id,key] of [['skillMode','mode'],['highContrastGrid','highContrast'],['colorCueMode','cues'],['alwaysSymbols','symbols'],['numberScale','numberScale'],['showMeasurementRuler','ruler']]){
+    $(id).addEventListener('change',()=>{v16Prefs[key]=['mode','numberScale'].includes(key)?$(id).value:$(id).checked;v16SavePrefs();v16ApplyPrefs();});
+  }
+  $('saveVersion').addEventListener('click',v16SaveVersion);
+  $('compareVersion').addEventListener('click',v16CompareVersion);
+  $('restoreVersion').addEventListener('click',v16RestoreVersion);
+  $('addAnnotation').addEventListener('click',v16AddNote);
+  $('measureArea').addEventListener('click',v16MeasureArea);
+  $('previewShape').addEventListener('click',v16PreviewShape);
+  $('applyShape').addEventListener('click',v16ApplyShape);
+  $('renderTexture').addEventListener('click',v16DrawTexture);
+  $('shapeKind').addEventListener('change',()=>{v16ShapeProposal=null;requestDraw();});
+  v16ApplyPrefs();
+}
+
 function hookEvents(){
   hookNextEvents();
   $('newProjectForm').addEventListener('submit',ev=>{
@@ -2576,7 +2867,7 @@ function hookEvents(){
   window.addEventListener('beforeunload',()=>flushSave());
 }
 async function initialize(){
-  hookEvents();
+  hookEvents();v16Hook();
   $('singleChart').addEventListener('click',()=>setChartLayout('single'));
   $('dualChart').addEventListener('click',()=>setChartLayout('dual'));
   let chartLayout='dual';try{chartLayout=localStorage.getItem('dorette-chart-layout')||'dual';}catch{}

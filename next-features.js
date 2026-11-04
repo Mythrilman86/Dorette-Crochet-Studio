@@ -48,6 +48,13 @@ function backgroundRemove(img,tolerance=38,mode='corners',chosen=null){
  }
  g.putImageData(im,0,0);return c.toDataURL('image/png');
 }
+function locateNote(note,project){
+ const size=project.sectionSize||25;
+ const section=note.scope==='section'
+   ?Math.floor((note.row-1)/size)*Math.ceil(project.cols/size)+Math.floor((note.col-1)/size)+1
+   :null;
+ return {...note,section};
+}
 function remap(project,cols,rows,mode='canvas',anchor='center'){
  if(!Number.isInteger(cols)||!Number.isInteger(rows)||cols<1||rows<1||cols>200||rows>300)throw Error('Choose 1–200 columns and 1–300 rows.');
  const fromCols=project.cols,fromRows=project.rows,total=cols*rows,newCells=Array(total).fill(0),newDone=Array(total).fill(0),newRows=Array(rows).fill(0),map=new Map();
@@ -83,7 +90,14 @@ function remap(project,cols,rows,mode='canvas',anchor='center'){
  for(let r=1;r<=rows;r++){const oldR=mode==='scale'?clamp(Math.floor((r-.5)*fromRows/rows)+1,1,fromRows):r-dy;
   if(oldR>=1&&oldR<=fromRows&&(mode==="scale"||(dx<=0&&dx+fromCols>=cols)))newRows[r-1]=project.rowDone?.[oldR-1]||0;
  }
- return {cols,rows,cells:newCells,done:newDone,rowDone:newRows,layers};
+ const annotations=(project.annotations||[]).flatMap(note=>{
+  const row=mode==='scale'?Math.floor((note.row-.5)*rows/fromRows)+1:note.row+dy;
+  let col=mode==='scale'?Math.floor((note.col-.5)*cols/fromCols)+1:note.col+dx;
+  if(note.scope==='row')col=clamp(col,1,cols);
+  if(row<1||row>rows||col<1||col>cols)return [];
+  return [locateNote({...note,col,row},{cols,sectionSize:project.sectionSize})];
+ });
+ return {cols,rows,cells:newCells,done:newDone,rowDone:newRows,layers,annotations};
 }
 function sections(p,size){size=clamp(Number(size)||25,5,100);const out=[];
  for(let r0=1;r0<=p.rows;r0+=size)for(let c0=1;c0<=p.cols;c0+=size){const c1=Math.min(p.cols,c0+size-1),r1=Math.min(p.rows,r0+size-1);let complete=0;
@@ -126,5 +140,5 @@ function svg(p,{cell=12,numbers=true,legend=true,sections:sectionSize=0}={}){
  if(legend){p.palette.forEach((c,i)=>{const y=gutter+p.rows*cell+18+i*16;lines.push(`<rect x="${gutter}" y="${y}" width="12" height="12" fill="${esc(c.hex)}"/><text x="${gutter+20}" y="${y+10}" font-size="11">${esc(c.symbol)} — ${esc(c.name)}</text>`);});}
  lines.push('</svg>');return lines.join('');
 }
-window.DoretteNext=Object.freeze({detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
+window.DoretteNext=Object.freeze({locateNote,detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
 })();

@@ -199,3 +199,28 @@ body.unpinned-dock .crochet-dock{position:static}
 .next-text-favorites{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;align-items:end}.next-text-favorites label{flex:1 1 150px;display:flex;flex-direction:column;gap:5px;font-size:.7rem}.next-text-favorites button{font-size:.7rem}.next-text-favorites select{max-width:100%}
 
 .chart-split-control,.chart-split-number{display:flex;align-items:center;gap:6px}.chart-split-control{flex-wrap:wrap}.chart-split-number input[type=number]{width:4.5rem}
+
+/* v1.6.0 — milestones, annotations, rulers, accessibility, shapes and craft previews */
+.v16-quickbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 12px;border:1px solid #ddd1ea;background:#faf7ff;border-radius:12px}
+.v16-quickbar label{font-size:.76rem;font-weight:700;display:flex;gap:6px;align-items:center;min-width:0}
+.v16-quickbar select{border:1px solid #c7b8d5;border-radius:8px;padding:6px;background:#fff;color:#403252;max-width:115px}
+.v16-panel{padding:13px;border:1px solid #e6ddec;border-radius:12px;background:#fcfaff;min-width:0;break-inside:avoid;margin:8px 0}
+.v16-panel .field{margin-top:10px}.v16-panel p{line-height:1.45}.v16-panel .pair{display:flex;gap:7px;flex-wrap:wrap}
+.v16-panel .pair .button{flex:1;min-width:112px}.v16-panel .button{white-space:normal}
+.v16-panel textarea{resize:vertical;width:100%;min-height:68px;max-width:100%}
+.v16-compare{padding:8px;border:1px dashed #ad95c7;border-radius:9px;margin-top:10px}
+.v16-dual-preview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}
+.v16-dual-preview>div{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.73rem}
+.v16-dual-preview canvas{width:100%;height:auto;max-height:230px;object-fit:contain;image-rendering:pixelated;border:1px solid #c9bad9;background:white;border-radius:6px}
+.v16-note-list{display:grid;gap:8px;margin-top:10px;max-height:260px;overflow-y:auto}
+.v16-note{display:flex;gap:7px;align-items:center;border:1px solid #e2d9ea;background:#fff;border-radius:9px;padding:7px;flex-wrap:wrap}
+.v16-note button:first-child{flex:1;text-align:left;min-width:125px;white-space:normal}
+.v16-note .v16-remove{color:#a04958}
+body.beginner-mode .advanced-edit-toolbar,body.beginner-mode .motif-tools,body.beginner-mode #motifPreviewTools,
+body.beginner-mode #layerPanel,body.beginner-mode #patternHealth,body.beginner-mode #yarnLibraryPanel,
+body.beginner-mode #texturePanel,body.beginner-mode #shapesPanel,body.beginner-mode #versionHistoryPanel,
+body.beginner-mode #measurementPanel,body.beginner-mode #textStyleFavorite,
+body.beginner-mode .next-text-favorites{display:none!important}
+body.beginner-mode .editor-tools .edit-tool:not(#toolSelect):not(#toolPaint):not(#toolErase):not(#toolPan){display:none}
+body.accessible-contrast .stitch-editor,body.accessible-contrast .chart-pane,body.accessible-contrast .guide-dock{outline:2px solid #35264b;outline-offset:1px}
+@media(max-width:600px){.v16-dual-preview{grid-template-columns:repeat(2,minmax(0,1fr))}.v16-quickbar{padding:8px;gap:8px}.v16-quickbar label{font-size:.68rem}}

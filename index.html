@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.5.2">
+  <link rel="stylesheet" href="./styles.css?v=1.6.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -30,7 +30,14 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.5.2 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.6.1 · Local workspace</span></div>
+      <section class="v16-quickbar" aria-label="Display and skill level">
+        <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
+        <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
+        <label class="toggle"><input id="colorCueMode" type="checkbox"> Yarn shape cues</label>
+        <label class="toggle"><input id="alwaysSymbols" type="checkbox"> Emphasize yarn letters</label>
+        <label>Number size <select id="numberScale"><option value="1">Standard</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
+      </section>
       <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
       <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><div class="chart-split-control"><label for="chartSplit">Chart split</label><input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage slider"><label class="chart-split-number"><input id="chartSplitNumber" type="number" min="25" max="75" step="1" value="50" inputmode="numeric" aria-label="Overview width percentage">%</label></div><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
       <div class="toolbar" aria-label="Chart tools">
@@ -214,6 +221,45 @@
         <p id="yarnEstimateSummary" class="muted"></p>
       </details>
       <div class="section-divider"></div>
+      <section class="inspector-section v16-panel edit-section" id="versionHistoryPanel">
+        <div class="section-title"><span class="eyebrow">PROJECT VERSION HISTORY</span></div>
+        <p class="muted">Save up to eight named design milestones. Compare the current chart to an earlier version and restore one as a NEW project, leaving today's chart intact.</p>
+        <label class="field">Version label<input id="versionName" maxlength="70" placeholder="Before changing the lettering"></label>
+        <button type="button" class="button secondary block" id="saveVersion">Save design version</button>
+        <label class="field">Saved versions<select id="versionChoice"><option value="">No versions yet</option></select></label>
+        <div class="pair"><button id="compareVersion" type="button" class="button ghost">Compare versions</button><button id="restoreVersion" type="button" class="button ghost">Restore as copy</button></div>
+        <div id="versionCompare" class="v16-compare" hidden><div class="v16-dual-preview"><div><strong>Saved</strong><canvas id="savedVersionPreview" width="240" height="200"></canvas></div><div><strong>Current</strong><canvas id="currentVersionPreview" width="240" height="200"></canvas></div></div><p id="versionDiff" class="muted"></p></div>
+      </section>
+      <div class="section-divider"></div>
+      <section class="inspector-section v16-panel always-section" id="annotationsPanel"><div class="section-title"><span class="eyebrow">STITCH / ROW NOTES</span></div>
+        <label class="field">Attach note to<select id="annotationScope"><option value="stitch">Selected stitch</option><option value="row">Selected row</option><option value="section">Selected work section</option></select></label>
+        <label class="field">Reminder<textarea id="annotationText" rows="2" maxlength="280" placeholder="Change yarn here, check tension…"></textarea></label>
+        <button type="button" id="addAnnotation" class="button secondary block">Add reminder</button>
+        <div id="annotationList" class="v16-note-list"></div>
+        <p class="muted">Notes are stored with each project and appear in optional PDF notes pages. Orange markers on the chart indicate stitch notes.</p>
+      </section>
+      <div class="section-divider"></div>
+      <section class="inspector-section v16-panel edit-section" id="measurementPanel"><div class="section-title"><span class="eyebrow">STITCH RULER &amp; MEASUREMENT</span></div>
+        <label class="toggle"><input id="showMeasurementRuler" type="checkbox"> Show ruler markers around chart</label>
+        <p class="muted">Use Select area above the chart, then drag between two chart squares to measure the rectangular region.</p>
+        <button id="measureArea" type="button" class="button ghost block">Measure selected area</button>
+        <p id="measurementResult" class="measurement-result" role="status">Select an area to measure stitches and approximate size.</p>
+      </section>
+      <div class="section-divider"></div>
+      <section class="inspector-section v16-panel edit-section" id="shapesPanel"><div class="section-title"><span class="eyebrow">DRAW SHAPES</span></div>
+        <label class="field">Shape<select id="shapeKind"><option value="line">Straight line</option><option value="rectangle">Outline rectangle</option><option value="filled-rectangle">Filled rectangle</option><option value="ellipse">Outline ellipse</option><option value="filled-ellipse">Filled ellipse</option><option value="circle">Outline circle</option><option value="filled-circle">Filled circle</option></select></label>
+        <p class="muted">Use Select area to drag the shape boundaries on your working chart, then preview. Uses the currently selected yarn color.</p>
+        <div class="pair"><button id="previewShape" type="button" class="button ghost">Preview shape</button><button id="applyShape" type="button" class="button secondary">Apply shape</button></div>
+        <p id="shapeInfo" class="muted" role="status"></p>
+      </section>
+      <div class="section-divider"></div>
+      <section class="inspector-section v16-panel create-section edit-section" id="texturePanel"><div class="section-title"><span class="eyebrow">SIMULATED CROCHET PREVIEW</span></div>
+        <label>Stitch texture<select id="textureDensity"><option value="low">Soft</option><option value="medium" selected>Defined</option><option value="high">Detailed</option></select></label>
+        <button id="renderTexture" class="button ghost block" type="button">Preview crocheted appearance</button>
+        <div class="v16-dual-preview"><div><strong>Chart</strong><canvas id="textureOriginal" width="220" height="220"></canvas></div><div><strong>Simulation</strong><canvas id="textureSimulated" width="220" height="220"></canvas></div></div>
+        <p class="muted">Illustrative stitch texture only, not a physical simulation of yarn, hook size, tension, or fabric drape.</p>
+      </section>
+      <div class="section-divider"></div>
       <div class="inspector-section pdf-panel" aria-label="Printable PDF export">
         <div class="section-title"><span class="eyebrow">PRINTABLE PDF EXPORT</span><span class="pdf-chip">OFFLINE</span></div>
         <p class="muted">Download a complete PDF with a full-chart overview, symbol and yarn legend, and numbered stitch-by-stitch pages.</p>
@@ -260,11 +306,11 @@
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
   <div class="crochet-dock" aria-label="Crochet progress controls"><strong id="dockStatus" role="status"></strong><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo progress</button></div>
-  <script src="./pattern-tools.js?v=1.5.2" defer></script>
-  <script src="./advanced.js?v=1.5.2" defer></script>
-  <script src="./pdf-export.js?v=1.5.2" defer></script>
-  <script src="./next-features.js?v=1.5.2" defer></script>
-  <script src="./app.js?v=1.5.2" defer></script>
-  <script src="./help.js?v=1.5.2" defer></script>
+  <script src="./pattern-tools.js?v=1.6.1" defer></script>
+  <script src="./advanced.js?v=1.6.1" defer></script>
+  <script src="./pdf-export.js?v=1.6.1" defer></script>
+  <script src="./next-features.js?v=1.6.1" defer></script>
+  <script src="./app.js?v=1.6.1" defer></script>
+  <script src="./help.js?v=1.6.1" defer></script>
 </body>
 </html>
