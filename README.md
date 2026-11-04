@@ -48,3 +48,23 @@ uncertainty checks. For browser verification, serve this folder over localhost,
 load the Studio and wait for its service worker to control the page. Check image
 import, crop, manual corrections, legend confirmation, camera permission denial,
 then disconnect and reload the same URL to repeat the scan from the offline cache.
+
+### Generated chart validation
+
+An Edge canvas test used seven original glyph variants (six stitch IDs, with
+both cross and plus for single crochet) in each condition. The fixture shapes
+were derived from the bundled artwork. This measures tolerance to image changes,
+and does not estimate accuracy on real charts or fabric.
+
+| Image condition | Correct first match | Clear and correct |
+| --- | ---: | ---: |
+| Small (24 px drawing area) | 7/7 | 6/7 |
+| Tilted left 7 degrees, warm background | 7/7 | 1/7 |
+| Tilted right 7 degrees, gray background | 7/7 | 0/7 |
+| Large and bold | 7/7 | 7/7 |
+| Low contrast (17 gray levels apart) | 0/7 | 0/7 |
+
+The low-contrast crops all abstained. No fixture received a wrong clear match.
+The tilted fixtures show why uncertainty and legend confirmation matter even
+when the first suggestion is useful. Real chart photos and labeled fabric
+swatches are still needed to compare this baseline with any hosted model.
