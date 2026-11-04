@@ -1,21 +1,24 @@
-const CACHE = 'dorette-crochet-v1.6.1';
-const FILES = ['./','./index.html','./styles.css?v=1.6.1','./app.js?v=1.6.1','./pattern-tools.js?v=1.6.1','./advanced.js?v=1.6.1','./next-features.js?v=1.6.1','./pdf-export.js?v=1.6.1','./help.js?v=1.6.1','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
+const CACHE = 'dorette-crochet-v1.7.1';
+const FILES = ['./','./index.html','./styles.css?v=1.7.1','./app.js?v=1.7.1','./pattern-tools.js?v=1.7.1','./advanced.js?v=1.7.1','./next-features.js?v=1.7.1','./pdf-export.js?v=1.7.1','./help.js?v=1.7.1','./reliability.js?v=1.7.1','./pdf-worker.js?v=1.7.1','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES)));
 });
 self.addEventListener('activate', event => {
   event.waitUntil(Promise.all([caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('dorette-crochet-') && k !== CACHE).map(k => caches.delete(k)))), self.clients.claim()]));
 });
 self.addEventListener('fetch', event => {
   if(event.request.method!=='GET'||new URL(event.request.url).origin!==self.location.origin)return;
-  // Network-first app shell prevents old code from being served forever after new releases.
-  event.respondWith(fetch(event.request).then(response=>{
-    if(response.ok){const copy=response.clone();event.waitUntil(caches.open(CACHE).then(cache=>cache.put(event.request,copy)));}
-    return response;
-  }).catch(async()=>{
-    const cached=await caches.match(event.request);
-    if(cached)return cached;
-    if(event.request.mode==='navigate')return caches.match('./index.html');
-    throw new Error('Offline and resource is not cached');
+  // Serve a consistent release while a newer service worker waits for approval.
+  const url=new URL(event.request.url);
+  const scope=new URL(self.registration.scope);
+  const relative='./'+url.pathname.slice(scope.pathname.length)+url.search;
+  const shellNavigation=event.request.mode==='navigate'&&
+    (url.pathname===scope.pathname||url.pathname===scope.pathname+'index.html');
+  if(!shellNavigation&&!FILES.includes(relative))return;
+  event.respondWith(caches.open(CACHE).then(async cache=>{
+    const cached=await cache.match(shellNavigation?'./index.html':event.request);
+    return cached||fetch(event.request);
   }));
 });
+
+self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();});

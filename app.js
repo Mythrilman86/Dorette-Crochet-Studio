@@ -28,6 +28,9 @@ let toastTimer = null, referenceImg = null, referenceSrc = '', canvasWidth = 800
 let pendingConversion = null, cropPreviewRect = null, cropGesture = null, comparisonResults = null, textPreview = null;
 const view = {scale:1, x:0, y:0}, pointers = new Map();
 let gesture = {dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
+let lastPenTouchAt=0;
+function ignorePalmTouch(ev){if(ev.pointerType==='pen'){lastPenTouchAt=Date.now();return false;}return uiSettings().stylusOnly&&ev.pointerType==='touch'&&Date.now()-lastPenTouchAt<500;}
+
 let drawingPending = false;
 const EDIT_TOOLS = ['select','paint','erase','pick','pan','rect','bucket','area','paste'];
 let editorTool = 'select', paintStroke = null;
@@ -43,7 +46,14 @@ function clamp(n,min,max) {return Math.min(max,Math.max(min,n));}
 function validDimensions(cols,rows) {return Number.isInteger(cols)&&Number.isInteger(rows)&&cols>=1&&cols<=MAX_COLS&&rows>=1&&rows<=MAX_ROWS;}
 function indexFor(col,row) { return (active.rows-row)*active.cols+(col-1); }
 function format(n) {return n.toLocaleString('en-US');}
-function composedCells(project=active){return window.DoretteAdvanced.compose(project);}
+let renderRevision=0, composedCache=null, composedCacheRevision=-1, composedCacheProject=null;
+function invalidateChartCache(){renderRevision++;composedCache=null;}
+function composedCells(project=active){
+  if(project===active&&composedCache&&composedCacheRevision===renderRevision&&composedCacheProject===active)return composedCache;
+  const result=window.DoretteAdvanced.compose(project);
+  if(project===active){composedCache=result;composedCacheRevision=renderRevision;composedCacheProject=active;}
+  return result;
+}
 function compositeProject(project=active){return (project?.layers?.length)?{...project,cells:composedCells(project)}:project;}
 
 function currentCrop(p=active){
@@ -83,7 +93,23 @@ function updateChartSubtitle(){
   $('chartSubtitle').textContent=`${d.cols} columns × ${d.rows} rows • Row 1 begins at the bottom${preview?' • PREVIEW ONLY':''}`;
 }
 function toast(msg) {const t=$('toast'); t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3300);}
-function status(msg,error=false) {const el=$('saveStatus');el.textContent=msg;el.style.color=error?'#b35269':'#537e64';}
+function status(msg,error=false){const el=$('saveStatus');el.textContent=msg;el.style.color=error?'#b35269':'#537e64';}
+const invalidProjects=new Map();
+const reliability=window.DoretteReliability;
+let savePhase='opening',lastSaveTime=null,lastSaveError='',writePending=0;
+const failedWrites=new Map();
+let drawSamples=0,drawTotal=0,drawLast=0;
+function saveAlert(message){const el=$('saveAlert');if(!el)return;el.hidden=!message;$('saveAlertText').textContent=message||'';}
+function setSavePhase(phase,error=''){
+ savePhase=phase;
+ if(phase==='saved'){lastSaveError='';saveAlert(invalidProjects.size?`${invalidProjects.size} invalid stored project(s) protected from edits. Open Studio Diagnostics.`:'');}
+ if(phase==='failed'){lastSaveError=error||'Browser storage did not confirm the write';saveAlert('Save failed. Your latest edits may not be stored: '+lastSaveError+' · Export a project ZIP if possible.');}
+ if(phase==='blocked'){lastSaveError=error||'Browser storage unavailable';saveAlert('Browser storage is unavailable. Projects may not survive closing this page. Export backups privately.');}
+ const labels={opening:'Opening local storage…',unsaved:'● Unsaved changes',saving:'◌ Saving…',saved:lastSaveTime?`✓ Saved at ${lastSaveTime.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'✓ Saved on this device',failed:'⚠ Save failed',blocked:'⚠ Storage unavailable'};
+ status(labels[phase]||phase,phase==='failed'||phase==='blocked');
+ const detail=$('saveStateDetails');if(detail)detail.textContent=`${labels[phase]||phase}${writePending?` · ${writePending} pending write(s)`:''}`;
+}
+function needsSave(){return !!saveTimer||writePending>0||failedWrites.size>0||savePhase==='unsaved'||savePhase==='saving';}
 
 async function openDatabase() {
   return new Promise((resolve,reject)=>{
@@ -106,24 +132,45 @@ function dbRequest(storeType,action) {
   });
 }
 async function loadProjects(){return dbRequest('readonly',store=>store.getAll());}
-function queueWrite(project) {
-  if (memoryOnly) {status('Storage blocked — export backups',true);return Promise.resolve();}
-  const copy=structuredClone(project);
-  writeChain=writeChain.catch(()=>{}).then(()=>dbRequest('readwrite',store=>store.put(copy)));
-  writeChain.then(()=>status('✓ Saved on this device')).catch(e=>{status('Save failed — export a backup',true);toast('Unable to save locally: '+e.message);});
-  return writeChain;
+function refreshSaveState(){
+ if(memoryOnly){setSavePhase('blocked');return;}
+ if(failedWrites.size){setSavePhase('failed',failedWrites.values().next().value);return;}
+ if(saveTimer){setSavePhase('unsaved');return;}
+ setSavePhase(writePending?'saving':'saved');
+}
+function queueWrite(project){
+ const id=project.id;
+ const audit=reliability.auditProject(project);
+ const copy=audit.ok?structuredClone(project):null;
+ const result=writeChain.catch(()=>{}).then(()=>{
+   if(memoryOnly)throw new Error('Local database unavailable');
+   if(!audit.ok)throw new Error('Project validation: '+audit.errors[0]);
+   return dbRequest('readwrite',store=>store.put(copy));
+ });
+ writePending++;
+ writeChain=result;
+ const complete=error=>{
+   writePending--;
+   if(error)failedWrites.set(id,error.message);
+   else {failedWrites.delete(id);lastSaveTime=new Date();}
+   refreshSaveState();
+ };
+ result.then(()=>complete(),complete);
+ refreshSaveState();
+ return result;
 }
 function scheduleSave(){
-  if (!active) return;
-  queuePatternRender();
-  active.updatedAt=new Date().toISOString();
-  status(memoryOnly?'Storage blocked — export backups':'Saving…',memoryOnly);
-  const id=active.id;
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{saveTimer=null;const project=projects.get(id);if(project)queueWrite(project);},420);
+ if(!active)return;
+ invalidateChartCache();queuePatternRender();
+ active.updatedAt=new Date().toISOString();
+ if(memoryOnly){failedWrites.set(active.id,'Local database unavailable');setSavePhase('blocked');return;}
+ setSavePhase('unsaved');
+ const id=active.id;clearTimeout(saveTimer);
+ saveTimer=setTimeout(()=>{saveTimer=null;const p=projects.get(id);if(p)queueWrite(p).catch(()=>{});},420);
 }
 function flushSave(){
-  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(active)queueWrite(active);}
+ if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(active)queueWrite(active).catch(()=>{});}
+ return writeChain;
 }
 function refreshProjectList(){
   const list=$('projectList');list.replaceChildren();
@@ -151,14 +198,15 @@ function refreshProjectList(){
 }
 
 function selectProject(id) {
+  invalidateChartCache();
   v16ShapeProposal=null;
   clearColorProposal();
   $("grayTrio").replaceChildren();
   layerGesture=null;layerDragPreview=null;
   clearProgressHistory();
   clearMotifPreview();
-  flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];areaSelection=null;
-  $('undoButton').disabled=true;$('redoButton').disabled=true;updateAreaStatus();
+  flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];designHistoryLabels=[];redoHistoryLabels=[];areaSelection=null;
+  $('undoButton').disabled=true;$('redoButton').disabled=true;renderDesignHistory();updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
   selectedLayerId=null;editingLayerId=null;pendingCleanup=null;nextColorProposal=null;syncImage();refreshProjectList();refreshInspector();fitChart();refreshNextPanels();
 }
@@ -201,40 +249,61 @@ function undoState(){
 }
 const progressHistory=[];
 const PROGRESS_HISTORY_LIMIT=30;
+let designHistoryLabels=[],redoHistoryLabels=[];
 let motifPreview=null;
 let progressBrush=null, overviewStroke=null;
 let lastText=null, editingText=null, placingText=false, editingLayerId=null, selectedLayerId=null, pendingCleanup=null, studioMode='edit';
-function snapshot({keepProgress=false}={}){
+function snapshot({keepProgress=false,label='Design edit'}={}){
   clearColorProposal();
   pendingCleanup=null;
   $("applyCleanup").disabled=true;
-  if(!keepProgress)clearProgressHistory();
+  // Progress Undo is independent of design Undo; do not discard it on ordinary edits.
   if(editingText)clearTextPreview();
   lastText=null;
   $("editLastText").disabled=true;
   if(!active)return;
   undoStack.push(undoState());if(undoStack.length>30)undoStack.shift();
-  redoStack=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
+  designHistoryLabels.push(label);if(designHistoryLabels.length>30)designHistoryLabels.shift();
+  redoStack=[];redoHistoryLabels=[];$('undoButton').disabled=false;$('redoButton').disabled=true;
+  renderDesignHistory();
 }
 function restoreUndoState(state){
   clearColorProposal();
-  clearProgressHistory();
+  // Keep crochet-progress Undo when restoring an edit on the same grid.
+  const mirrored=!!active.referenceMirrored!==!!state.referenceMirrored;
+  if(active.cols!==state.cols||active.rows!==state.rows||mirrored)clearProgressHistory();
   clearMotifPreview();
   lastText=null;
   $("editLastText").disabled=true;
-  pendingCleanup=null;selectedLayerId=null;editingLayerId=null;discardPreview(false);clearTextPreview();Object.assign(active,state);window.DorettePattern.ensure(active);
+  // Design Undo must not revert independent crochet-progress marking.
+  // If dimensions changed, use the stored progress mapping so resizing remains reversible.
+  const keepProgress=active.cols===state.cols&&active.rows===state.rows;
+  const currentProgress=keepProgress?{done:active.done.slice(),rowDone:active.rowDone.slice(),guide:structuredClone(active.guide),diagonalIndex:active.diagonalIndex||0}:null;
+  pendingCleanup=null;selectedLayerId=null;editingLayerId=null;discardPreview(false);clearTextPreview();Object.assign(active,state);
+  if(currentProgress){
+    if(mirrored){
+      const {cols,rows}=active,done=currentProgress.done;
+      for(let row=0;row<rows;row++){
+        const start=row*cols;
+        done.splice(start,cols,...done.slice(start,start+cols).reverse());
+      }
+      currentProgress.guide.position=cols-1-currentProgress.guide.position;
+    }
+    Object.assign(active,currentProgress);
+  }
+  invalidateChartCache();window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
 }
 function undo(){
   if(!active||!undoStack.length||editBlocked("undo changes"))return;
-  redoStack.push(undoState());restoreUndoState(undoStack.pop());
-  $('undoButton').disabled=!undoStack.length;$('redoButton').disabled=false;toast('Undone — use Redo to restore.');
+  redoStack.push(undoState());redoHistoryLabels.push(designHistoryLabels.pop()||'Design edit');restoreUndoState(undoStack.pop());
+  $('undoButton').disabled=!undoStack.length;$('redoButton').disabled=false;renderDesignHistory();toast('Undone — use Redo to restore.');
 }
 function redo(){
   if(!active||!redoStack.length||editBlocked("redo changes"))return;
-  undoStack.push(undoState());restoreUndoState(redoStack.pop());
-  $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;toast('Change redone.');
+  undoStack.push(undoState());designHistoryLabels.push(redoHistoryLabels.pop()||'Design edit');restoreUndoState(redoStack.pop());
+  $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;renderDesignHistory();toast('Change redone.');
 }
 function updateSelection(){
   updateProgressUndo();
@@ -403,7 +472,6 @@ function clearProgressHistory(){
   updateProgressUndo();
 }
 function progressSnapshot(){
-  snapshot({keepProgress:true});
   progressHistory.push({done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide},diagonalIndex:active.diagonalIndex||0});
   if(progressHistory.length>PROGRESS_HISTORY_LIMIT)progressHistory.shift();
   updateProgressUndo();
@@ -411,7 +479,6 @@ function progressSnapshot(){
 function undoProgress(){
   if(!active||pendingConversion||!progressHistory.length)return;
   const {done,rowDone,guide,diagonalIndex}=progressHistory.pop();
-  snapshot({keepProgress:true});
   Object.assign(active,{done,rowDone,guide,diagonalIndex});
   updateProgressUndo();
   scheduleSave();updateProgress();
@@ -430,7 +497,7 @@ function markStitch(){
 }
 function markRow(){
   if(pendingConversion||!selected||!active)return;
-  snapshot();active.rowDone[selected.row-1]=active.rowDone[selected.row-1]?0:1;
+  progressSnapshot();active.rowDone[selected.row-1]=active.rowDone[selected.row-1]?0:1;
   scheduleSave();updateSelection();updateProgress();requestDraw();
 }
 function symmetricIndexes(col,row){
@@ -524,6 +591,7 @@ function mirrorChart(){
   });
   active.annotations=(active.annotations||[]).map(note=>note.scope==='row'?note:
     DoretteNext.locateNote({...note,col:cols+1-note.col},active));
+  clearProgressHistory();
   active.referenceMirrored=!active.referenceMirrored;
   if(selected)selected={...selected,col:cols+1-selected.col};
   active.guide.position=cols-1-active.guide.position;
@@ -539,7 +607,7 @@ function editDimensions(){
   const old=active;
   if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
   snapshot();
-  Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
+  clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
   active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
   areaSelection=null;
   if(selected&&(selected.col>cols||selected.row>rows))selected=null;
@@ -1042,11 +1110,13 @@ function setChartLayout(mode,remember=true){
   requestDraw();
 }
 function draw(){
+  const stamp=performance.now();
   drawScene(ctx,canvasWidth,canvasHeight,view);
-  if(!active||$('overviewPane').hidden)return;
+  if(!active||$('overviewPane').hidden){drawLast=performance.now()-stamp;drawSamples++;drawTotal+=drawLast;return;}
   const rect=overviewCanvas.getBoundingClientRect(), w=Math.max(1,rect.width),h=Math.max(1,rect.height);
   const dpr=Math.min(devicePixelRatio||1,2);
-  overviewCanvas.width=Math.round(w*dpr);overviewCanvas.height=Math.round(h*dpr);
+  const pixelW=Math.round(w*dpr),pixelH=Math.round(h*dpr);
+  if(overviewCanvas.width!==pixelW||overviewCanvas.height!==pixelH){overviewCanvas.width=pixelW;overviewCanvas.height=pixelH;}
   const dims=displayDimensions();
   const margin=64*(Number(v16Prefs.numberScale)||1);
   const s=Math.min((w-24)/boardWidth(),(h-24)/boardHeight(),Math.max(1,w-margin)/(dims.cols*CELL),Math.max(1,h-margin)/(dims.rows*CELL));
@@ -1057,6 +1127,7 @@ function draw(){
   const x=Math.max(0,-view.x/view.scale),y=Math.max(0,-view.y/view.scale);
   const right=Math.min(boardWidth(),(canvasWidth-view.x)/view.scale),bottom=Math.min(boardHeight(),(canvasHeight-view.y)/view.scale);
   if(right>x&&bottom>y){g.save();g.setTransform(dpr,0,0,dpr,0,0);g.strokeStyle='#d23f17';g.lineWidth=2;g.setLineDash([6,3]);g.strokeRect(overviewView.x+x*s,overviewView.y+y*s,(right-x)*s,(bottom-y)*s);g.restore();}
+  drawLast=performance.now()-stamp;drawSamples++;drawTotal+=drawLast;
 }
 function makeMarkStroke(cell,pointerId){
   const complete=active.done[indexFor(cell.col,cell.row)]||active.rowDone[cell.row-1];
@@ -1080,12 +1151,13 @@ function navigateOverview(ev){
   }
   selected={col,row};view.x=canvasWidth/2-wx*view.scale;view.y=canvasHeight/2-wy*view.scale;updateSelection();requestDraw();
 }
-overviewCanvas.addEventListener('pointerdown',ev=>{overviewCanvas.setPointerCapture(ev.pointerId);navigateOverview(ev);});
-overviewCanvas.addEventListener('pointermove',ev=>{if(ev.buttons)navigateOverview(ev);});
+overviewCanvas.addEventListener('pointerdown',ev=>{if(ignorePalmTouch(ev))return;overviewCanvas.setPointerCapture(ev.pointerId);navigateOverview(ev);});
+overviewCanvas.addEventListener('pointermove',ev=>{if(ignorePalmTouch(ev))return;if(ev.buttons)navigateOverview(ev);});
 for(const type of ['pointerup','pointercancel','lostpointercapture'])overviewCanvas.addEventListener(type,ev=>{if(overviewStroke?.pointerId===ev.pointerId)overviewStroke=null;});
 overviewCanvas.addEventListener('keydown',ev=>{if(!active)return;const moves={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};if(!moves[ev.key])return;ev.preventDefault();const [dc,dr]=moves[ev.key];selected={col:clamp((selected?.col||1)+dc,1,active.cols),row:clamp((selected?.row||1)+dr,1,active.rows)};view.x=canvasWidth/2-(M+(selected.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-selected.row+.5)*CELL)*view.scale;updateSelection();requestDraw();});
 
 canvas.addEventListener('pointerdown',ev=>{
+  if(ignorePalmTouch(ev))return;
   if(startLayerDrag(ev))return;
   if(ev.button!==0&&ev.pointerType==='mouse')return;
   canvas.setPointerCapture(ev.pointerId);
@@ -1107,6 +1179,7 @@ canvas.addEventListener('pointerdown',ev=>{
   }
 });
 canvas.addEventListener('pointermove',ev=>{
+  if(ignorePalmTouch(ev))return;
   if(moveLayerDrag(ev))return;
   const prev=pointers.get(ev.pointerId);if(!prev)return;
   pointers.set(ev.pointerId,{x:ev.offsetX,y:ev.offsetY});
@@ -1154,7 +1227,7 @@ function endPointer(ev){
       }else if(editorTool==='bucket'&&!pendingConversion){
         if(editBlocked('fill stitches')){}
         else {const target=Number($('paintColor').value),from=active.cells[indexFor(cell.col,cell.row)];
-          if(from!==target){snapshot();const n=window.DorettePattern.bucket(active,cell.col,cell.row,target);if(n){active.converted=true;scheduleSave();updateLegend();toast('Filled '+format(n)+' connected stitches.');}}}
+          if(from!==target){snapshot({label:'Fill connected region'});const n=window.DorettePattern.bucket(active,cell.col,cell.row,target);if(n){active.converted=true;scheduleSave();updateLegend();toast('Filled '+format(n)+' connected stitches.');}}}
       }else if(editorTool==='paste'&&!pendingConversion){
         if(editBlocked('paste stitches')){}
         else if(stitchClipboard)pasteClipboard(cell);
@@ -1432,26 +1505,45 @@ function updatePdfEstimate(){
     $('pdfPages').textContent=`${info.pages} pages: 1 overview + 1 yarn legend + ${info.across*info.down} numbered sections${info.extraPages?' + checklist and notes':''} (${info.across} across × ${info.down} down). ${info.overlap?`Up to ${info.overlap} repeated stitches on shared edges, outside purple outline (reference only). May increase pages.`:'No repeated stitches.'}`;
   }catch(e){$('pdfPages').textContent='Cannot prepare the PDF: '+e.message;}
 }
-function exportPdf(){
-  if(!active)return;
-  if(!window.DorettePdf){toast('PDF export files are missing. Update all GitHub files.');return;}
-  const button=$('exportPdf');
-  if(button.disabled)return;
-  button.disabled=true;button.textContent='Preparing PDF…';
-  // Let the browser draw the busy state before doing the vector export.
-  setTimeout(()=>{
-    try{
-      // Always export the SAVED project, never a temporary photo preview.
-      const {bytes,pages}=window.DorettePdf.build(compositeProject(active),pdfSettings());
-      download(new Blob([bytes],{type:'application/pdf'}),`${slug(active.name)}-Crochet-Chart.pdf`);
-      toast(`${pages}-page PDF downloaded. Open it from Downloads.`);
-    }catch(e){toast('PDF export failed: '+e.message);console.error(e);}
-    finally{button.disabled=false;button.textContent='⇩ Download printable PDF';}
-  },50);
+function runPdfJob(kind){
+ if(!active||!window.DorettePdf)return toast('PDF engine not ready. Reload all app files.');
+ const isWritten=kind==='written',button=$(isWritten?'exportWrittenPdf':'exportPdf');
+ if(button.disabled)return;
+ const checked=compositeProject(active),audit=reliability.auditExport(active,checked.cells);
+ if(!audit.ok)return toast('Export stopped: '+audit.errors[0]);
+ const project=structuredClone(checked),settings=pdfSettings(),filename=`${slug(active.name)}-${isWritten?'Written-Rows':'Crochet-Chart'}.pdf`;
+ button.disabled=true;const originalText=button.textContent;button.textContent='Preparing PDF…';
+ let finished=false,worker=null,timer=null,fallbackStarted=false;
+ const done=(result,error)=>{
+   if(finished)return;finished=true;clearTimeout(timer);
+   if(worker){worker.terminate();worker=null;}
+   if(error){toast('PDF export failed: '+error.message);console.error(error);}
+   else if(!reliability.verifyPdf(result.bytes))toast('PDF export failed a file signature check.');
+   else {download(new Blob([result.bytes],{type:'application/pdf'}),filename);toast(`${result.pages}-page PDF downloaded. Saved chart unchanged.`);}
+   button.disabled=false;button.textContent=originalText;
+ };
+ const fallback=()=>{
+   if(fallbackStarted||finished)return;fallbackStarted=true;clearTimeout(timer);
+   if(worker){worker.terminate();worker=null;}
+   setTimeout(()=>{
+   try{const result=isWritten?window.DorettePdf.buildWritten(project,settings):window.DorettePdf.build(project,settings);done(result,null);}
+   catch(e){done(null,e);}
+ },40);};
+ if(typeof Worker==='undefined'||!/^https?:$/.test(location.protocol)){fallback();return;}
+ try{
+   worker=new Worker('./pdf-worker.js?v=1.7.1');
+   worker.onmessage=ev=>{if(ev.data?.error||!reliability.verifyPdf(ev.data?.bytes))fallback();else done(ev.data,null);};
+   worker.onerror=fallback;worker.onmessageerror=fallback;
+   timer=setTimeout(fallback,30000);
+   worker.postMessage({kind,project,settings});
+ }catch(e){if(worker){worker.terminate();worker=null;}fallback();}
 }
+function exportPdf(){runPdfJob('chart');}
 function exportBackup(all=false){
   flushSave();const items=all?[...projects.values()]:[active];
   if(!items.length)return;
+  const bad=items.map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
+  if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
   const payload=JSON.stringify(backupPayload(items));
   const readme=`Dorette Crochet Studio backup\nExported: ${new Date().toISOString()}\nProjects: ${items.length}\n\nRestore using the Restore backup button inside Dorette Crochet Studio.\nThis ZIP includes backup.json with project data, progress, yarn colors, and any embedded reference images.\nDo not extract or modify the ZIP before restoring. Store a copy in Google Drive.\n`;
   const bytes=makeZip({'README.txt':readme,'backup.json':payload});
@@ -1487,15 +1579,19 @@ async function restoreBackup(file){
     }
     if(payload?.app!=='dorette-crochet-studio'||payload?.version!==1||!Array.isArray(payload.projects)||payload.projects.length<1||payload.projects.length>100)throw new Error('Not a supported Dorette backup');
     const restored=payload.projects.map(validateBackup); // Check everything BEFORE changing existing data.
-    for(const p of restored){projects.set(p.id,p);await queueWrite(p);}
-    selectProject(restored[0].id);toast(`Restored ${restored.length} project${restored.length===1?'':'s'} as new copies.`);
+    const writes=restored.map(p=>{projects.set(p.id,p);return queueWrite(p);});
+    const saved=await Promise.allSettled(writes);
+    selectProject(restored[0].id);
+    if(saved.some(result=>result.status==='rejected'))toast('Copies opened. Some could not save to this device. Retry saving or export a backup.');
+    else toast('Restored '+restored.length+' project(s) as new copies.');
   }catch(e){toast('Could not restore: '+e.message);}
 }
 
 async function removeActiveProject(){
   if(!active||!confirm(`Delete “${active.name}” from this device? Make a backup first. This cannot be undone.`))return;
-  flushSave();const id=activeId;projects.delete(id);
-  if(!memoryOnly){try{await writeChain.catch(()=>{});await dbRequest('readwrite',store=>store.delete(id));}catch(e){toast('Deletion could not be saved: '+e.message);}}
+  flushSave();const id=activeId;
+  if(!memoryOnly){try{await writeChain.catch(()=>{});await dbRequest('readwrite',store=>store.delete(id));}catch(e){toast('Deletion could not be saved: '+e.message);return;}}
+  projects.delete(id);failedWrites.delete(id);refreshSaveState();
   if(projects.size===0){const p=blankProject('My First Chart',79,117);projects.set(p.id,p);queueWrite(p);}
   selectProject(projects.keys().next().value);toast('Project deleted from local storage.');
 }
@@ -1668,18 +1764,7 @@ function guideChangeRow(n){
   const g=active.guide;g.row=clamp(g.row+n,1,active.rows);g.position=0;g.finished=false;
   scheduleSave();focusGuideCell();
 }
-function exportWrittenPdf(){
-  if(!active||!window.DorettePdf?.buildWritten)return toast('Please install all Version 1.0 files, including the PDF exporter.');
-  const btn=$('exportWrittenPdf');btn.disabled=true;btn.textContent='Building written instructions…';
-  setTimeout(()=>{
-    try{
-      const {bytes,pages}=window.DorettePdf.buildWritten(compositeProject(active),pdfSettings());
-      download(new Blob([bytes],{type:'application/pdf'}),`${slug(active.name)}-Written-Rows.pdf`);
-      toast(`${pages}-page row-by-row PDF downloaded. Saved chart is unchanged.`);
-    }catch(e){toast('Written export failed: '+e.message);console.error(e);}
-    finally{btn.disabled=false;btn.textContent='⇩ Download written instructions PDF';}
-  },50);
-}
+function exportWrittenPdf(){runPdfJob('written');}
 function v16ValidateVersions(p){
   const arr=p.versions??[];
   if(!Array.isArray(arr)||arr.length>V16_MAX_VERSIONS)throw Error('Invalid saved project version history');
@@ -1895,6 +1980,9 @@ function hookPatternEvents(){
     const cp=active.checkpoints.find(c=>c.id===$('checkpointChoice').value);if(!cp)return;
     if(!confirm(`Restore “${cp.name}”? Current changes will be kept in Undo history. Save a ZIP backup too.`))return;
     snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),layers:structuredClone(cp.layers||[]),converted:true,referenceMirrored:cp.referenceMirrored===true});
+    clearProgressHistory();
+    active.annotations=(cp.annotations||active.annotations||[]).filter(note=>note.row<=active.rows&&note.col<=active.cols).map(note=>DoretteNext.locateNote(note,active));
+    active.guide={row:1,position:0};active.diagonalIndex=0;
     Pattern.ensure(active);areaSelection=null;selected=null;scheduleSave();refreshInspector();fitChart();toast('Snapshot restored; Undo is available.');
   });
 }
@@ -2229,7 +2317,7 @@ function verifyGridDimensions(){
  const cols=Number($('gridCols').value),rows=Number($('gridRows').value);
  if(!validDimensions(cols,rows))return toast('Choose a valid 1–200 by 1–300 grid.');
  if(!confirm(`Use ${cols} columns and ${rows} rows? This resizes the current chart using nearest-cell canvas mapping. Back up your important project first.`))return;
- snapshot();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
+ snapshot();clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
 }
 function doAdvancedResize(){
  if(!active||editBlocked('resize the chart'))return;
@@ -2237,7 +2325,7 @@ function doAdvancedResize(){
  if(!validDimensions(cols,rows))return toast('Choose chart dimensions from 1–200 columns and 1–300 rows.');
  const mode=$('resizeMode').value,anchor=$('resizeAnchor').value;
  if(!confirm(`${mode==='scale'?'Scale all stitch cells':'Expand or crop without stretching'} to ${cols} × ${rows}, anchored ${anchor}? Cropped cells cannot be recovered except through Undo or a backup.`))return;
- snapshot();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
+ snapshot();clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
  active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Advanced resize applied. Undo remains available.');
 }
 function plotGrayTrio(){
@@ -2282,7 +2370,9 @@ function navigateQualityProblem(){
  }
 }
 function exportChartImage(kind){
- if(!active)return;const options={cell:Number($('imageExportScale').value)||12,numbers:$('imageExportNumbers').checked,legend:$('imageExportNumbers').checked,sections:Number(active.sectionSize)||25};
+ if(!active)return;
+ const audit=reliability.auditExport(active,composedCells(active));
+ if(!audit.ok){toast('Export blocked: '+audit.errors[0]);return;}const options={cell:Number($('imageExportScale').value)||12,numbers:$('imageExportNumbers').checked,legend:$('imageExportNumbers').checked,sections:Number(active.sectionSize)||25};
  const svg=NF.svg(active,options),file=slug(active.name)+'-Chart';
  if(kind==='svg'){download(new Blob([svg],{type:'image/svg+xml'}),file+'.svg');return;}
  const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
@@ -2380,7 +2470,7 @@ function hookNextEvents(){
     const c=b.left+Math.min(oldW-1,Math.floor((col-area.left+.5)*oldW/newW)),r=b.bottom+Math.min(oldH-1,Math.floor((row-area.bottom+.5)*oldH/newH)),color=old.get(indexFor(c,r));
     if(color!==undefined)entries.set(indexFor(col,row),color);
   }
-  snapshot();layer.entries=[...entries];layer.source=null;scheduleSave();renderLayers();updateLegend();requestDraw();toast('Layer fitted to selection (stitch-based nearest-neighbor scale).');
+  snapshot({label:'Resize editable layer'});layer.entries=[...entries];layer.source=null;scheduleSave();renderLayers();updateLegend();requestDraw();toast('Layer fitted to selection (stitch-based nearest-neighbor scale).');
  });
  $('matchYarn').addEventListener('click',matchSelectedYarn);
  $('exportPng').addEventListener('click',()=>exportChartImage('png'));$('exportSvg').addEventListener('click',()=>exportChartImage('svg'));
@@ -2662,6 +2752,77 @@ function v16Hook(){
   v16ApplyPrefs();
 }
 
+function renderDesignHistory(){
+ const panel=$('designHistory');if(!panel)return;panel.replaceChildren();
+ const count=designHistoryLabels.length;
+ for(const label of designHistoryLabels.slice(-8).reverse()){
+   const line=document.createElement('div');line.className='history-line';line.textContent='↶ '+label;panel.append(line);
+ }
+ if(!count){const hint=document.createElement('small');hint.className='muted';hint.textContent='No design edits in this session.';panel.append(hint);}
+ $('historyUndo').disabled=!undoStack.length;$('historyRedo').disabled=!redoStack.length;
+}
+function diagnosticsPayload(){return reliability.makeDiagnostics({
+ version:'1.7.1',saveState:savePhase,pendingWrites:writePending+(saveTimer?1:0),projectCount:projects.size,
+ activeProject:active,renderMetrics:{lastDrawMs:Number(drawLast.toFixed(1)),averageDrawMs:drawSamples?Number((drawTotal/drawSamples).toFixed(1)):0},
+ });}
+function showDiagnostics(){
+ const host=$('diagnosticSummary');if(!host)return;
+ const report=diagnosticsPayload();
+ host.textContent=JSON.stringify({...report,quarantinedProjects:invalidProjects.size,quarantinedChecks:[...invalidProjects.values()].map(x=>x.check)},null,2);
+}
+function setupReliabilityTools(){
+ const run=$('runIntegrityCheck');if(!run)return;
+ run.addEventListener('click',()=>{showDiagnostics();const r=active?reliability.auditProject(active):null;
+   $('integrityStatus').textContent=!r?'No project selected':r.ok?'✓ Project data structure is valid. This does not replace project backups.':`⚠ ${r.errors.length} validation issue(s): ${r.errors.join('; ')}`;
+ });
+ $('copyDiagnostic').addEventListener('click',async()=>{
+   const body=JSON.stringify(diagnosticsPayload(),null,2);
+   try{await navigator.clipboard.writeText(body);toast('Privacy-safe diagnostics copied.');}
+   catch{const b=new Blob([body],{type:'application/json'});download(b,'Dorette-Diagnostics.json');toast('Diagnostics downloaded instead of copied.');}
+ });
+ $('exportInvalid').addEventListener('click',()=>{
+   if(!invalidProjects.size)return toast('No invalid stored projects were found.');
+   const payload={format:'dorette-raw-recovery',version:1,reason:'Preserve these original bytes for inspection, NOT for normal Restore',records:[...invalidProjects.values()].map(v=>v.raw)};
+   download(new Blob([JSON.stringify(payload)],{type:'application/json'}),'Dorette-Quarantined-Projects-RAW.json');
+   toast('Original invalid records exported. Keep the file private; do not use it with Restore.');
+ });
+ $('retrySave').addEventListener('click',()=>{if(memoryOnly)return toast('Local storage is blocked. Use private project backups.');flushSave();const ids=new Set([...failedWrites.keys(),activeId]);for(const id of ids){const p=projects.get(id);if(p)queueWrite(p);}});
+ $('historyUndo').addEventListener('click',undo);$('historyRedo').addEventListener('click',redo);
+ renderDesignHistory();showDiagnostics();
+}
+function setupServiceWorkerUpdates(){
+ if(!('serviceWorker' in navigator)||!location.protocol.startsWith('http'))return;
+ let installingUpdate=false,registration=null;
+ navigator.serviceWorker.addEventListener('controllerchange',()=>{
+   if(installingUpdate&&!needsSave())location.reload();
+   else if(installingUpdate)toast('Update installed. Finish saving, then reload to open it.');
+   installingUpdate=false;
+ });
+ function readyUpdate(reg){if(!reg?.waiting||!navigator.serviceWorker.controller)return;
+   $('updateAvailable').hidden=false;
+   $('updateAvailableText').textContent='A newer Studio version is ready. Save your changes before applying the update.';
+ }
+ navigator.serviceWorker.register('./service-worker.js').then(reg=>{
+   registration=reg;readyUpdate(reg);
+   reg.addEventListener('updatefound',()=>{const w=reg.installing;if(!w)return;
+     w.addEventListener('statechange',()=>{if(w.state==='installed')readyUpdate(reg);});
+   });
+ }).catch(e=>{console.warn('Service worker registration unavailable:',e.message);});
+ $('checkUpdates').addEventListener('click',async()=>{
+   if(!navigator.onLine)return toast('Connect to the internet to check for an update.');
+   if(!registration)return toast('Update service is not ready yet.');
+   try{await registration.update();readyUpdate(registration);if(!registration.waiting)toast('Update check complete. No ready update detected.');}
+   catch(e){toast('Update check failed: '+e.message);}
+ });
+ $('installReadyUpdate').addEventListener('click',async()=>{
+   if(!registration?.waiting)return toast('There is no update ready to install.');
+   flushSave();try{await writeChain;if(needsSave()){toast('Saving is still in progress. Try again.');return;}}
+   catch{toast('Save failed. Export a private project backup before updating.');return;}
+   if(memoryOnly||failedWrites.size)return toast('Save your projects before applying the update.');
+   installingUpdate=true;registration.waiting?.postMessage({type:'SKIP_WAITING'});
+ });
+}
+
 function hookEvents(){
   hookNextEvents();
   $('newProjectForm').addEventListener('submit',ev=>{
@@ -2672,7 +2833,7 @@ function hookEvents(){
   });
   $('projectName').addEventListener('change',()=>{
     if(!active)return;const name=$('projectName').value.trim();if(!name){$('projectName').value=active.name;return;}
-    if(name===active.name)return;snapshot();active.name=name.slice(0,70);scheduleSave();refreshInspector();refreshProjectList();
+    if(name===active.name)return;snapshot({label:'Rename project'});active.name=name.slice(0,70);scheduleSave();refreshInspector();refreshProjectList();
   });
   $('applyDimensions').addEventListener('click',editDimensions);
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
@@ -2864,7 +3025,8 @@ function hookEvents(){
   $('deleteProject').addEventListener('click',removeActiveProject);
   new ResizeObserver(resizeCanvas).observe($('canvasWrap'));
   new ResizeObserver(requestDraw).observe(overviewCanvas);
-  window.addEventListener('beforeunload',()=>flushSave());
+  window.addEventListener('pagehide',()=>{flushSave();});
+  window.addEventListener('beforeunload',ev=>{if(needsSave()){flushSave();ev.preventDefault();ev.returnValue='';}});
 }
 async function initialize(){
   hookEvents();v16Hook();
@@ -2872,13 +3034,17 @@ async function initialize(){
   $('dualChart').addEventListener('click',()=>setChartLayout('dual'));
   let chartLayout='dual';try{chartLayout=localStorage.getItem('dorette-chart-layout')||'dual';}catch{}
   setChartLayout(chartLayout,false);
-  try {db=await openDatabase();const items=await loadProjects();items.forEach(p=>projects.set(p.id,p));}
-  catch(e){memoryOnly=true;status('Browser storage blocked — backups only',true);toast('Local saving is unavailable. Keep backups and use a normal browser window.');}
-  if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);await queueWrite(sample);}
+  try{
+    db=await openDatabase();const items=await loadProjects();
+    for(const p of items){const check=reliability.auditProject(p);if(check.ok)projects.set(p.id,p);else invalidProjects.set(String(p?.id||'invalid-'+invalidProjects.size),{raw:p,check});}
+  }catch(e){memoryOnly=true;setSavePhase('blocked',e.message);toast('Local saving is unavailable. Keep private backups in a normal browser window.');}
+  if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);if(!memoryOnly)await queueWrite(sample).catch(()=>{});}
   let preferred=null;try{preferred=localStorage.getItem('dorette-active-project');}catch{}
   resizeCanvas();selectProject(projects.has(preferred)?preferred:projects.keys().next().value);
-  if(!memoryOnly)status('✓ Saved on this device');
-  if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+  if(!memoryOnly&&!needsSave())setSavePhase('saved');
+  if(invalidProjects.size)saveAlert(`${invalidProjects.size} stored project(s) failed validation. Originals remain untouched. Open Studio Diagnostics to export the raw record.`);
+  setupReliabilityTools();
+  setupServiceWorkerUpdates();
 }
 initialize().catch(e=>{status('Unable to open workspace',true);toast(e.message);});
 })();

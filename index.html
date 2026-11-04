@@ -7,7 +7,7 @@
   <meta name="description" content="Create, track and back up crochet charts on your device.">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
-  <link rel="stylesheet" href="./styles.css?v=1.6.1">
+  <link rel="stylesheet" href="./styles.css?v=1.7.1">
   <title>Dorette Crochet Studio</title>
 </head>
 <body>
@@ -15,6 +15,8 @@
     <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
+  <div id="saveAlert" class="reliability-alert" role="alert" hidden><span id="saveAlertText"></span><button id="retrySave" class="button ghost" type="button">Retry saving</button></div>
+  <div id="updateAvailable" class="update-notice" role="status" hidden><span id="updateAvailableText"></span><button id="installReadyUpdate" class="button secondary" type="button">Save and update Studio</button></div>
   <main class="layout">
     <aside class="sidebar" aria-label="Projects">
       <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
@@ -30,7 +32,7 @@
     </aside>
 
     <section class="workspace" aria-label="Chart editor">
-      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.6.1 · Local workspace</span></div>
+      <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill">v1.7.1 · Local workspace</span></div>
       <section class="v16-quickbar" aria-label="Display and skill level">
         <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
         <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
@@ -51,6 +53,17 @@
         <button id="mirrorChart" class="button ghost" type="button">Mirror chart</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
+      <details class="reliability-drawer"><summary><span>Studio health &amp; updates</span><span class="reliability-subline">Project integrity, safe saves, diagnostics</span></summary>
+        <div class="reliability-grid">
+          <div class="health-mini"><strong>Save status</strong><p id="saveStateDetails" role="status">Opening local storage…</p><button id="checkUpdates" class="button ghost" type="button">Check for Studio updates</button></div>
+          <div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
+        </div>
+        <p class="muted">Checks never modify a broken project. Invalid records stay in your browser's local database until you decide what to do. Diagnostics do not include pattern images, names, yarn records, notes, or stitch colors.</p>
+        <div class="health-mini"><strong>Privacy-safe diagnostics</strong><button id="copyDiagnostic" class="button secondary" type="button">Copy diagnostic report</button><pre id="diagnosticSummary" class="diagnostic-output" aria-label="Current diagnostics"></pre></div>
+      </details>
+      <details class="reliability-drawer history-drawer"><summary><span>Design Undo / Redo history</span><span class="reliability-subline">Separate from crochet progress</span></summary>
+        <div class="history-actions"><button id="historyUndo" type="button" class="button ghost">Undo design</button><button id="historyRedo" type="button" class="button ghost">Redo design</button></div><div id="designHistory" aria-live="polite"></div><p class="muted">Current-session design edits only. Crochet progress uses its own Undo progress control. Use saved design versions for long-term milestones.</p>
+      </details>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
@@ -306,11 +319,12 @@
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
   <div class="crochet-dock" aria-label="Crochet progress controls"><strong id="dockStatus" role="status"></strong><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo progress</button></div>
-  <script src="./pattern-tools.js?v=1.6.1" defer></script>
-  <script src="./advanced.js?v=1.6.1" defer></script>
-  <script src="./pdf-export.js?v=1.6.1" defer></script>
-  <script src="./next-features.js?v=1.6.1" defer></script>
-  <script src="./app.js?v=1.6.1" defer></script>
-  <script src="./help.js?v=1.6.1" defer></script>
+  <script src="./pattern-tools.js?v=1.7.1" defer></script>
+  <script src="./advanced.js?v=1.7.1" defer></script>
+  <script src="./pdf-export.js?v=1.7.1" defer></script>
+  <script src="./next-features.js?v=1.7.1" defer></script>
+  <script src="./reliability.js?v=1.7.1" defer></script>
+  <script src="./app.js?v=1.7.1" defer></script>
+  <script src="./help.js?v=1.7.1" defer></script>
 </body>
 </html>

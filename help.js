@@ -57,5 +57,7 @@
     button.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();panel.hidden=!panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));});
     panel.addEventListener('keydown',e=>{if(e.key==='Escape'){panel.hidden=true;button.setAttribute('aria-expanded','false');button.focus();}});
   }
+  const health=document.querySelector('.reliability-drawer');
+  if(health){const note=document.createElement('p');note.className='muted';note.textContent='New in 1.7.0: project integrity checks do not alter records. Confirmed autosave is displayed only after the database transaction finishes. Use the diagnostic report when asking for help; it deliberately excludes private chart details. Update notifications wait until unsaved changes have been written.';health.append(note);}
   const link=document.createElement('a');link.className='guide-link';link.href='./Dorette-Crochet-Studio-User-Guide.pdf';link.textContent='Illustrated user guide (PDF)';link.target='_blank';link.rel='noopener';document.querySelector('.workspace-top').after(link);
 })();

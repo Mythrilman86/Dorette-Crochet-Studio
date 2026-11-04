@@ -224,3 +224,29 @@ body.beginner-mode .next-text-favorites{display:none!important}
 body.beginner-mode .editor-tools .edit-tool:not(#toolSelect):not(#toolPaint):not(#toolErase):not(#toolPan){display:none}
 body.accessible-contrast .stitch-editor,body.accessible-contrast .chart-pane,body.accessible-contrast .guide-dock{outline:2px solid #35264b;outline-offset:1px}
 @media(max-width:600px){.v16-dual-preview{grid-template-columns:repeat(2,minmax(0,1fr))}.v16-quickbar{padding:8px;gap:8px}.v16-quickbar label{font-size:.68rem}}
+
+/* v1.7.0 - clarity, health panels, touch targets, and safe update banners */
+.reliability-alert,.update-notice{padding:12px clamp(12px,2vw,26px);display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:.83rem;line-height:1.4;position:sticky;top:0;z-index:20;box-shadow:0 2px 9px #231b3218}
+.reliability-alert[hidden],.update-notice[hidden]{display:none!important}
+.reliability-alert{background:#fff1f2;border-bottom:2px solid #b84b67;color:#813043}
+.update-notice{background:#f4effd;border-bottom:2px solid #9473d4;color:#534072}
+.reliability-alert .button,.update-notice .button{flex:0 0 auto;white-space:normal}
+.reliability-drawer{background:#fff;border:1px solid #e4ddeb;border-radius:13px;padding:11px 13px;min-width:0}
+.reliability-drawer summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.77rem;font-weight:800;color:#54416e}
+.reliability-drawer summary::-webkit-details-marker{display:none}
+.reliability-drawer summary::before{content:'▸';margin-right:3px;color:#8d75ae}
+.reliability-drawer[open] summary::before{content:'▾'}
+.reliability-subline{font-size:.69rem;color:#7f718e;font-weight:500}
+.reliability-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:12px 0}
+.health-mini{background:#faf8fd;border:1px solid #e8e0ee;border-radius:10px;padding:11px;display:flex;gap:8px;flex-direction:column;align-items:flex-start;min-width:0}
+.health-mini strong{font-size:.75rem;color:#53406a}
+.health-mini p{font-size:.72rem;color:#6b6079;overflow-wrap:anywhere}
+.health-mini .button{white-space:normal;min-height:40px}
+.diagnostic-output{background:#262133;color:#f2eafc;max-height:190px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.7rem;padding:10px;border-radius:8px;width:100%;margin:0}
+.history-actions{display:flex;gap:7px;margin:12px 0;flex-wrap:wrap}
+.history-line{border-bottom:1px solid #ece5f1;padding:7px 4px;font-size:.75rem;color:#665577}
+.studio-modes button[aria-pressed=true]{box-shadow:inset 0 -3px 0 #5c3fa6}
+body.crochet-view .crochet-dock .button{min-height:48px}
+@media(max-width:700px){.reliability-grid{grid-template-columns:1fr}.reliability-subline{font-size:.62rem}.topbar{padding:0 11px}.save-status{max-width:115px}.reliability-alert,.update-notice{flex-wrap:wrap}.reliability-alert .button,.update-notice .button{width:100%}}
+@media(pointer:coarse){.edit-tool,.reliability-drawer button,.studio-modes button{min-height:44px}canvas{touch-action:none}}
+@media(prefers-reduced-motion:reduce){.toast,.progress-bar{transition:none}}
