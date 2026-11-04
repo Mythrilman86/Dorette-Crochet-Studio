@@ -192,7 +192,7 @@ function refreshProjectList(){
     const meta=document.createElement('small');meta.textContent=`${p.cols} × ${p.rows} · ${p.category||'Other'}`;
     choose.append(title,meta);choose.addEventListener('click',()=>selectProject(p.id));
     const fav=document.createElement('button');fav.type='button';fav.className='gallery-favorite';fav.textContent=p.favorite?'★':'☆';fav.title='Toggle favorite';fav.setAttribute('aria-label','Favorite '+p.name);
-    fav.addEventListener('click',()=>{p.favorite=!p.favorite;queueWrite(p);refreshProjectList();});
+    fav.addEventListener('click',()=>{if(p===active)snapshot({label:'Change project favorite'});p.favorite=!p.favorite;queueWrite(p);refreshProjectList();});
     item.append(thumb,choose,fav);list.append(item);
   });
 }
@@ -203,7 +203,7 @@ function selectProject(id) {
   clearColorProposal();
   $("grayTrio").replaceChildren();
   layerGesture=null;layerDragPreview=null;
-  clearProgressHistory();
+  
   clearMotifPreview();
   flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];designHistoryLabels=[];redoHistoryLabels=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;renderDesignHistory();updateAreaStatus();
@@ -245,10 +245,8 @@ function refreshInspector(){
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
-    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',annotations:structuredClone(active.annotations||[]),ui:{...uiSettings(active)}};
+    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',annotations:structuredClone(active.annotations||[]),versions:(active.versions||[]).slice(),ui:{...uiSettings(active)}};
 }
-const progressHistory=[];
-const PROGRESS_HISTORY_LIMIT=30;
 let designHistoryLabels=[],redoHistoryLabels=[];
 let motifPreview=null;
 let progressBrush=null, overviewStroke=null;
@@ -269,39 +267,22 @@ function snapshot({keepProgress=false,label='Design edit'}={}){
 }
 function restoreUndoState(state){
   clearColorProposal();
-  // Keep crochet-progress Undo when restoring an edit on the same grid.
-  const mirrored=!!active.referenceMirrored!==!!state.referenceMirrored;
-  if(active.cols!==state.cols||active.rows!==state.rows||mirrored)clearProgressHistory();
   clearMotifPreview();
-  lastText=null;
-  $("editLastText").disabled=true;
-  // Design Undo must not revert independent crochet-progress marking.
-  // If dimensions changed, use the stored progress mapping so resizing remains reversible.
-  const keepProgress=active.cols===state.cols&&active.rows===state.rows;
-  const currentProgress=keepProgress?{done:active.done.slice(),rowDone:active.rowDone.slice(),guide:structuredClone(active.guide),diagonalIndex:active.diagonalIndex||0}:null;
-  pendingCleanup=null;selectedLayerId=null;editingLayerId=null;discardPreview(false);clearTextPreview();Object.assign(active,state);
-  if(currentProgress){
-    if(mirrored){
-      const {cols,rows}=active,done=currentProgress.done;
-      for(let row=0;row<rows;row++){
-        const start=row*cols;
-        done.splice(start,cols,...done.slice(start,start+cols).reverse());
-      }
-      currentProgress.guide.position=cols-1-currentProgress.guide.position;
-    }
-    Object.assign(active,currentProgress);
-  }
+  lastText=null;$('editLastText').disabled=true;
+  pendingCleanup=null;selectedLayerId=null;editingLayerId=null;
+  discardPreview(false);clearTextPreview();
+  Object.assign(active,state);
   invalidateChartCache();window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
 }
 function undo(){
-  if(!active||!undoStack.length||editBlocked("undo changes"))return;
+  if(!active||!undoStack.length||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(designHistoryLabels.at(-1)||'')&&editBlocked('undo chart edits')))return;
   redoStack.push(undoState());redoHistoryLabels.push(designHistoryLabels.pop()||'Design edit');restoreUndoState(undoStack.pop());
   $('undoButton').disabled=!undoStack.length;$('redoButton').disabled=false;renderDesignHistory();toast('Undone — use Redo to restore.');
 }
 function redo(){
-  if(!active||!redoStack.length||editBlocked("redo changes"))return;
+  if(!active||!redoStack.length||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(redoHistoryLabels.at(-1)||'')&&editBlocked('redo chart edits')))return;
   undoStack.push(undoState());designHistoryLabels.push(redoHistoryLabels.pop()||'Design edit');restoreUndoState(redoStack.pop());
   $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;renderDesignHistory();toast('Change redone.');
 }
@@ -463,27 +444,10 @@ function updateLegend(){
   renderLayers();
 }
 function updateProgressUndo(){
-  const count=progressHistory.length,button=$('undoProgress');
-  button.disabled=count===0||!!pendingConversion;
-  button.textContent=count?`Undo progress (${count})`:'Undo progress';
+  $('undoProgress').disabled=!undoStack.length||!!pendingConversion;
+  $('redoProgress').disabled=!redoStack.length||!!pendingConversion;
 }
-function clearProgressHistory(){
-  progressHistory.length=0;
-  updateProgressUndo();
-}
-function progressSnapshot(){
-  progressHistory.push({done:active.done.slice(),rowDone:active.rowDone.slice(),guide:{...active.guide},diagonalIndex:active.diagonalIndex||0});
-  if(progressHistory.length>PROGRESS_HISTORY_LIMIT)progressHistory.shift();
-  updateProgressUndo();
-}
-function undoProgress(){
-  if(!active||pendingConversion||!progressHistory.length)return;
-  const {done,rowDone,guide,diagonalIndex}=progressHistory.pop();
-  Object.assign(active,{done,rowDone,guide,diagonalIndex});
-  updateProgressUndo();
-  scheduleSave();updateProgress();
-  if(active.technique==="c2c")diagonalMove(0);else focusGuideCell();
-}
+function progressSnapshot(){snapshot({label:'Progress: crochet action'});}
 function markStitch(){
   if(pendingConversion||!selected||!active)return;
   const i=indexFor(selected.col,selected.row);progressSnapshot();
@@ -509,10 +473,7 @@ function symmetricIndexes(col,row){
 }
 function paintStitch(){
  if(pendingConversion||!selected||!active||editBlocked('paint stitches'))return;
- const color=Number($('paintColor').value);if(color<0||color>=active.palette.length)return;
- const indexes=symmetricIndexes(selected.col,selected.row);
- if(indexes.every(i=>active.cells[i]===color))return;
- snapshot();for(const i of indexes)active.cells[i]=color;active.converted=true;scheduleSave();updateLegend();requestDraw();
+ brushSegment(selected,selected,{tool:'paint',color:Number($('paintColor').value),snapshotted:false});
 }
 
 function applyBrushCell(cell,stroke){
@@ -543,9 +504,27 @@ function applyBrushCell(cell,stroke){
   const color=stroke.tool==='erase'?0:stroke.color;
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return false;
   const indexes=symmetricIndexes(cell.col,cell.row);
-  if(indexes.every(i=>active.cells[i]===color))return false;
-  if(!stroke.snapshotted){snapshot();stroke.snapshotted=true;}
-  for(const i of indexes)active.cells[i]=color;
+  const visibleLayers=(active.layers||[]).filter(layer=>layer.visible!==false);
+  stroke.painted??=new Set();
+  let changed=false;
+  for(const i of indexes){
+    if(stroke.painted.has(i))continue;
+    stroke.painted.add(i);
+    const top=visibleLayers.findLast(layer=>layer.entries.some(([index])=>index===i));
+    if(top?.type==='shape'){
+      if(top.locked)continue;
+      const entry=top.entries.findIndex(([index])=>index===i);
+      if(stroke.tool!=='erase'&&top.entries[entry][1]===color)continue;
+      if(!stroke.snapshotted){snapshot({label:'Edit shape stitches'});stroke.snapshotted=true;}
+      if(stroke.tool==='erase')top.entries.splice(entry,1);
+      else top.entries[entry][1]=color;
+      changed=true;
+    }else if(active.cells[i]!==color){
+      if(!stroke.snapshotted){snapshot({label:'Paint stitches'});stroke.snapshotted=true;}
+      active.cells[i]=color;changed=true;
+    }
+  }
+  if(!changed)return false;
   active.converted=true;stroke.changed=true;return true;
 }
 function brushSegment(from,to,stroke){
@@ -561,7 +540,7 @@ function brushSegment(from,to,stroke){
     if(e2<dx){error+=dx;y+=sy;}
   }
   selected=to;
-  if(changed){scheduleSave();if(stroke.tool==="mark"||stroke.tool==="row")updateProgress();else updateLegend();}
+  if(changed){scheduleSave();if(stroke.tool==="mark"||stroke.tool==="row")updateProgress();else{updateLegend();renderLayers();}}
   updateSelection();requestDraw();
 }
 function addYarnColor(){
@@ -591,7 +570,7 @@ function mirrorChart(){
   });
   active.annotations=(active.annotations||[]).map(note=>note.scope==='row'?note:
     DoretteNext.locateNote({...note,col:cols+1-note.col},active));
-  clearProgressHistory();
+  
   active.referenceMirrored=!active.referenceMirrored;
   if(selected)selected={...selected,col:cols+1-selected.col};
   active.guide.position=cols-1-active.guide.position;
@@ -607,7 +586,7 @@ function editDimensions(){
   const old=active;
   if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
   snapshot();
-  clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
+  Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
   active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
   areaSelection=null;
   if(selected&&(selected.col>cols||selected.row>rows))selected=null;
@@ -1531,7 +1510,7 @@ function runPdfJob(kind){
  },40);};
  if(typeof Worker==='undefined'||!/^https?:$/.test(location.protocol)){fallback();return;}
  try{
-   worker=new Worker('./pdf-worker.js?v=1.7.1');
+   worker=new Worker('./pdf-worker.js?v=1.7.2');
    worker.onmessage=ev=>{if(ev.data?.error||!reliability.verifyPdf(ev.data?.bytes))fallback();else done(ev.data,null);};
    worker.onerror=fallback;worker.onmessageerror=fallback;
    timer=setTimeout(fallback,30000);
@@ -1756,11 +1735,15 @@ function guideNext(wholeRun=false){
   scheduleSave();updateProgress();focusGuideCell();
 }
 function guideBack(){
+  if(!active||pendingConversion)return;
+  progressSnapshot();
   const g=active.guide;g.finished=false;
   if(g.position>0)g.position--;else if(g.row>1){g.row--;g.position=active.cols-1;}
   scheduleSave();focusGuideCell();
 }
 function guideChangeRow(n){
+  if(!active||pendingConversion)return;
+  progressSnapshot();
   const g=active.guide;g.row=clamp(g.row+n,1,active.rows);g.position=0;g.finished=false;
   scheduleSave();focusGuideCell();
 }
@@ -1901,12 +1884,14 @@ function hookPatternEvents(){
   $('startHere').addEventListener('click',()=>{
     if(!active||!selected||pendingConversion)return toast('Select a stitch first.');
     const {row,col}=selected;
+    progressSnapshot();
     active.guide={row,position:Pattern.direction(active,row)==='rtl'?active.cols-col:col-1,finished:false};
     scheduleSave();setCrochetView(true);
   });
   $('dockStitch').addEventListener('click',()=>guideNext());
   $('dockRun').addEventListener('click',()=>guideNext(true));
-  $('undoProgress').addEventListener('click',undoProgress);
+  $('undoProgress').addEventListener('click',undo);
+  $('redoProgress').addEventListener('click',redo);
   $('goToCell').addEventListener('submit',ev=>{
     ev.preventDefault();
     if(!active||pendingConversion)return;
@@ -1980,7 +1965,7 @@ function hookPatternEvents(){
     const cp=active.checkpoints.find(c=>c.id===$('checkpointChoice').value);if(!cp)return;
     if(!confirm(`Restore “${cp.name}”? Current changes will be kept in Undo history. Save a ZIP backup too.`))return;
     snapshot();Object.assign(active,{cols:cp.cols,rows:cp.rows,cells:cp.cells.slice(),done:cp.done.slice(),rowDone:cp.rowDone.slice(),palette:structuredClone(cp.palette),yarnInfo:structuredClone(cp.yarnInfo||[]),layers:structuredClone(cp.layers||[]),converted:true,referenceMirrored:cp.referenceMirrored===true});
-    clearProgressHistory();
+    
     active.annotations=(cp.annotations||active.annotations||[]).filter(note=>note.row<=active.rows&&note.col<=active.cols).map(note=>DoretteNext.locateNote(note,active));
     active.guide={row:1,position:0};active.diagonalIndex=0;
     Pattern.ensure(active);areaSelection=null;selected=null;scheduleSave();refreshInspector();fitChart();toast('Snapshot restored; Undo is available.');
@@ -1993,10 +1978,11 @@ function validateLayers(p){
  if(ls.length>80)throw Error('Too many editable layers in project');
  for(const l of ls){if(!l||typeof l.name!=='string'||l.name.length>80||!Array.isArray(l.entries)||l.entries.length>p.cols*p.rows||
    l.entries.some(e=>!Array.isArray(e)||e.length!==2||!Number.isInteger(e[0])||e[0]<0||e[0]>=p.cols*p.rows||!Number.isInteger(e[1])||e[1]<0||e[1]>=p.palette.length))throw Error('Invalid editable layer in backup');}
- return ls.map(l=>({id:String(l.id||uid()).slice(0,85),name:l.name.slice(0,80),type:l.type==='text'?'text':'motif',visible:l.visible!==false,locked:!!l.locked,entries:l.entries.map(e=>e.slice()),source:l.source&&typeof l.source==='object'?structuredClone(l.source):null}));
+ return ls.map(l=>({id:String(l.id||uid()).slice(0,85),name:l.name.slice(0,80),type:['text','shape'].includes(l.type)?l.type:'motif',visible:l.visible!==false,locked:!!l.locked,entries:l.entries.map(e=>e.slice()),source:l.source&&typeof l.source==='object'?structuredClone(l.source):null}));
 }
 function setLayerAndRefresh(layer,index=null){
  if(isPatternLocked()||pendingConversion)return toast('Unlock the chart and finish the preview before editing layers.');
+ if(index===null&&(active.layers||[]).length>=80)return toast('The chart already has 80 layers.');
  snapshot();if(!Array.isArray(active.layers))active.layers=[];
  if(index!==null)active.layers[index]=layer;else active.layers.push(layer);
  selectedLayerId=layer.id;active.converted=true;pendingCleanup=null;scheduleSave();refreshInspector();requestDraw();
@@ -2022,6 +2008,10 @@ function renderLayers(){
  for(const id of ['layerUp','layerDown','layerEdit','layerDuplicate','layerFlatten','layerDelete','layerMoveUp','layerMoveLeft','layerMoveRight','layerMoveDown'])$(id).disabled=!l||isPatternLocked();
 }
 function shiftLayer(l,dx,dy){
+ const bounds=layerBounds(l);
+ if(!bounds)return;
+ dx=clamp(dx,1-bounds.left,active.cols-bounds.right);
+ dy=clamp(dy,1-bounds.bottom,active.rows-bounds.top);
  const map=[];for(const [i,c] of l.entries){const x=i%active.cols,y=Math.floor(i/active.cols),nx=x+dx,ny=y-dy;
   if(nx>=0&&nx<active.cols&&ny>=0&&ny<active.rows)map.push([ny*active.cols+nx,c]);}
  l.entries=map;
@@ -2143,10 +2133,20 @@ function hookAdvanced(){
   if(active.palette.length>=12)return toast('This chart already uses 12 yarn colors.');snapshot();active.palette.push({hex:c.hex,name:c.name,symbol:SYMBOLS[active.palette.length]});active.yarnInfo??=[];active.yarnInfo[active.palette.length-1]=structuredClone(c.info||{});scheduleSave();updateLegend();toast('Saved yarn added to this chart.');});
  $('removeLibraryYarn').addEventListener('click',()=>{yarnLibrary=yarnLibrary.filter(c=>c.id!==$('yarnLibrarySelect').value);saveYarnLibrary();});
  for(const [id,delta] of [['layerUp',1],['layerDown',-1]])$(id).addEventListener('click',()=>{const a=active.layers||[],i=a.findIndex(l=>l.id===selectedLayerId),j=i+delta;if(i<0||j<0||j>=a.length||editBlocked('reorder layers'))return;snapshot();[a[i],a[j]]=[a[j],a[i]];scheduleSave();renderLayers();requestDraw();});
+ for(const [id,dx,dy] of [['layerMoveUp',0,1],['layerMoveDown',0,-1],['layerMoveLeft',-1,0],['layerMoveRight',1,0]]){
+  $(id).addEventListener('click',()=>{
+    const layer=chosenLayer(),bounds=layerBounds(layer);
+    if(!bounds||layer.locked||pendingConversion||editBlocked('move the layer'))return;
+    if(bounds.left+dx<1||bounds.right+dx>active.cols||bounds.bottom+dy<1||bounds.top+dy>active.rows)return toast('The layer is at the chart edge.');
+    snapshot({label:'Move layer'});shiftLayer(layer,dx,dy);
+    scheduleSave();renderLayers();updateLegend();requestDraw();
+  });
+ }
  $('layerDuplicate').addEventListener('click',()=>{const l=chosenLayer();if(!l||editBlocked('duplicate layers'))return;const copy=structuredClone(l);copy.id=uid();copy.name=l.name+' copy';shiftLayer(copy,1,-1);setLayerAndRefresh(copy);});
  $('layerDelete').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('delete layers'))return;snapshot();active.layers=active.layers.filter(x=>x!==l);selectedLayerId=null;scheduleSave();renderLayers();updateLegend();requestDraw();});
  $('layerFlatten').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('flatten a layer'))return;snapshot();for(const [i,c] of l.entries)active.cells[i]=c;active.layers=active.layers.filter(x=>x!==l);selectedLayerId=null;active.converted=true;scheduleSave();refreshInspector();toast('Layer flattened into the base chart.');});
  $('layerEdit').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('edit a layer'))return;
+  if(l.type==='shape')return toast('Use Paint or Erase on the shape, or move it with the layer arrows.');
   if(l.type!=='text')return toast('Move motif layers with the arrows; duplicate or flatten them as needed.');
   editingLayerId=l.id;for(const [key,id] of [['text','textInput'],['angle','textAngle'],['height','textScale'],['col','textCol'],['row','textRow'],['color','textColor'],['style','textStyle'],['letterSpacing','letterSpacing'],['layout','textLayout'],['wrap','textWrap']])if(l.source?.[key]!==undefined)$(id).value=l.source[key];
   $('flipText').checked=!!l.source?.flip;$('applyText').textContent='Update selected text layer';buildTextPreview();
@@ -2217,7 +2217,8 @@ function renderDiagonalInfo(){if(!active||!$('diagonalStatus'))return;
 function diagonalMove(direction){
  if(!active||active.technique!=='c2c'||pendingConversion)return;
  const path=NF.diagonal(active),current=clamp(Math.round(Number(active.diagonalIndex)||0),0,path.length-1),cell=path[current];
- if(direction>0){progressSnapshot();active.done[indexFor(cell.col,cell.row)]=1;}
+ if(direction!==0)progressSnapshot();
+ if(direction>0)active.done[indexFor(cell.col,cell.row)]=1;
  active.diagonalIndex=clamp(current+direction,0,path.length-1);
  const next=path[active.diagonalIndex];selected={...next};
  view.x=canvasWidth/2-(M+(next.col-.5)*CELL)*view.scale;view.y=canvasHeight/2-(M+(active.rows-next.row+.5)*CELL)*view.scale;
@@ -2235,7 +2236,7 @@ function drawNextChartOverlays(g,cols,rows,s){
  }}
 }
 function startLayerDrag(ev){
- if(!active||progressBrush||placingText||motifPreview||document.body.classList.contains('crochet-view')||!$('dragLayerOnChart')?.checked||isPatternLocked()||pendingConversion)return false;
+ if(!active||!['select','pan'].includes(editorTool)||progressBrush||placingText||motifPreview||document.body.classList.contains('crochet-view')||!$('dragLayerOnChart')?.checked||isPatternLocked()||pendingConversion)return false;
  const layer=chosenLayer(),bounds=layerBounds(layer),cell=screenToStitch(ev.offsetX,ev.offsetY);
  if(!layer||!bounds||layer.locked||layer.visible===false||!cell)return false;
  const inside=cell.col>=bounds.left&&cell.col<=bounds.right&&cell.row>=bounds.bottom&&cell.row<=bounds.top;
@@ -2317,7 +2318,7 @@ function verifyGridDimensions(){
  const cols=Number($('gridCols').value),rows=Number($('gridRows').value);
  if(!validDimensions(cols,rows))return toast('Choose a valid 1–200 by 1–300 grid.');
  if(!confirm(`Use ${cols} columns and ${rows} rows? This resizes the current chart using nearest-cell canvas mapping. Back up your important project first.`))return;
- snapshot();clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
+ snapshot();Object.assign(active,NF.remap(active,cols,rows,'canvas','center'));clearTextPreview();selected=null;areaSelection=null;active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Verified grid size applied. Inspect the result carefully.');
 }
 function doAdvancedResize(){
  if(!active||editBlocked('resize the chart'))return;
@@ -2325,7 +2326,7 @@ function doAdvancedResize(){
  if(!validDimensions(cols,rows))return toast('Choose chart dimensions from 1–200 columns and 1–300 rows.');
  const mode=$('resizeMode').value,anchor=$('resizeAnchor').value;
  if(!confirm(`${mode==='scale'?'Scale all stitch cells':'Expand or crop without stretching'} to ${cols} × ${rows}, anchored ${anchor}? Cropped cells cannot be recovered except through Undo or a backup.`))return;
- snapshot();clearProgressHistory();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
+ snapshot();Object.assign(active,NF.remap(active,cols,rows,mode,anchor));clearTextPreview();selected=null;areaSelection=null;
  active.guide={row:1,position:0};active.diagonalIndex=0;scheduleSave();refreshInspector();fitChart();toast('Advanced resize applied. Undo remains available.');
 }
 function plotGrayTrio(){
@@ -2451,7 +2452,7 @@ function hookNextEvents(){
  $('duplicateProject').addEventListener('click',()=>{if(!active)return;flushSave();const p=structuredClone(active);p.id=uid();p.name=(active.name+' copy').slice(0,70);p.createdAt=new Date().toISOString();p.updatedAt=p.createdAt;projects.set(p.id,p);queueWrite(p);selectProject(p.id);toast('Project duplicated; the original remains untouched.');});
  $('techniquePreset').addEventListener('change',e=>{if(!active)return;snapshot();active.technique=e.target.value;active.diagonalIndex=0;scheduleSave();renderDiagonalInfo();});
  $('diagonalNext').addEventListener('click',()=>diagonalMove(1));$('diagonalBack').addEventListener('click',()=>diagonalMove(-1));
- $('workSectionSize').addEventListener('change',e=>{if(!active)return;active.sectionSize=Number(e.target.value);scheduleSave();refreshSections();updatePdfEstimate();requestDraw();});
+ $('workSectionSize').addEventListener('change',e=>{if(!active)return;snapshot({label:'Change work sections'});active.sectionSize=Number(e.target.value);scheduleSave();refreshSections();updatePdfEstimate();requestDraw();});
  $('workSectionSelect').addEventListener('change',refreshSections);$('goSection').addEventListener('click',navigateSection);$('markSection').addEventListener('click',completeSection);
  $('detectGrid').addEventListener('click',handleGridDetection);
  $('gridRotation').addEventListener('input',e=>$('gridRotationValue').textContent=e.target.value+'°');
@@ -2550,6 +2551,7 @@ function v16RefreshVersions(){
 function v16SaveVersion(){
   if(!active||pendingConversion)return toast('Finish or discard the temporary conversion preview first.');
   const label=String($('versionName').value||'').trim()||`Design ${new Date().toLocaleDateString()}`;
+  snapshot({label:'Save design version'});
   active.versions??=[];
   active.versions.unshift({id:uid(),label:label.slice(0,70),at:new Date().toISOString(),data:v16VersionPayload(active)});
   if(active.versions.length>V16_MAX_VERSIONS)active.versions.length=V16_MAX_VERSIONS;
@@ -2611,7 +2613,7 @@ function v16RefreshNotes(){
     });
     const del=document.createElement('button');del.type='button';del.className='button ghost v16-remove';del.textContent='Remove';
     del.setAttribute('aria-label',`Remove note at ${v16NoteLocation(note)}`);
-    del.addEventListener('click',()=>{active.annotations=active.annotations.filter(x=>x.id!==note.id);scheduleSave();v16RefreshNotes();requestDraw();updatePdfEstimate();});
+    del.addEventListener('click',()=>{snapshot({label:'Remove reminder'});active.annotations=active.annotations.filter(x=>x.id!==note.id);scheduleSave();v16RefreshNotes();requestDraw();updatePdfEstimate();});
     row.append(jump,del);host.append(row);
   });
 }
@@ -2626,6 +2628,7 @@ function v16AddNote(){
     const sec=window.DoretteNext.sections(active,active.sectionSize||25)[Number($('workSectionSelect')?.value||1)-1];
     if(sec){col=sec.c0;row=sec.r0;section=sec.id;}
   }
+  snapshot({label:'Add reminder'});
   active.annotations??=[];
   active.annotations.push({id:uid(),scope,col,row,section,text:text.slice(0,280),at:new Date().toISOString()});
   $('annotationText').value='';scheduleSave();v16RefreshNotes();requestDraw();updatePdfEstimate();
@@ -2676,11 +2679,32 @@ function v16ApplyShape(){
   if(!active||pendingConversion||editBlocked('draw a shape'))return;
   const values=v16ShapeCells();if(!values?.length)return toast('Select an area before drawing a shape.');
   const color=Number($('paintColor').value);if(!Number.isInteger(color)||!active.palette[color])return toast('Select a yarn color.');
-  const changes=values.filter(i=>active.cells[i]!==color);
-  if(!changes.length)return toast('No stitches would change.');
-  snapshot();for(const i of changes)active.cells[i]=color;
-  active.converted=true;v16ShapeProposal=null;scheduleSave();updateLegend();requestDraw();
-  $('shapeInfo').textContent=`Applied ${format(changes.length)} stitches to the base chart. Undo is available.`;
+  if((active.layers||[]).length>=80)return toast('The chart already has 80 layers.');
+  const name=$('shapeKind').selectedOptions[0].textContent;
+  setLayerAndRefresh({id:uid(),name,type:'shape',visible:true,locked:false,source:null,entries:values.map(i=>[i,color])});
+  v16ShapeProposal=null;
+  setTool('select');
+  $('shapeInfo').textContent='Shape added as a layer. Use the layer arrows to move it, or Paint and Erase to edit its stitches.';
+}
+function liftShape(){
+  if(!active||pendingConversion||editBlocked('lift shape stitches')||!areaSelection)return toast('Select an area containing the shape first.');
+  if((active.layers||[]).length>=80)return toast('The chart already has 80 layers.');
+  const color=Number($('paintColor').value);
+  if(!color)return toast('Choose the shape’s yarn color first.');
+  const {start,end}=areaSelection,entries=[];
+  for(let row=Math.min(start.row,end.row);row<=Math.max(start.row,end.row);row++){
+    for(let col=Math.min(start.col,end.col);col<=Math.max(start.col,end.col);col++){
+      const i=indexFor(col,row);
+      if(active.cells[i]===color)entries.push([i,color]);
+    }
+  }
+  if(!entries.length)return toast('No base stitches match that yarn in the selected area.');
+  snapshot({label:'Lift shape stitches'});
+  for(const [i] of entries)active.cells[i]=0;
+  const layer={id:uid(),name:'Lifted shape',type:'shape',visible:true,locked:false,source:null,entries};
+  (active.layers??=[]).push(layer);selectedLayerId=layer.id;setTool('select');
+  scheduleSave();refreshInspector();
+  toast('Selected yarn stitches are now a movable shape layer.');
 }
 function v16DrawTexture(){
   if(!active)return;
@@ -2747,6 +2771,7 @@ function v16Hook(){
   $('measureArea').addEventListener('click',v16MeasureArea);
   $('previewShape').addEventListener('click',v16PreviewShape);
   $('applyShape').addEventListener('click',v16ApplyShape);
+  $('liftShape').addEventListener('click',liftShape);
   $('renderTexture').addEventListener('click',v16DrawTexture);
   $('shapeKind').addEventListener('change',()=>{v16ShapeProposal=null;requestDraw();});
   v16ApplyPrefs();
@@ -2759,10 +2784,10 @@ function renderDesignHistory(){
    const line=document.createElement('div');line.className='history-line';line.textContent='↶ '+label;panel.append(line);
  }
  if(!count){const hint=document.createElement('small');hint.className='muted';hint.textContent='No design edits in this session.';panel.append(hint);}
- $('historyUndo').disabled=!undoStack.length;$('historyRedo').disabled=!redoStack.length;
+  $('historyUndo').disabled=!undoStack.length;$('historyRedo').disabled=!redoStack.length;updateProgressUndo();
 }
 function diagnosticsPayload(){return reliability.makeDiagnostics({
- version:'1.7.1',saveState:savePhase,pendingWrites:writePending+(saveTimer?1:0),projectCount:projects.size,
+ version:'1.7.2',saveState:savePhase,pendingWrites:writePending+(saveTimer?1:0),projectCount:projects.size,
  activeProject:active,renderMetrics:{lastDrawMs:Number(drawLast.toFixed(1)),averageDrawMs:drawSamples?Number((drawTotal/drawSamples).toFixed(1)):0},
  });}
 function showDiagnostics(){
@@ -2986,7 +3011,7 @@ function hookEvents(){
   $('exportPdf').addEventListener('click',exportPdf);
   $('exportWrittenPdf').addEventListener('click',exportWrittenPdf);
   $('showProgressOverlay').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),showProgress:ev.target.checked};scheduleSave();updateTabletControls();requestDraw();});
-  $('patternLock').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),patternLock:ev.target.checked};if(ev.target.checked&&['paint','erase','pick','rect','bucket','area','paste'].includes(editorTool))editorTool='select';scheduleSave();updateTabletControls();updateToolUI();toast(ev.target.checked?'Pattern lock enabled. Editing tools are now protected.':'Pattern lock disabled. Stitch editing is available again.');});
+  $('patternLock').addEventListener('change',ev=>{if(!active)return;snapshot({label:'Pattern lock'});active.ui={...uiSettings(),patternLock:ev.target.checked};if(ev.target.checked&&['paint','erase','pick','rect','bucket','area','paste'].includes(editorTool))editorTool='select';scheduleSave();updateTabletControls();updateToolUI();toast(ev.target.checked?'Pattern lock enabled. Editing tools are now protected.':'Pattern lock disabled. Stitch editing is available again.');});
   $('stylusOnly').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),stylusOnly:ev.target.checked};scheduleSave();updateTabletControls();toast(ev.target.checked?'Stylus mode on: finger touches only pan/select.':'Stylus mode off: touch editing restored.');});
   $('largeTouch').addEventListener('change',ev=>{if(!active)return;snapshot();active.ui={...uiSettings(),largeTouch:ev.target.checked};scheduleSave();updateTabletControls();});
   $('textColor').addEventListener('change',()=>{$('paintColor').value=$('textColor').value;updateToolUI();});

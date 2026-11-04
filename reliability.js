@@ -1,4 +1,4 @@
-/* Dorette Crochet Studio v1.7.1 - portable, read-only project integrity and diagnostics.
+/* Dorette Crochet Studio v1.7.2 - portable, read-only project integrity and diagnostics.
    Does not repair, delete, mutate or upload user data. */
 (()=>{'use strict';
 const isFlag=v=>v===0||v===1;
@@ -57,7 +57,7 @@ function auditExport(project,composed){
  return {ok:true,errors:[],warnings:report.warnings};
 }
 function verifyPdf(bytes){const str=String.fromCharCode(...new Uint8Array(bytes).slice(0,8));return str.startsWith('%PDF-');}
-function makeDiagnostics({version='1.7.1',saveState='unknown',pendingWrites=0,projectCount=0,activeProject=null,renderMetrics=null}={}){
+function makeDiagnostics({version='1.7.2',saveState='unknown',pendingWrites=0,projectCount=0,activeProject=null,renderMetrics=null}={}){
  const cvs=document.createElement('canvas');let canvas2d=false;try{canvas2d=!!cvs.getContext('2d');}catch{}
  let storage='unknown';try{localStorage.setItem('__dorette_diag','ok');localStorage.removeItem('__dorette_diag');storage='available';}catch{storage='blocked';}
  const safe={version,createdAt:new Date().toISOString(),online:navigator.onLine,secureContext:window.isSecureContext,serviceWorkerSupported:'serviceWorker' in navigator,serviceWorkerControlled:!!navigator.serviceWorker?.controller,indexedDBSupported:!!window.indexedDB,localStorage:storage,canvas2d,clipboardSupported:!!navigator.clipboard,wakeLockSupported:!!navigator.wakeLock,pointerEventsSupported:!!window.PointerEvent,saveState,pendingWrites,projectCount,activeGrid:activeProject?`${activeProject.cols}x${activeProject.rows}`:null,projectCheck:activeProject?auditProject(activeProject):null,renderMetrics};
