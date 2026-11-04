@@ -22,9 +22,15 @@
   <details id="studioUpdates" class="update-notice" hidden>
     <summary>Updates</summary>
     <button type="button" class="button secondary">Check for updates</button>
+    <label id="studioAutoUpdateSetting" hidden><input id="studioAutoUpdate" type="checkbox"> Check automatically when opening the app</label>
     <p role="status">Checks only when you ask.</p>
     <a target="_blank" rel="noopener noreferrer" hidden></a>
   </details>
+  <section id="studioAndroidUpdate" class="update-notice" aria-label="Android update" hidden>
+    <div role="status"></div>
+    <button id="studioUpdateNow" class="button primary" type="button">Update Now</button>
+    <button id="studioUpdateLater" class="button secondary" type="button">Remind Me Later</button>
+  </section>
   <main class="layout">
     <aside class="sidebar" aria-label="Projects">
       <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>

@@ -1,7 +1,13 @@
 apply plugin: 'com.android.application'
 
 // Use the retained test key only for local continuity builds.
+def continuityRelease = project.hasProperty('studioContinuity')
+def playBuild = project.hasProperty('studioPlay')
 def continuityKeystore = providers.environmentVariable('STUDIO_DEBUG_KEYSTORE')
+
+if (continuityRelease && (playBuild || !continuityKeystore.isPresent())) {
+    throw new GradleException('Continuity releases require the local continuity keystore and cannot be Play builds')
+}
 
 android {
     if (continuityKeystore.isPresent()) {
@@ -16,8 +22,8 @@ android {
         applicationId "com.deescrochetstudio.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "1.8.3"
+        versionCode 4
+        versionName "1.8.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -25,13 +31,16 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    if (project.hasProperty('studioPlay')) {
+    if (playBuild) {
         sourceSets.main.java.srcDir 'src/play/java'
+        sourceSets.debug.manifest.srcFile 'src/play/AndroidManifest.xml'
+        sourceSets.release.manifest.srcFile 'src/play/AndroidManifest.xml'
     } else {
         sourceSets.main.java.srcDir 'src/development/java'
     }
     buildTypes {
         release {
+            if (continuityRelease) signingConfig signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -45,7 +54,7 @@ repositories {
 }
 
 dependencies {
-    if (project.hasProperty('studioPlay')) {
+    if (playBuild) {
         implementation 'com.google.android.play:app-update:2.1.0'
     }
     implementation fileTree(include: ['*.jar'], dir: 'libs')

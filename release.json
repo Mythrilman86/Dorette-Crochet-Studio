@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "1.8.3",
-    "notes": "Keeps the version badge and Updates panel in sync and separates website, Google Play, and App Store availability."
+    "version": "1.8.4",
+    "notes": "Adds optional Android update notifications, verified downloads and Android installation confirmation."
   },
   "ios": null,
-  "version": "1.8.3",
-  "notes": "Keeps the version badge and Updates panel in sync and separates website, Google Play, and App Store availability."
+  "version": "1.8.4",
+  "notes": "Adds optional Android update notifications, verified downloads and Android installation confirmation."
 }
