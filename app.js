@@ -2119,6 +2119,8 @@ function hookPatternEvents(){
     const col=Pattern.colAt(active,guide.row,guide.position);
     snapshot({label:'Progress: row direction'});
     active.workDirection[key]=value;
+    $('rowFirstDirection').value=active.workDirection.first;
+    $('rowAlternate').checked=active.workDirection.alternate;
     guide.position=Pattern.direction(active,guide.row)==='rtl'?active.cols-col:col-1;
     scheduleSave();renderRowSequence();renderGuide();requestDraw();
   };
