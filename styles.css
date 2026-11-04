@@ -279,3 +279,25 @@ body.crochet-view .crochet-dock .button{min-height:48px}
 #studioUpdates{display:block;position:static}
 #studioUpdates summary{cursor:pointer;font-weight:700;width:max-content;padding-block:4px}
 #studioUpdates[open] summary{margin-bottom:10px}
+
+.crochet-dock-summary{display:grid;gap:2px;min-width:0;font-size:.8rem}.crochet-dock-summary span{font-variant-numeric:tabular-nums}
+
+/* Fill the available screen while keeping the shared canvas and controls. */
+body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
+.crochet-view:not(.unpinned-dock) .workspace{
+ position:fixed;inset:0;z-index:25;display:flex;min-height:0;max-height:none;height:auto;overflow:auto;
+ gap:6px;background:#f6f4f9;padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))
+}
+.crochet-view:not(.unpinned-dock)>.topbar,.crochet-view:not(.unpinned-dock)>.update-notice{visibility:hidden}
+.crochet-view:not(.unpinned-dock) #saveAlert:not([hidden]),.crochet-view:not(.unpinned-dock) #tabLockBanner:not([hidden]){position:fixed;inset:0 0 auto;z-index:26}
+.crochet-view:not(.unpinned-dock) .toast{z-index:27}
+.crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog){display:none}
+.crochet-view:not(.unpinned-dock) #chartViews{display:flex;flex:1 0 140px;min-height:140px}
+.crochet-view:not(.unpinned-dock) #overviewPane,.crochet-view:not(.unpinned-dock) .chart-pane h2,.crochet-view:not(.unpinned-dock) .canvas-note,
+.crochet-view:not(.unpinned-dock) #openCommandSearch,.crochet-view:not(.unpinned-dock) .toolbar-hint{display:none}
+.crochet-view:not(.unpinned-dock) #chartViews>.chart-pane:last-child{display:flex;width:100%;min-height:0}
+.crochet-view:not(.unpinned-dock) #canvasWrap{flex:1 1 auto;min-height:0;height:auto}
+.crochet-view:not(.unpinned-dock) .crochet-dock{position:static;flex:none;justify-content:flex-start;padding:4px 0;border:0;background:none}
+.crochet-view:not(.unpinned-dock) #guideDialog{max-height:30dvh;overflow:auto;flex:none}
+.crochet-view .crochet-view-actions .button,.crochet-view .toolbar .button,.crochet-view .toolbar .icon-button{min-height:44px}
+@media(max-width:640px){.crochet-view:not(.unpinned-dock) .crochet-dock-summary{flex-basis:100%}.crochet-view:not(.unpinned-dock) .crochet-dock .button{flex:1 1 27%}}

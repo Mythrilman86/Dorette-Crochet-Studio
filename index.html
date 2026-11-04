@@ -48,7 +48,7 @@
     <section class="workspace" aria-label="Chart editor">
       <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill" id="studioBuildBadge">Local workspace</span></div>
       <div class="chart-layout-controls"><span id="chartLayoutLabel">Chart view</span><div class="chart-layout-switch" role="group" aria-labelledby="chartLayoutLabel"><button id="singleChart" type="button" aria-pressed="false" aria-controls="chartViews">Single chart</button><button id="dualChart" type="button" aria-pressed="true" aria-controls="chartViews">Dual charts</button></div><span class="muted">Your view choice is remembered on this device.</span></div>
-      <div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
+      <div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button> <button id="focusGuideDetails" class="button ghost" type="button" aria-controls="guideDialog" aria-expanded="false" hidden>Guide details</button></div>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
@@ -77,6 +77,7 @@
         <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
       </div>
       </section></div>
+      <div class="crochet-dock" aria-label="Crochet progress controls"><div class="crochet-dock-summary"><strong id="dockStatus"></strong><span id="dockProgress" role="status"></span></div><button id="dockToggleStitch" class="button secondary" type="button">Mark stitch</button><button id="dockToggleRow" class="button secondary" type="button">Mark row</button><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
         <span id="zoomValue" class="zoom-value">100%</span>
@@ -350,7 +351,6 @@
 
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
-  <div class="crochet-dock" aria-label="Crochet progress controls"><strong id="dockStatus" role="status"></strong><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
   <script src="./pattern-tools.js?v=1.8.1" defer></script>
   <script src="./advanced.js?v=1.8.1" defer></script>
   <script src="./pdf-export.js?v=1.8.1" defer></script>
