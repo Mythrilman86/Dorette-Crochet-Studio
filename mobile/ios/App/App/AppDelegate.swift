@@ -53,7 +53,7 @@ class StudioViewController: CAPBridgeViewController {
 class StudioFilesPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerDelegate {
     let identifier = "StudioFilesPlugin"
     let jsName = "StudioFiles"
-    let pluginMethods = ["begin", "append", "discard", "save", "openGuide"].map {
+    let pluginMethods: [CAPPluginMethod] = ["begin", "append", "discard", "save", "openGuide"].compactMap {
         CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise)
     }
 
