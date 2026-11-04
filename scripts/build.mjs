@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -7,8 +8,10 @@ const target = process.argv[2];
 if (!['web', 'mobile'].includes(target)) throw new Error('Choose web or mobile');
 const native = target === 'mobile';
 const out = native ? 'mobile/www' : 'dist';
-const release = JSON.parse(await readFile('release.json', 'utf8'));
+const window = {};
+runInNewContext(await readFile('release-config.js', 'utf8'), { window });
 const pkg = JSON.parse(await readFile('mobile/package.json', 'utf8'));
+if (window.StudioRelease.version !== pkg.version) throw new Error('Build metadata and package versions must match');
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 for (const entry of await readdir('.', { withFileTypes: true })) {
@@ -25,15 +28,6 @@ if (native) {
     .replace('</head>', '  <script src="./mobile.js"></script>\n</head>');
   await cp('mobile/mobile.js', out + '/mobile.js');
 } else {
-  const worker = (await readFile('service-worker.js', 'utf8'))
-    .replace(/^const CACHE = .*;/m, `const CACHE = 'dorette-crochet-${pkg.version}-unified';`);
-  await writeFile(out + '/service-worker.js', worker);
   await cp('release.json', out + '/release.json');
 }
-html = html.replace('v1.8.1 · Local workspace', `v${pkg.version} · Local workspace`);
 await writeFile(out + '/index.html', html);
-await writeFile(out + '/release-config.js', `window.StudioRelease = ${JSON.stringify({
-  version: pkg.version,
-  manifest: 'https://mythrilman86.github.io/Dorette-Crochet-Studio/release.json'
-})};\n`);
-if (release.version !== pkg.version) throw new Error('Release and package versions must match');

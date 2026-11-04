@@ -16,7 +16,14 @@ test('website and Capacitor builds share the engine and preserve identifiers', (
   const config = JSON.parse(read('mobile/capacitor.config.json'));
   assert.equal(config.appId, 'com.deescrochetstudio.app');
   assert.equal(config.server, undefined);
-  const release = JSON.parse(read('release.json'));
+  const context = { window: {} };
+  const metadata = read('release-config.js');
+  vm.runInNewContext(metadata, context);
+  for (const directory of ['dist', 'mobile/www']) {
+    assert.equal(read(directory + '/release-config.js'), metadata);
+    assert.match(read(directory + '/index.html'), /id="studioBuildBadge"/);
+  }
+  const release = context.window.StudioRelease;
   assert.equal(release.version, JSON.parse(read('mobile/package.json')).version);
   assert.ok(read('mobile/android/app/build.gradle').includes('versionName "' + release.version + '"'));
   assert.ok(read('mobile/ios/App/App.xcodeproj/project.pbxproj').includes('MARKETING_VERSION = ' + release.version + ';'));
@@ -45,24 +52,26 @@ function updates({ online = true, body, platform, play, canSave = true } = {}) {
   let requests = 0;
   const button = { addEventListener: (_, callback) => { click = callback; } };
   const status = {};
+  const badge = {};
   const action = { hidden: true };
   const elements = { button, '[role="status"]': status, a: action };
   const window = { StudioBeforeUpdate: async () => canSave, StudioRelease: { version: '1.8.2', manifest: 'https://example.com/release.json' } };
   if (platform) window.Capacitor = { getPlatform: () => platform, Plugins: { StudioUpdates: play } };
   vm.runInNewContext(read('updates.js'), {
     window, navigator: { onLine: online }, URL, AbortSignal,
-    document: { getElementById: () => ({ querySelector: key => elements[key] }) },
+    document: { getElementById: id => id === 'studioBuildBadge' ? badge : ({ querySelector: key => elements[key] }) },
     fetch: async () => {
       requests++;
       if (body instanceof Error) throw body;
       return { ok: true, text: async () => JSON.stringify(body) };
     }
   });
-  return { click, status, action, requests: () => requests };
+  return { click, badge, status, action, requests: () => requests };
 }
 
 test('update checks are opt-in per click and skip all requests offline', async () => {
   const view = updates({ online: false });
+  assert.equal(view.badge.textContent, "v1.8.2 · Local workspace");
   assert.equal(view.requests(), 0);
   await view.click();
   assert.equal(view.requests(), 0);
@@ -73,18 +82,28 @@ test('update check handles failures, compares version numbers and validates stor
   const fail = updates({ body: new Error('offline') });
   await fail.click();
   assert.match(fail.status.textContent, /couldn’t finish/);
-  const latest = { version: '1.8.10', notes: '<b>release notes</b>', iosStore: 'https://apps.apple.com/us/app/studio/id123' };
-  const ios = updates({ platform: 'ios', body: latest });
+  const latest = { version: '1.8.10', notes: '<b>release notes</b>', storeUrl: 'https://apps.apple.com/us/app/studio/id123' };
+  const manifest = ios => ({ schema: 1, web: null, ios });
+  const ios = updates({ platform: 'ios', body: manifest(latest) });
   await ios.click();
   assert.match(ios.status.textContent, /1\.8\.10/);
   assert.match(ios.status.textContent, /<b>release notes<\/b>/);
   assert.equal(ios.action.hidden, false);
-  const invalid = updates({ platform: 'ios', body: { ...latest, iosStore: 'https://apps.apple.com.example.org/app/id123' } });
+  const invalid = updates({ platform: 'ios', body: manifest({ ...latest, storeUrl: 'https://apps.apple.com.example.org/app/id123' }) });
   await invalid.click();
   assert.equal(invalid.action.hidden, true);
+  const web = updates({ body: manifest(latest) });
+  await web.click();
+  assert.match(web.status.textContent, /No published update/);
+  assert.doesNotMatch(web.status.textContent, /1\.8\.10/);
+  const development = updates({ platform: 'android', play: { source: async () => ({ installedByPlay: false }) } });
+  await development.click();
+  assert.match(development.status.textContent, /same signing certificate/);
+  assert.equal(development.requests(), 0);
+  assert.equal(development.action.hidden, true);
 });
 
-test('Play checks use Play, including when release notes are unavailable', async () => {
+test('Play checks use Play without fetching the public manifest', async () => {
   let checks = 0;
   const play = {
     source: async () => ({ installedByPlay: true }),
@@ -93,6 +112,7 @@ test('Play checks use Play, including when release notes are unavailable', async
   const view = updates({ platform: 'android', play, body: new Error('unavailable') });
   await view.click();
   assert.equal(checks, 1);
+  assert.equal(view.requests(), 0);
   assert.match(view.status.textContent, /Follow the Google Play prompt/);
   assert.match(view.action.href, /^https:\/\/play\.google\.com/);
   const pending = updates({ platform: 'android', play, canSave: false, body: { version: '1.8.3', notes: 'New' } });

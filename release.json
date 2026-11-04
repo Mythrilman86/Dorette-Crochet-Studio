@@ -1,6 +1,10 @@
 {
-  "version": "1.8.2",
-  "notes": "Adds a shared website and mobile build and an Updates panel. Existing ZIP backups remain compatible.",
-  "androidApk": null,
-  "iosStore": null
+  "schema": 1,
+  "web": {
+    "version": "1.8.3",
+    "notes": "Keeps the version badge and Updates panel in sync and separates website, Google Play, and App Store availability."
+  },
+  "ios": null,
+  "version": "1.8.3",
+  "notes": "Keeps the version badge and Updates panel in sync and separates website, Google Play, and App Store availability."
 }

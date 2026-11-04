@@ -20,7 +20,7 @@ jobs:
       - run: node --test tests/*.cjs
       - name: Verify release tag
         if: github.ref_type == 'tag'
-        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").version) process.exit(1)'
+        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./mobile/package.json").version) process.exit(1)'
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
@@ -50,12 +50,14 @@ jobs:
           test -f "$ANDROID_HOME/platforms/android-36/android.jar"
           test -x "$ANDROID_HOME/build-tools/36.0.0/aapt2"
       - run: npm ci && npm run sync:android
-      - run: bash gradlew assembleDebug bundleRelease -PstudioPlay
+      - run: bash gradlew assembleDebug
+        working-directory: mobile/android
+      - run: bash gradlew bundleRelease -PstudioPlay
         working-directory: mobile/android
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
-          name: studio-android
+          name: studio-android-builds-ci-only
           path: |
             mobile/android/app/build/outputs/apk/debug/*.apk
             mobile/android/app/build/outputs/bundle/release/*.aab
