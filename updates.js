@@ -21,6 +21,7 @@
     let url;
     try { url = new URL(raw); } catch { return; }
     if (url.origin !== 'https://' + host || url.username || url.password || !path.test(url.pathname)) return;
+    if (platform === 'android' || platform === 'ios') action.target = '_self';
     action.href = url.href;
     action.textContent = label;
     action.hidden = false;
