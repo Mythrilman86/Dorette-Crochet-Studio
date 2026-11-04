@@ -28,22 +28,143 @@
     action.hidden = false;
   }
 
-  async function checkPlay(play) {
-    showLink('https://play.google.com/store/apps/details?id=com.deescrochetstudio.app',
-      'play.google.com', /^\/store\/apps\/details$/, 'Open Google Play');
-    status.textContent = `Installed version ${config.version}.`;
-    try {
-      if (!await window.StudioBeforeUpdate()) {
-        status.textContent += ' Finish saving or back up your projects before installing.';
+  if (platform === 'android') {
+    const native = window.Capacitor.Plugins.StudioUpdates;
+    const notice = document.getElementById('studioAndroidUpdate');
+    const description = notice.querySelector('[role="status"]');
+    const updateNow = document.getElementById('studioUpdateNow');
+    const later = document.getElementById('studioUpdateLater');
+    const setting = document.getElementById('studioAutoUpdate');
+    const preference = 'studio.android.autoUpdates';
+    const reminder = 'studio.android.updateReminder';
+    const repository = 'Mythrilman86/Dorette-Crochet-Studio';
+    let candidate;
+    let downloaded;
+    let busy = false;
+    let deferred;
+
+    function readSetting(key) {
+      try { return localStorage.getItem(key); } catch { return undefined; }
+    }
+
+    function saveSetting(key, value) {
+      try { localStorage.setItem(key, value); } catch { /* Keep the current session preference. */ }
+    }
+
+    function setBusy(value) {
+      busy = value;
+      button.disabled = updateNow.disabled = later.disabled = value;
+    }
+
+    async function githubUpdate() {
+      const response = await fetch('https://api.github.com/repos/' + repository + '/releases?per_page=10', {
+        cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(8000)
+      });
+      if (!response.ok) throw new Error('GitHub releases unavailable');
+      const releases = await response.json();
+      if (!Array.isArray(releases)) throw new Error('Invalid GitHub release list');
+      let latest;
+      for (const release of releases) {
+        if (typeof release?.tag_name !== 'string' || !release.tag_name.startsWith('v')
+            || release.draft !== false || release.prerelease !== false || !Array.isArray(release.assets)) continue;
+        const version = release.tag_name.slice(1);
+        if (!versionPattern.test(version) || !newer(version, latest?.version ?? config.version)) continue;
+        const name = 'Dees-Crochet-Studio-' + version + '-Android.apk';
+        const url = 'https://github.com/' + repository + '/releases/download/v' + version + '/' + name;
+        const apk = release.assets.find(asset => asset?.name === name && asset.browser_download_url === url
+          && asset.state === 'uploaded' && /^sha256:[a-f0-9]{64}$/.test(asset.digest));
+        if (!apk) continue;
+        latest = { id: 'github:' + version, version, sha256: apk.digest.slice(7),
+          notes: typeof release.body === 'string' ? release.body.slice(0, 4000) : '' };
+      }
+      return latest;
+    }
+
+    async function checkAndroid(automatic = false) {
+      if (busy) return;
+      if (!navigator.onLine) {
+        if (!automatic) status.textContent = 'You’re offline. You can keep working and check again later.';
         return;
       }
-      const { result } = await play.check();
-      status.textContent += result === 'started'
-        ? ' Follow the Google Play prompt.'
-        : ' Google Play did not start an update. You can check the store for availability.';
-    } catch {
-      status.textContent += ' The Google Play check couldn’t finish.';
+      setBusy(true);
+      if (!automatic) status.textContent = 'Checking for updates…';
+      try {
+        const source = await native.source();
+        let next;
+        if (source.installedByPlay) {
+          const play = await native.availability();
+          if (play.available) next = { id: 'play:' + play.versionCode, play: true };
+        } else if (source.githubSupported) {
+          next = await githubUpdate();
+        }
+        if (automatic && !setting.checked) return;
+        status.textContent = 'Installed version ' + config.version + '.';
+        if (!next) {
+          notice.hidden = true;
+          candidate = undefined;
+          status.textContent += ' No compatible update was found.';
+          return;
+        }
+        candidate = next;
+        const savedReminder = deferred ?? readSetting(reminder);
+        const expires = Number(savedReminder?.split('|')[1]);
+        if (automatic && savedReminder?.startsWith(next.id + '|') && Date.now() < expires) return;
+        description.textContent = next.play
+          ? 'A Google Play update is ready. Open Google Play to see the update details.'
+          : 'Android version ' + next.version + ' is available. ' + next.notes;
+        notice.hidden = false;
+        status.textContent += ' An update is available.';
+      } catch {
+        if (!automatic) status.textContent = 'The update check couldn’t finish. You can keep working and try again later.';
+      } finally {
+        setBusy(false);
+      }
     }
+
+    updateNow.addEventListener('click', async () => {
+      if (!candidate || busy) return;
+      setBusy(true);
+      try {
+        if (!candidate.play && downloaded !== candidate.id) {
+          description.textContent = 'Downloading and verifying version ' + candidate.version + '…';
+          await native.download({ version: candidate.version, sha256: candidate.sha256 });
+          downloaded = candidate.id;
+        }
+        if (!await window.StudioBeforeUpdate()) {
+          description.textContent = 'Finish saving your projects or export a backup before installing.';
+          return;
+        }
+        if (candidate.play) {
+          const { result } = await native.check();
+          description.textContent = result === 'started' ? 'Follow the Google Play prompt.' : 'Google Play did not start the update.';
+        } else {
+          const { permissionRequired } = await native.install();
+          description.textContent = permissionRequired
+            ? 'Allow Dee’s Crochet Studio to install updates in Android Settings, then return and tap Update Now again.'
+            : 'Confirm the update in Android’s installer.';
+        }
+      } catch {
+        downloaded = undefined;
+        description.textContent = 'The update could not be downloaded, verified, or opened. Try Update Now again.';
+      } finally {
+        setBusy(false);
+      }
+    });
+    later.addEventListener('click', () => {
+      if (!candidate) return;
+      deferred = candidate.id + '|' + (Date.now() + 24 * 60 * 60 * 1000);
+      saveSetting(reminder, deferred);
+      notice.hidden = true;
+      status.textContent = 'We’ll remind you the next time you open the app after 24 hours.';
+    });
+    document.getElementById('studioAutoUpdateSetting').hidden = false;
+    const savedPreference = readSetting(preference);
+    setting.checked = savedPreference !== 'off' && savedPreference !== undefined;
+    setting.addEventListener('change', () => saveSetting(preference, setting.checked ? 'on' : 'off'));
+    status.textContent = 'Check now, or let Studio check when it opens.';
+    button.addEventListener('click', () => checkAndroid());
+    if (setting.checked) window.setTimeout(() => checkAndroid(true), 0);
+    return;
   }
 
   button.addEventListener('click', async () => {
@@ -55,12 +176,6 @@
     button.disabled = true;
     status.textContent = 'Checking for updates…';
     try {
-      if (platform === 'android') {
-        const play = window.Capacitor?.Plugins?.StudioUpdates;
-        if ((await play.source()).installedByPlay) await checkPlay(play);
-        else status.textContent = `Installed development version ${config.version}. Back up your projects before installing a private test APK. An in-place update requires the same signing certificate.`;
-        return;
-      }
       const response = await fetch(config.manifest, {
         cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(8000)
       });

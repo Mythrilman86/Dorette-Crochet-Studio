@@ -10,6 +10,16 @@ import com.google.android.play.core.install.model.AppUpdateType;
 import com.google.android.play.core.install.model.UpdateAvailability;
 
 public class PlayUpdates {
+    public static void availability(Activity activity, PluginCall call) {
+        AppUpdateManagerFactory.create(activity).getAppUpdateInfo().addOnSuccessListener(info -> {
+            int availability = info.updateAvailability();
+            boolean eligible = availability == UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS
+                || (availability == UpdateAvailability.UPDATE_AVAILABLE
+                    && info.isUpdateTypeAllowed(AppUpdateType.IMMEDIATE));
+            call.resolve(new JSObject().put("available", eligible).put("versionCode", info.availableVersionCode()));
+        }).addOnFailureListener(error -> call.reject("Google Play could not check for updates", error));
+    }
+
     public static void start(Activity activity, PluginCall call) {
         AppUpdateManager manager = AppUpdateManagerFactory.create(activity);
         manager.getAppUpdateInfo().addOnSuccessListener(info -> {
