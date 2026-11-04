@@ -30,7 +30,7 @@ jobs:
 
   android:
     needs: web
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: mobile
@@ -45,7 +45,10 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Verify runner Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt2"
       - run: npm ci && npm run sync:android
       - run: bash gradlew assembleDebug bundleRelease -PstudioPlay
         working-directory: mobile/android
@@ -60,7 +63,6 @@ jobs:
 
   ios:
     needs: web
-    if: github.event_name != 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +78,7 @@ jobs:
             -derivedDataPath ios-build CODE_SIGNING_ALLOWED=NO build
           ditto -c -k --keepParent ios-build/Build/Products/Debug-iphonesimulator/App.app studio-ios-simulator.zip
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: studio-ios-simulator
           path: studio-ios-simulator.zip
