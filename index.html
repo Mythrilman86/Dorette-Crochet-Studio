@@ -9,6 +9,7 @@
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./styles.css?v=1.8.1">
   <title>Dorette Crochet Studio</title>
+  <link rel="stylesheet" href="./stitch-studio.css">
 </head>
 <body>
   <header class="topbar">
@@ -41,7 +42,7 @@
         <label class="toggle"><input id="alwaysSymbols" type="checkbox"> Emphasize yarn letters</label>
         <label>Number size <select id="numberScale"><option value="1">Standard</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
       </section>
-      <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
+      <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="openStitchStudio">Stitch Scanner</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
       <div class="next-workspace-bar"><label class="toggle"><input id="keepAwake" type="checkbox"> Keep screen awake (where supported)</label><label class="toggle"><input id="pinCrochetDock" type="checkbox" checked> Pin crochet controls</label><div class="chart-split-control"><label for="chartSplit">Chart split</label><input id="chartSplit" type="range" min="25" max="75" value="50" aria-label="Overview width percentage slider"><label class="chart-split-number"><input id="chartSplitNumber" type="number" min="25" max="75" step="1" value="50" inputmode="numeric" aria-label="Overview width percentage">%</label></div><button id="toggleSettings" class="button ghost" type="button">Show/hide settings</button><button id="toggleProjects" class="button ghost" type="button">Show/hide projects</button></div><div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
@@ -343,5 +344,52 @@
   <script src="./studio-ops.js?v=1.8.1" defer></script>
   <script src="./app.js?v=1.8.1" defer></script>
   <script src="./help.js?v=1.8.1" defer></script>
+<dialog id="stitchStudio" aria-labelledby="stitchTitle">
+  <header><h2 id="stitchTitle">Stitch Scanner &amp; Encyclopedia</h2><form method="dialog"><button>Close</button></form></header>
+  <label>Tool <select id="stitchMode">
+    <option value="library">Encyclopedia</option><option value="symbol">Single chart symbol</option>
+    <option value="chart">Multi-symbol chart</option><option value="fabric">Fabric comparison (experimental)</option>
+  </select></label>
+  <section id="stitchPhoto" hidden>
+    <p>Photos stay on this device. Use a sharp, upright photo with dark symbols on a light background.</p>
+    <div class="stitch-controls">
+      <label>Open photo <input id="stitchFile" type="file" accept="image/*"></label>
+      <label>Take photo on phone <input id="stitchCapture" type="file" accept="image/*" capture="environment"></label>
+      <button id="stitchCamera" type="button">Open live camera</button>
+    </div>
+    <div id="stitchLive" hidden><video autoplay muted playsinline></video><button id="stitchSnap">Take photo</button> <button id="stitchStop">Stop camera</button></div>
+    <p id="stitchStatus" role="status">Choose an image to start.</p>
+    <div id="stitchPreview" hidden>
+      <p>Drag over the image to select a crop, or edit the crop in pixels. The orange outline marks the crop.</p>
+      <canvas id="stitchImage" aria-label="Photo with crop and numbered chart markers"></canvas>
+      <div class="stitch-controls" id="stitchCrop">
+        <label>Left <input type="number" min="0" step="1"></label>
+        <label>Top <input type="number" min="0" step="1"></label>
+        <label>Width <input type="number" min="1" step="1"></label>
+        <label>Height <input type="number" min="1" step="1"></label>
+        <button id="stitchReset">Whole image</button>
+      </div>
+      <details open><summary>Magnified crop</summary><canvas id="stitchZoom" aria-label="Magnified crop"></canvas></details>
+      <div class="stitch-controls">
+        <button id="stitchAnalyze">Scan crop</button>
+        <button id="stitchAdd">Mark crop manually</button>
+      </div>
+    </div>
+    <div id="stitchResults" aria-live="polite"></div>
+  </section>
+  <section id="stitchReference">
+    <h3>Compare with the pattern legend</h3>
+    <div class="stitch-controls">
+      <label>Search stitches <input id="stitchSearch" type="search" placeholder="Try hdc or treble"></label>
+      <label>Search terms <select id="stitchTerms"><option value="both">US and UK</option><option value="us">US</option><option value="uk">UK</option></select></label>
+    </div>
+    <div id="stitchEntries"></div>
+    <small>Source for chart conventions and terminology: Craft Yarn Council. Illustrations are original. Always follow your pattern's own legend.</small>
+  </section>
+</dialog>
+
+  <script src="./stitch-library.js" defer></script>
+  <script src="./stitch-match.js" defer></script>
+  <script src="./stitch-studio.js" defer></script>
 </body>
 </html>
