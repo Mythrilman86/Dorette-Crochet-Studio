@@ -1,0 +1,6 @@
+{
+  "version": "1.8.2",
+  "notes": "Adds a shared website and mobile build and an Updates panel. Existing ZIP backups remain compatible.",
+  "androidApk": null,
+  "iosStore": null
+}

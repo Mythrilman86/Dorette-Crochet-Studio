@@ -68,3 +68,10 @@ The low-contrast crops all abstained. No fixture received a wrong clear match.
 The tilted fixtures show why uncertainty and legend confirmation matter even
 when the first suggestion is useful. Real chart photos and labeled fabric
 swatches are still needed to compare this baseline with any hosted model.
+
+## Shared website and mobile builds
+
+Run `node scripts/build.mjs web` to produce the website in `dist/`, or
+`node scripts/build.mjs mobile` to stage the same engine for Android and iOS.
+See [the mobile release guide](mobile/README.md) for Android testing, Apple signing,
+and the GitHub tag and update manifest workflow.

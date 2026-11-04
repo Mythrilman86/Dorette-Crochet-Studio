@@ -1,0 +1,5 @@
+/dist/
+/mobile/node_modules/
+/mobile/www/
+*.jks
+*.keystore

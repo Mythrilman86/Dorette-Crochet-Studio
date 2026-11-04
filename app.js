@@ -1588,7 +1588,15 @@ function readZip(bytes){
 }
 function backupPayload(items){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items};}
 function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,45)||'crochet-chart';}
-function download(blob,name){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+async function download(blob,name){
+  if(window.StudioMobile?.nativeFiles){
+    try{
+      const saved=await window.StudioMobile.save(blob,name);
+      toast(saved?'File saved: '+name:'Export canceled.');
+    }catch(error){toast('Could not save file: '+error.message);}
+    return;
+  }
+  const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function pdfSettings(){
   return {paper:$('pdfPaper').value,orientation:$('pdfOrientation').value,
     extraPages:$('pdfExtraPages').checked,sectionSize:Number($('workSectionSize').value)||25,notes:[active?.notes||'',...(active?.annotations||[]).map(n=>`${v16NoteLocation(n)}: ${n.text}`)].filter(Boolean).join('\n').slice(0,1500),
@@ -1615,7 +1623,7 @@ function runPdfJob(kind){
    if(worker){worker.terminate();worker=null;}
    if(error){toast('PDF export failed: '+error.message);console.error(error);}
    else if(!reliability.verifyPdf(result.bytes))toast('PDF export failed a file signature check.');
-   else {download(new Blob([result.bytes],{type:'application/pdf'}),filename);toast(`${result.pages}-page PDF downloaded. Saved chart unchanged.`);}
+   else {download(new Blob([result.bytes],{type:'application/pdf'}),filename);if(!window.StudioMobile?.nativeFiles)toast(`${result.pages}-page PDF downloaded. Saved chart unchanged.`);}
    button.disabled=false;button.textContent=originalText;
  };
  const fallback=()=>{
@@ -1646,7 +1654,7 @@ function exportBackup(all=false){
   const date=new Date().toISOString().slice(0,10);
   const filename=`Dorette-${all?'All-Projects':slug(active.name)}-${date}.zip`;
   download(new Blob([bytes],{type:'application/zip'}),filename);
-  toast(`Backup downloaded (${items.length} project${items.length===1?'':'s'}). Upload the ZIP to Google Drive.`);
+  if(!window.StudioMobile?.nativeFiles)toast(`Backup downloaded (${items.length} project${items.length===1?'':'s'}). Upload the ZIP to Google Drive.`);
 }
 function validateBackup(p){
   if(!p||typeof p!=='object'||!validDimensions(p.cols,p.rows))throw new Error('Invalid grid dimensions in backup');
@@ -3092,8 +3100,13 @@ function setupReliabilityTools(){
  $('historyUndo').addEventListener('click',undo);$('historyRedo').addEventListener('click',redo);
  renderDesignHistory();showDiagnostics();
 }
+window.StudioBeforeUpdate = async () => {
+ await flushSave();
+ await writeChain;
+ return !needsSave() && !memoryOnly;
+};
 function setupServiceWorkerUpdates(){
- if(!('serviceWorker' in navigator)||!location.protocol.startsWith('http'))return;
+ if(window.Capacitor?.isNativePlatform()||!('serviceWorker' in navigator)||!location.protocol.startsWith('http'))return;
  let installingUpdate=false,registration=null;
  navigator.serviceWorker.addEventListener('controllerchange',()=>{
    if(installingUpdate&&!needsSave())location.reload();

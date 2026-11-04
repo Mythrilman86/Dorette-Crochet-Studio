@@ -1,0 +1,19 @@
+{
+  "name": "dees-crochet-studio-mobile",
+  "version": "1.8.2",
+  "description": "Offline crochet chart studio for Android and iOS",
+  "scripts": {
+    "sync:android": "node ../scripts/build.mjs mobile && cap sync android",
+    "sync:ios": "node ../scripts/build.mjs mobile && cap sync ios"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  },
+  "private": true
+}
