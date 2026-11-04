@@ -275,3 +275,7 @@ body.crochet-view .crochet-dock .button{min-height:48px}
 @media(max-width:650px){
   .dual-charts > .chart-pane:not(#overviewPane){grid-row:1}
 }
+
+#studioUpdates{display:block;position:static}
+#studioUpdates summary{cursor:pointer;font-weight:700;width:max-content;padding-block:4px}
+#studioUpdates[open] summary{margin-bottom:10px}

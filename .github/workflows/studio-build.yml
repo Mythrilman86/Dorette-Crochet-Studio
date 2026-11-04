@@ -1,0 +1,85 @@
+name: Studio build
+on:
+  pull_request:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/build.mjs web && node scripts/build.mjs mobile
+      - run: node --test tests/*.cjs
+      - name: Verify release tag
+        if: github.ref_type == 'tag'
+        run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").version) process.exit(1)'
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: studio-website
+          path: dist/
+          if-no-files-found: error
+
+  android:
+    needs: web
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Verify runner Android SDK
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/aapt2"
+      - run: npm ci && npm run sync:android
+      - run: bash gradlew assembleDebug bundleRelease -PstudioPlay
+        working-directory: mobile/android
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: studio-android
+          path: |
+            mobile/android/app/build/outputs/apk/debug/*.apk
+            mobile/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+  ios:
+    needs: web
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm run sync:ios
+        working-directory: mobile
+      - name: Compile for iOS Simulator
+        run: |
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios-build CODE_SIGNING_ALLOWED=NO build
+          ditto -c -k --keepParent ios-build/Build/Products/Debug-iphonesimulator/App.app studio-ios-simulator.zip
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: studio-ios-simulator
+          path: studio-ios-simulator.zip
+          if-no-files-found: error

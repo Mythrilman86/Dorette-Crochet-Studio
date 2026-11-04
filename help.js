@@ -65,5 +65,16 @@
   }
   const health=document.querySelector('.reliability-drawer');
   if(health){const note=document.createElement('p');note.className='muted';note.textContent='Version 1.8.0 adds multi-tab edit ownership, approximate storage monitoring, cancelable background image operations, export preview checks and safe-copy edits. Project validation and confirmed database save messages remain. Diagnostics exclude private pattern data. Update notifications wait for pending writes.';health.append(note);}
-  const link=document.createElement('a');link.className='guide-link';link.href='./Dorette-Crochet-Studio-User-Guide.pdf';link.textContent='Illustrated user guide (PDF)';link.target='_blank';link.rel='noopener';document.querySelector('.workspace-top').after(link);
+  const link=document.createElement('a');link.className='guide-link';link.href='./Dorette-Crochet-Studio-User-Guide.pdf';link.textContent='Illustrated user guide (PDF)';link.target='_blank';link.rel='noopener';link.addEventListener('click',async event=>{
+    if(!window.StudioMobile?.nativeFiles)return;
+    event.preventDefault();
+    try{await window.StudioMobile.openGuide();}
+    catch{
+      try{
+        const response=await fetch(link.href);
+        if(!response.ok)throw new Error('Guide unavailable.');
+        await download(await response.blob(),'Dorette-Crochet-Studio-User-Guide.pdf');
+      }catch(error){toast('Could not open the guide: '+error.message);}
+    }
+  });document.querySelector('.workspace-top').after(link);
 })();

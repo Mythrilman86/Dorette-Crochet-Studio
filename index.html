@@ -19,6 +19,12 @@
   <div id="tabLockBanner" class="reliability-alert conflict-alert" role="alert" hidden><strong>Read-only in this tab.</strong><span id="tabLockMessage">Another Studio tab is editing local projects. Close that tab to prevent overwrites.</span><button id="retryEditing" class="button secondary" type="button">Retry editing</button></div>
   <div id="saveAlert" class="reliability-alert" role="alert" hidden><span id="saveAlertText"></span><button id="retrySave" class="button ghost" type="button">Retry saving</button></div>
   <div id="updateAvailable" class="update-notice" role="status" hidden><span id="updateAvailableText"></span><button id="installReadyUpdate" class="button secondary" type="button">Save and update Studio</button></div>
+  <details id="studioUpdates" class="update-notice" hidden>
+    <summary>Updates</summary>
+    <button type="button" class="button secondary">Check for updates</button>
+    <p role="status">Checks only when you ask.</p>
+    <a target="_blank" rel="noopener noreferrer" hidden></a>
+  </details>
   <main class="layout">
     <aside class="sidebar" aria-label="Projects">
       <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
@@ -394,5 +400,7 @@
   <script src="./stitch-library.js" defer></script>
   <script src="./stitch-match.js" defer></script>
   <script src="./stitch-studio.js" defer></script>
+  <script src="./release-config.js" defer></script>
+  <script src="./updates.js" defer></script>
 </body>
 </html>
