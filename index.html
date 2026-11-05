@@ -76,6 +76,7 @@
         <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
       </div>
       </section></div>
+      <details id="focusRowColors" class="focus-row-colors" open><summary>Row Color Instructions <span id="focusRowSummary"></span></summary><div class="focus-row-body"><div id="focusRowRuns" class="focus-row-runs" aria-label="Complete color sequence"></div><p id="focusRowChange" class="muted"></p><div class="focus-row-nav"><button id="focusRowPrev" type="button" class="button ghost">Previous row</button><button id="focusRowNext" type="button" class="button ghost">Next row</button></div></div></details>
       <div class="crochet-dock" aria-label="Crochet progress controls"><div class="crochet-dock-summary"><strong id="dockStatus"></strong><span id="dockProgress" role="status"></span></div><button id="dockToggleStitch" class="button secondary" type="button">Mark stitch</button><button id="dockToggleRow" class="button secondary" type="button">Mark row</button><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
       <div class="toolbar" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
@@ -86,6 +87,8 @@
         <button id="undoButton" class="button ghost" title="Undo (Ctrl+Z)">↶ Undo</button><button id="redoButton" class="button ghost" title="Redo (Ctrl+Shift+Z)">↷ Redo</button>
         <button id="resetView" class="button ghost">⌖ Center</button>
         <button id="openCommandSearch" class="button secondary" type="button" title="Find a feature (Ctrl+K)">⌕ Find a tool</button>
+        <button id="quickTextLayer" class="button ghost" type="button" aria-pressed="false">Text layer tools</button><span id="chartPaintTarget" class="muted" role="status"></span>
+        <button id="openChartStructure" class="button ghost" type="button">Rows &amp; columns</button>
         <button id="mirrorChart" class="button ghost" type="button">Mirror chart</button>
         <span class="toolbar-hint">Pinch or wheel: zoom · Use Pan to move the chart</span>
       </div>
@@ -218,7 +221,7 @@
         <button id="removeImage" class="text-button" disabled>Remove reference image</button>
       </div>
       <div class="section-divider"></div>
-      <div class="inspector-section"><div class="section-title"><span class="eyebrow">CROCHET MODE &amp; TABLET</span><span class="count">SAFE</span></div><label class="toggle"><input id="patternLock" type="checkbox"> Lock chart editing while crocheting</label><label class="toggle"><input id="stylusOnly" type="checkbox"> Stylus paints, finger only pans/selects</label><label class="toggle"><input id="largeTouch" type="checkbox"> Larger touch-friendly buttons</label><p class="muted">Pattern lock keeps row instructions and progress tools available, but blocks stitch-color editing until unlocked.</p></div>
+      <div class="inspector-section"><div class="section-title"><span class="eyebrow">CROCHET MODE &amp; TABLET</span><span class="count">SAFE</span></div><label class="toggle"><input id="patternLock" type="checkbox"> Pattern Lock (entire chart)</label><strong id="patternLockStatus"></strong><label class="toggle"><input id="stylusOnly" type="checkbox"> Stylus paints, finger only pans/selects</label><label class="toggle"><input id="largeTouch" type="checkbox"> Larger touch-friendly buttons</label><p class="muted">Pattern lock keeps row instructions and progress tools available, but blocks stitch-color editing until unlocked.</p></div>
       <div class="section-divider"></div>
       <div class="inspector-section"><div class="section-title"><span class="eyebrow">YARN COLOR LEGEND</span><span id="totalColors" class="count">1</span></div><div id="legend" class="legend"></div>
         <label class="field">Color for editing<select id="paintColor"></select></label>
@@ -356,6 +359,7 @@
     <p class="muted compare-footnote">The larger chart requires 10,557 more stitches. Zoom in on PUERTO RICAN and Boyfriend before making a decision.</p>
   </dialog>
 
+  <dialog id="chartStructureDialog" aria-labelledby="chartStructureTitle"><form method="dialog" class="stack"><h2 id="chartStructureTitle">Rows &amp; columns</h2><label>Action <select id="chartStructureAction"><option value="above">Insert Row Above</option><option value="below">Insert Row Below</option><option value="delete-row">Delete Selected Row</option><option value="left">Insert Column Left</option><option value="right">Insert Column Right</option><option value="delete-column">Delete Selected Column</option></select></label><p id="chartStructurePreview" role="status"></p><div class="pair"><button id="applyChartStructure" class="button primary" type="button">Confirm change</button><button class="button ghost" value="cancel">Cancel</button></div></form></dialog>
   <dialog id="categoryNameDialog" aria-labelledby="categoryNameTitle">
     <form id="categoryNameForm" class="stack">
       <h2 id="categoryNameTitle">Add category</h2>

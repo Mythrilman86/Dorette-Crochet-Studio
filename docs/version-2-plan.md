@@ -73,3 +73,15 @@ The local OCR prototype read parts of the published multilingual terminology she
 ## Physical-device verification · Version 2.0.0
 
 After publication, the project owner reported that both the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra updated successfully through Studio's in-app Android updater. The owner confirmed that 2.0.0 runs on both devices, project pinning works, and Samsung S Pen selection works. The owner also confirmed that creating a temporary project, adding a custom category, moving the project to the Recycle Bin, and restoring it worked on their Samsung devices. These are owner-reported physical-device checks, separate from the emulator upgrade, offline, and signing checks in the 2.0 release report.
+
+## Version 2.1.0 physical-device verification
+
+The owner reported that 2.1.0 is installed and working on the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra. Single/Dual switching, upright vertical HELLO, independently increasing letter width, and lettering persistence after reopening all worked. Painting and erasing HELLO worked after selecting its text layer and enabling **Paint and erase on selected text layer**. The owner reported that a lock icon appeared locked while painting was permitted. The icon-only report does not identify which control they saw. The next milestone separates the global Pattern Lock status from each layer's lock status and names the current brush target.
+
+## Version 2.2 development milestone
+
+- Crochet View shows the selected row's complete colorwork sequence from the existing pattern engine. It follows the project direction and alternation settings. The dock can collapse without changing progress. It describes colors and stitch counts only.
+- Select a stitch and open **Rows & columns** to insert above, below, left or right, or delete the selected line. Confirm the preview. With safe edits enabled Studio works on a saved copy.
+- Structural changes shift chart and layer stitches. Deleted-line reminders move to the nearest surviving line. Inserted cells start in the background color and incomplete. Previous row completion is retained on the surviving stitches.
+- Text layers retain the remapped stitch entries, including hand edits, and remain editable. Regenerating the lettering shape still requires confirmation when it would replace those entries. If a reference photo is attached, Studio keeps it and hides its overlay so the user can review alignment. Existing checkpoints and design versions remain separate historical records.
+- The current scanner remains the default. Recognition experiments remain outside this milestone.
