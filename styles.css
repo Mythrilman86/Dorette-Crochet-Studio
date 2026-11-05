@@ -371,3 +371,14 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 }
 #settingsLayoutBackup summary{min-height:44px;padding:10px;background:#ede3f7;border-radius:8px;cursor:pointer;font-weight:750}
 #settingsImportCategories .toggle{min-height:44px}
+
+/* Keep command and backup dialogs reachable above mobile system insets. */
+.command-dialog{
+  max-height:min(86vh,calc(100dvh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
+  overscroll-behavior:contain;
+}
+.command-dialog .button{min-height:44px;white-space:normal}
+.command-dialog :is(button,input,select):focus-visible{
+  outline:2px solid #68448e;
+  outline-offset:2px;
+}
