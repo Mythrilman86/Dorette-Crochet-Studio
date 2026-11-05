@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.3.1",
-    "notes": "Shows every section in Customize Layout, enlarges reorder controls, keeps menus in Crochet View, and adds safe bulk project actions."
+    "version": "2.3.2",
+    "notes": "Adds visible Settings drag feedback and edge auto-scroll, bulk Recycle Bin actions, and extra Crochet View menu clearance on Android tablets."
   },
   "ios": null,
-  "version": "2.3.1",
-  "notes": "Shows every section in Customize Layout, enlarges reorder controls, keeps menus in Crochet View, and adds safe bulk project actions."
+  "version": "2.3.2",
+  "notes": "Adds visible Settings drag feedback and edge auto-scroll, bulk Recycle Bin actions, and extra Crochet View menu clearance on Android tablets."
 }
