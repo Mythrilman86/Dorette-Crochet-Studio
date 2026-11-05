@@ -428,9 +428,19 @@
     <p>Find bundled instructions and troubleshooting. Results are reference matches.</p>
     <label>Question or stitch <input id="stitchQuestion" type="search" maxlength="160" placeholder="Try uneven edges or how to make a magic ring"></label>
     <div id="stitchAnswers" aria-live="polite"></div>
+    <button id="stitchExplainRow" type="button">Explain the current chart row</button>
+    <div id="stitchRowExplanation" aria-live="polite"></div>
     <h3>Online references</h3>
     <p>These sources open when you choose a link. Studio does not send your question, photos, or projects.</p>
     <ul id="stitchLinks"></ul>
+    <form id="stitchOnlineSearch" class="stitch-controls">
+      <label>Search Wikimedia Commons <input id="stitchOnlineQuery" type="search" maxlength="100" required placeholder="Try granny square"></label>
+      <button type="submit">Search online</button>
+    </form>
+    <p>Searching sends only the search terms to Wikimedia Commons.</p>
+    <p id="stitchOnlineStatus" role="status"></p>
+    <ul id="stitchOnlineResults"></ul>
+    <ul id="stitchOnlineBookmarks" aria-label="Saved Wikimedia Commons references"></ul>
     <h3>Saved references</h3>
     <ul id="stitchBookmarks"></ul>
     <p id="stitchReferenceStatus" role="status"></p>

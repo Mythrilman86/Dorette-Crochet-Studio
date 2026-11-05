@@ -1993,6 +1993,15 @@ async function restoreBackup(file){
 async function removeActiveProject(){if(active)await recycleProject(active);}
 // v1.0 - All computations use SAVED project cells; preview pixels never alter them.
 const Pattern=window.DorettePattern;
+window.StudioCurrentRowHelp=()=>{
+  if(!active)return null;
+  const row=selected?.row||active.guide?.row||1;
+  const direction=Pattern.direction(active,row)==='rtl'?'Right to left':'Left to right';
+  const chart=compositeProject(active);
+  return {row,direction,runs:Pattern.runs(chart,row).map(run=>({
+    count:run.count,yarn:chart.palette[run.color]?.name||'Yarn '+(run.color+1)
+  }))};
+};
 function queuePatternRender(){
   clearTimeout(patternRenderTimer);
   patternRenderTimer=setTimeout(()=>{patternRenderTimer=null;renderRowSequence();renderGuide();renderInventoryEstimates();},100);

@@ -9,7 +9,6 @@
   const cropFields = [...get('Crop').querySelectorAll('input')];
   const video = get('Live').querySelector('video');
   const status = text => { get('Status').textContent = text; };
-  const supported = new Set(['ch', 'sc', 'hdc', 'dc', 'tr', 'dtr']);
   const known = new Map(stitchEntries.map(entry => [entry.id, entry]));
   let crop, drag, stream, templates, imageRequest = 0, cameraRequest = 0;
   let marks = [];
@@ -65,6 +64,67 @@
     const saved = JSON.parse(localStorage.getItem(bookmarkKey) || '[]');
     if (Array.isArray(saved)) bookmarks = saved.filter(id => references.some(ref => ref.id === id));
   } catch {}
+
+  const commonsKey = 'studio.crochet.commons';
+  let commonsBookmarks = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(commonsKey) || '[]');
+    if (Array.isArray(saved)) commonsBookmarks = saved.filter(validCommonsResult).slice(0, 50);
+  } catch {}
+
+  function validCommonsResult(result) {
+    return Number.isSafeInteger(result?.pageid) && result.pageid > 0 &&
+      typeof result.title === 'string' && result.title.length <= 240 && result.title.startsWith('File:');
+  }
+
+  function renderCommons(target, results) {
+    target.replaceChildren();
+    for (const ref of results) {
+      const item = element('li', '', target);
+      const link = element('a', ref.title.slice(5), item);
+      link.href = 'https://commons.wikimedia.org/?curid=' + ref.pageid;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      const saved = commonsBookmarks.some(bookmark => bookmark.pageid === ref.pageid);
+      element('button', saved ? 'Remove bookmark' : 'Bookmark', item).onclick = () => {
+        if (!saved && commonsBookmarks.length >= 50) {
+          get('OnlineStatus').textContent = 'Remove a saved reference before adding another.';
+          return;
+        }
+        const next = saved ? commonsBookmarks.filter(bookmark => bookmark.pageid !== ref.pageid) : [...commonsBookmarks, ref];
+        try {
+          localStorage.setItem(commonsKey, JSON.stringify(next));
+          commonsBookmarks = next;
+          if (target !== get('OnlineBookmarks')) renderCommons(target, results);
+          renderCommons(get('OnlineBookmarks'), commonsBookmarks);
+        } catch { get('OnlineStatus').textContent = 'This device could not save the bookmark.'; }
+      };
+    }
+  }
+
+  async function searchCommons(event) {
+    event.preventDefault();
+    const status = get('OnlineStatus');
+    const query = get('OnlineQuery').value.trim();
+    const button = event.currentTarget.querySelector('button');
+    if (!query || button.disabled) return;
+    if (!navigator.onLine) { status.textContent = 'You’re offline. Saved references are still available.'; return; }
+    const url = new URL('https://commons.wikimedia.org/w/api.php');
+    url.search = new URLSearchParams({action:'query', list:'search', format:'json', formatversion:'2',
+      origin:'*', srnamespace:'6', srlimit:'8', srprop:'', srsearch:'crochet ' + query});
+    button.disabled = true;
+    status.textContent = 'Searching Wikimedia Commons…';
+    try {
+      const response = await fetch(url, {credentials:'omit', redirect:'error', signal:AbortSignal.timeout(8000)});
+      if (!response.ok) throw new Error('Search unavailable');
+      const data = await response.json();
+      const results = Array.isArray(data.query?.search)
+        ? data.query.search.filter(validCommonsResult).slice(0,8).map(({pageid,title})=>({pageid,title})) : [];
+      renderCommons(get('OnlineResults'), results);
+      status.textContent = results.length ? 'Open a source to check its description, creator and reuse license.' : 'No matching files found.';
+    } catch { status.textContent = 'Search is unavailable. Try again later or use saved references.'; }
+    finally { button.disabled = false; }
+  }
 
   function renderHelp() {
     const question = get('Question').value.trim();
@@ -264,23 +324,7 @@
   }
 
   function getTemplates() {
-    if (templates) return templates;
-    const sample = document.createElement('canvas');
-    sample.width = sample.height = 48;
-    const ctx = sample.getContext('2d', {willReadFrequently:true});
-    const shapes = stitchEntries.filter(entry => supported.has(entry.id))
-      .map(entry => ({id:entry.id, path:entry.path}));
-    shapes.push({id:'sc', path:'M24 10v28M10 24h28'});
-    templates = shapes.flatMap(({id,path}) => [2, 3, 5].map(lineWidth => {
-      ctx.clearRect(0, 0, 48, 48);
-      ctx.lineCap = 'round';
-      ctx.lineWidth = lineWidth;
-      ctx.stroke(new Path2D(path));
-      const mask = inkMask(ctx.getImageData(0, 0, 48, 48).data, 48, 48);
-      const box = components(mask, 48, 48).sort((a,b) => b.area - a.area)[0];
-      return {id, pixels:normalizedMask(mask, 48, box)};
-    }));
-    return templates;
+    return templates ??= buildStitchTemplates(stitchEntries);
   }
 
   function scan(asRegion = false) {
@@ -410,6 +454,21 @@
   get('Terms').onchange = showLibrary;
   get('Category').onchange = showLibrary;
   get('Question').oninput = renderHelp;
+  get('OnlineSearch').addEventListener('submit', searchCommons);
+  renderCommons(get('OnlineBookmarks'), commonsBookmarks);
+  get('ExplainRow').onclick = () => {
+    const details = window.StudioCurrentRowHelp?.();
+    const panel = get('RowExplanation');
+    panel.replaceChildren();
+    if (!details) { element('p', 'Open a chart to explain a row.', panel); return; }
+    element('h4', 'Row ' + details.row + ' · ' + details.direction, panel);
+    const steps = element('ol', '', panel);
+    for (const run of details.runs) {
+      element('li', run.count + (run.count === 1 ? ' stitch with ' : ' stitches with ') + run.yarn, steps);
+    }
+    element('p', 'These are chart color instructions. Follow your pattern for stitch type, turning chains, and repeats.', panel);
+  };
+  dialog.addEventListener('close', () => get('RowExplanation').replaceChildren());
   mode.onchange = () => {
     stopCamera();
     get('Photo').hidden = ['library','help'].includes(mode.value);

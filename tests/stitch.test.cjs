@@ -65,3 +65,12 @@ test('illustrated encyclopedia additions are searchable by terminology and categ
     assert.ok(entry.path && entry.steps.length >= 2 && entry.example);
   }
 });
+
+test('downsampling keeps one-pixel strokes between sample centers', () => {
+  const width=120;
+  const mask=new Uint8Array(width*width);
+  for(let y=0;y<width-1;y++)mask[y*width+y+1]=1;
+  const normalized=normalizedMask(mask,width,{x:0,y:0,w:width,h:width});
+  const rows=Array.from({length:32},(_,y)=>normalized.slice(y*32,(y+1)*32));
+  assert.ok(rows.filter(row=>row.some(Boolean)).length>=24);
+});

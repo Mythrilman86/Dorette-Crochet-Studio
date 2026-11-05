@@ -63,3 +63,9 @@ A real [CC0 single-crochet swatch photographed by Kawan856](https://commons.wiki
 The project panel groups matching pinned projects ahead of other matching projects and keeps Favorites independent. Both deletion entry points use the same pinned-project check. The Recycle Bin stores full project records locally and requires confirmation for permanent deletion. Organization mutations commit before the project list changes, and ZIP restores insert new IDs.
 
 Project category selectors include Manage Categories and place Add New Category last. The filter contains names only. Custom category renames and reassignments update active and recycled projects in one transaction. Default categories are protected. Full-library ZIPs preserve catalog names and recycled records using an optional organization field while keeping the original backup version. Restore an older ZIP normally. Use a full backup before moving between application versions, since v1.8.4 has no Recycle Bin interface.
+
+## Development checkpoint · Real-image benchmark and integrated 2.0 candidate
+
+The benchmark catalog, attribution records, and local runner live in [benchmark](../benchmark/README.md). The published symbol and photo sources are evaluation material and are outside the app bundle. The scanner preserves thin ink strokes when downsampling and retains manual confirmation. In help, users can explain the selected chart row locally or explicitly send a typed search to Wikimedia Commons. Only the search terms are sent. Saved result links remain available offline.
+
+The local OCR prototype read parts of the published multilingual terminology sheet but misread DC in the cropped US abbreviation column. Neither OCR nor a fabric classifier is bundled. Free cloud inference remains deferred. The same-image cloud comparison would require an enabled provider and permission to send the test images. No cloud account, service charge, or image upload was introduced.
