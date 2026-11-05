@@ -83,3 +83,37 @@ test('row deletion relocates reminders from the deleted row and recalculates alt
   assert.throws(()=>editChartLine({...project,rows:1},'row',1,false),/limits/);
   assert.throws(()=>editChartLine({...project,cols:200},'column',200,true),/limits/);
 });
+
+test('edge resize independently shrinks rows and grows columns without resampling', () => {
+  const p=fixture(), {patch,position,losses}=window.DoretteNext.resizeChartEdges(p,5,2,'left','bottom');
+  assert.deepEqual(plain(patch.cells),[0,0,1,2,1,0,0,2,1,2]);
+  assert.deepEqual(plain(patch.done),[0,0,0,0,1,0,0,1,1,1]);
+  assert.deepEqual(plain(patch.rowDone),[0,0]);
+  assert.deepEqual(plain(patch.layers[0].entries),[[3,2],[8,1]]);
+  assert.deepEqual(plain(position({col:2,row:2})),{col:4,row:1});
+  assert.equal(position({col:2,row:1}),null);
+  assert.deepEqual(plain(losses),{artwork:true,layers:true,notes:false,progress:true});
+  assert.equal(patch.annotations.find(note=>note.id==='stitch').col,5);
+  assert.equal(patch.annotations.find(note=>note.id==='row').row,1);
+});
+
+test('top and bottom removal retain the intended rows and renumber from the bottom', () => {
+  const p={...fixture(),rows:30,cols:25,cells:Array(750).fill(0),done:Array(750).fill(0),rowDone:Array(30).fill(0)};
+  for(let row=1;row<=30;row++)p.cells[index(p,1,row)]=row;
+  for(const [edge,first,last] of [['top',1,25],['bottom',6,30]]){
+    const {patch}=window.DoretteNext.resizeChartEdges(p,25,25,'right',edge);
+    assert.equal(patch.cells[index(patch,1,1)],first);
+    assert.equal(patch.cells[index(patch,1,25)],last);
+  }
+});
+
+test('opposite edges handle simultaneous growth and crop and report relocated notes', () => {
+  const p=fixture();
+  const {patch,losses}=window.DoretteNext.resizeChartEdges(p,2,5,'right','top');
+  assert.deepEqual(plain(patch.cells),[0,0,0,0,1,2,2,1,1,1]);
+  assert.deepEqual(plain(patch.rowDone),[0,1,0,0,0]);
+  assert.equal(patch.annotations.find(note=>note.id==='stitch').col,2);
+  assert.equal(losses.notes,true);
+  assert.equal(losses.progress,true);
+  assert.throws(()=>window.DoretteNext.resizeChartEdges(p,201,2,'left','top'),/limits/);
+});

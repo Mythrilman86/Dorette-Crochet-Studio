@@ -897,21 +897,58 @@ async function mirrorChart(){
   scheduleSave();refreshInspector();
   toast('Chart mirrored left to right. Use Undo to restore it.');
 }
-async function editDimensions(){
-  if(!active||editBlocked("resize the chart"))return;
+let dimensionRequest=null;
+function drawDimensionDiagram(old, cols, rows, columnEdge, rowEdge){
+  const x=columnEdge==='left'?old.cols-cols:0,y=rowEdge==='top'?old.rows-rows:0;
+  const left=Math.max(0,x),top=Math.max(0,y),right=Math.min(old.cols,x+cols),bottom=Math.min(old.rows,y+rows);
+  const rect=(x,y,w,h)=>'M'+x+' '+y+'h'+w+'v'+h+'h'+(-w)+'Z';
+  const oldRect=rect(0,0,old.cols,old.rows),newRect=rect(x,y,cols,rows),keep=rect(left,top,right-left,bottom-top);
+  const diagram=$('dimensionDiagram'),minX=Math.min(0,x),minY=Math.min(0,y);
+  const width=Math.max(old.cols,x+cols)-minX,height=Math.max(old.rows,y+rows)-minY;
+  diagram.setAttribute('viewBox',[minX-1,minY-1,width+2,height+2].join(' '));
+  for(const [part,path] of [['keep',keep],['remove',oldRect+keep],['add',newRect+keep],['outline',newRect]]){
+    diagram.querySelector('.dimension-'+part).setAttribute('d',path);
+  }
+}
+function editDimensions(){
+  if(!active||pendingConversion||editBlocked('resize the chart'))return;
   const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
-  if(!validDimensions(cols,rows)){toast('Columns must be 1–200 and rows 1–300.');return;}
-  if(cols===active.cols&&rows===active.rows){toast('The dimensions have not changed.');return;}
-  const old=active;
-  if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
-  if(!await safeMajorCopy('resized chart'))return;
-  snapshot();
-  Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
-  active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
-  areaSelection=null;
-  if(selected&&(selected.col>cols||selected.row>rows))selected=null;
-  window.DorettePattern.ensure(active);active.guide.row=clamp(active.guide.row,1,rows);active.guide.position=clamp(active.guide.position,0,cols-1);
-  discardPreview(false);scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
+  if(!validDimensions(cols,rows))return toast('Columns must be 1–200 and rows 1–300.');
+  if(cols===active.cols&&rows===active.rows)return toast('The dimensions have not changed.');
+  const columnEdge=$('dimensionColumnEdge').value,rowEdge=$('dimensionRowEdge').value;
+  const result=NF.resizeChartEdges(active,cols,rows,columnEdge,rowEdge);
+  const describe=(delta,unit,edge)=>{
+    if(!delta)return '';
+    const count=Math.abs(delta),direction=delta>0?'Add':'Remove';
+    return direction+' '+count+' '+unit+(count===1?'':'s')+(delta>0?' at the ':' from the ')+edge+'.';
+  };
+  $('dimensionChangeSummary').textContent=[active.cols+' × '+active.rows+' → '+cols+' × '+rows+'.',
+    describe(rows-active.rows,'row',rowEdge),describe(cols-active.cols,'column',columnEdge)].filter(Boolean).join(' ');
+  const {losses}=result;
+  const lost=[losses.artwork&&'base artwork',losses.layers&&'layer stitches (such as lettering)',losses.progress&&'crochet progress'].filter(Boolean);
+  $('dimensionChangeWarning').textContent=[
+    lost.length?'This removes '+lost.join(', ')+'.':'',
+    losses.notes?'Notes on removed lines will move to the nearest surviving stitch or row.':'',
+    active.referenceImage?'The reference photo is kept and its overlay is hidden for alignment review.':'',
+    rows!==active.rows&&rowEdge==='bottom'&&active.workDirection?.alternate!==false?'Renumbered rows may reverse working direction.':'',
+    safeEditsEnabled?'The original is kept and Studio resizes a saved copy.':''
+  ].filter(Boolean).join(' ');
+  drawDimensionDiagram(active,cols,rows,columnEdge,rowEdge);
+  dimensionRequest={project:active,revision:renderRevision,result};
+  $('dimensionPreviewDialog').showModal();
+}
+async function confirmDimensions(){
+  const request=dimensionRequest,point=selected&&{...selected};
+  $('dimensionPreviewDialog').close();
+  if(!request||request.project!==active||request.revision!==renderRevision||pendingConversion||editBlocked('resize the chart'))return;
+  if(!await safeMajorCopy('resized chart')||editBlocked('resize the chart'))return;
+  const {patch,position}=request.result;
+  selected=point;
+  snapshot({label:'Resize chart edges'});
+  Object.assign(active,patch);
+  selected=point&&position(point,true);
+  areaSelection=null;clearMotifPreview();clearTextPreview();
+  invalidateChartCache();scheduleSave();refreshInspector();fitChart();
 }
 function syncImage(){
   const src=active?.referenceImage||'';
@@ -1972,12 +2009,64 @@ function runPdfJob(kind){
  }catch(e){if(worker){worker.terminate();worker=null;}fallback();}
 }
 function exportPdf(){runPdfJob('chart');}
+const workspacePreferenceKeys={
+  sections:'studio.settings.layout.v1',tools:'studio.tool.shortcuts.v1',panels:'studio.panel.visibility.v1',
+  display:'dorette-display-v16',chart:'dorette-chart-layout'
+};
+function sanitizeWorkspacePreferences(input){
+  if(!input||typeof input!=='object'||input.version!==1)return null;
+  const result={version:1};
+  const strings=list=>Array.isArray(list)?[...new Set(list.filter(v=>typeof v==='string'&&v.length<=100))].slice(0,100):[];
+  if(input.sections&&typeof input.sections==='object'&&!Array.isArray(input.sections)){
+    const {order,collapsed,favorites}=input.sections;
+    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites)};
+  }
+  if(input.tools&&typeof input.tools==='object'){
+    const {favorites,recent}=input.tools;
+    if([favorites,recent].every(Array.isArray))result.tools={favorites:strings(favorites),recent:strings(recent).slice(0,6)};
+  }
+  if(input.panels&&typeof input.panels.projects==='boolean'&&typeof input.panels.settings==='boolean'){
+    result.panels={projects:input.panels.projects,settings:input.panels.settings};
+  }
+  if(input.display&&['beginner','advanced'].includes(input.display.mode)){
+    const d=input.display;
+    result.display={mode:d.mode,highContrast:d.highContrast===true,cues:d.cues===true,symbols:d.symbols===true,ruler:d.ruler===true,numberScale:[1,1.5,2].includes(d.numberScale)?d.numberScale:1};
+  }
+  if(['single','dual'].includes(input.chart))result.chart=input.chart;
+  return Object.keys(result).length>1?result:null;
+}
+function exportWorkspacePreferences(){
+  const prefs={version:1};
+  for(const [key,storageKey] of Object.entries(workspacePreferenceKeys)){
+    try{
+      const value=localStorage.getItem(storageKey);
+      if(value!==null)prefs[key]=key==='chart'?value:JSON.parse(value);
+    }catch{}
+  }
+  return sanitizeWorkspacePreferences(prefs);
+}
+async function restoreWorkspacePreferences(input){
+  const preferences=sanitizeWorkspacePreferences(input);
+  if(!preferences||!confirm('Restore workspace preferences from this backup? Choose Cancel to keep this device’s current layout. Your projects have already been restored.'))return;
+  await flushSave();
+  if(needsSave())return toast('Workspace preferences could not be applied while a save is pending.');
+  for(const [key,storageKey] of Object.entries(workspacePreferenceKeys)){
+    if(preferences[key]!==undefined)localStorage.setItem(storageKey,key==='chart'?preferences[key]:JSON.stringify(preferences[key]));
+  }
+  location.reload();
+}
+
 async function exportBackup(all=false, share=false, project=active){
   flushSave();const items=all?[...projects.values()]:[project];
   if(!items.length||!items[0])return;
   const bad=(all?items.concat([...recycledProjects.values()]):items).map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
   if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
-  const payload=JSON.stringify(backupPayload(items,all?{categories:customCategories,recycleBin:[...recycledProjects.values()]}:undefined));
+  const data=backupPayload(items,all?{categories:customCategories,recycleBin:[...recycledProjects.values()]}:undefined);
+  if(all&&$('includeWorkspacePreferences').checked){
+    const preferences=exportWorkspacePreferences();
+    if(preferences)data.workspace=preferences;
+  }
+  const payload=JSON.stringify(data);
   const readme=`Dorette Crochet Studio backup\nExported: ${new Date().toISOString()}\nProjects: ${items.length}\n\nRestore using the Restore backup button inside Dorette Crochet Studio.\nThis ZIP includes backup.json with project data, progress, yarn colors, and any embedded reference images.\nDo not extract or modify the ZIP before restoring. Store a copy in Google Drive.\n`;
   const bytes=makeZip({'README.txt':readme,'backup.json':payload});
   const date=new Date().toISOString().slice(0,10);
@@ -2027,7 +2116,10 @@ async function restoreBackup(file){
       for(const project of restored.recycled)recycledProjects.set(project.id,project);
       if(restored.projects.length)selectProject(restored.projects[0].id);
     },{copies:true});
-    if(saved)toast('Restored '+(restored.projects.length+restored.recycled.length)+' project(s) as new copies.');
+    if(saved){
+      toast('Restored '+(restored.projects.length+restored.recycled.length)+' project(s) as new copies.');
+      await restoreWorkspacePreferences(payload.workspace);
+    }
   }catch(e){toast('Could not restore: '+e.message);}
 }
 
@@ -3104,6 +3196,8 @@ function refreshWorkspaceLayout(){
  const split=Number($('chartSplit').value)||50;
  if(document.activeElement!==$('chartSplitNumber'))$('chartSplitNumber').value=split;document.documentElement.style.setProperty('--dorette-overview-share',split+'fr');document.documentElement.style.setProperty('--dorette-working-share',(100-split)+'fr');
  document.body.classList.toggle('hide-settings',$('toggleSettings').dataset.hidden==='1');document.body.classList.toggle('hide-projects',$('toggleProjects').dataset.hidden==='1');
+ $('toggleProjects').textContent=$('toggleProjects').dataset.hidden==='1'?'Show Projects':'Hide Projects';
+ $('toggleSettings').textContent=$('toggleSettings').dataset.hidden==='1'?'Show Settings':'Hide Settings';
  document.body.classList.toggle('unpinned-dock',!$('pinCrochetDock').checked);
  requestDraw();
 }
@@ -3557,37 +3651,301 @@ function renderExportPreview(){
  $('exportConsistency').textContent=matched===sampled?'✓ Preview colors match saved chart data.':'⚠ Preview needs review before export.';
  $('exportPreviewDialog').showModal();
 }
+const settingsLayoutKey='studio.settings.layout.v1';
+let settingsSections=new Map();
+function revealSettingsSection(section){
+  if(!section)return;
+  $('toggleSettings').dataset.hidden='0';refreshWorkspaceLayout();
+  if(getComputedStyle(section).display==='none'){
+    const mode=['edit','create','crochet'].find(name=>section.classList.contains(name+'-section'));
+    if(mode)setStudioMode(mode);
+    if(getComputedStyle(section).display==='none')section.classList.add('settings-revealed');
+  }
+  section.querySelector('.settings-section-toggle')?.setAttribute('aria-expanded','true');
+  section.classList.remove('settings-collapsed');
+  section.dispatchEvent(new Event('settings-open'));
+}
+function setupAppNavigation(){
+  const nav=$('appNavigation'),categories=$('appMenuCategories'),toggle=$('appMenuToggle');
+  const visibilityKey='studio.panel.visibility.v1';
+  let visibility={};
+  try{visibility=JSON.parse(localStorage.getItem(visibilityKey))||{};}catch{}
+  const projects=$('toggleProjects'),settings=$('toggleSettings');
+  projects.dataset.hidden=(visibility.projects??matchMedia('(max-width:920px)').matches)?'1':'0';
+  settings.dataset.hidden=visibility.settings===true?'1':'0';
+  refreshWorkspaceLayout();
+  const persist=()=>{
+    try{localStorage.setItem(visibilityKey,JSON.stringify({projects:projects.dataset.hidden==='1',settings:settings.dataset.hidden==='1'}));}catch{}
+  };
+  for(const button of [projects,settings])button.addEventListener('click',persist);
+  $('collapseProjects').onclick=()=>{projects.click();projects.focus();};
+  function close(focus=false){
+    const trigger=nav.querySelector('details[open] > summary');
+    nav.querySelectorAll('details[open]').forEach(details=>details.open=false);
+    nav.classList.remove('menu-open');toggle.setAttribute('aria-expanded','false');
+    if(focus)(toggle.getClientRects().length?toggle:trigger)?.focus();
+  }
+  toggle.onclick=()=>{if(nav.classList.contains('menu-open'))close();else{nav.classList.add('menu-open');toggle.setAttribute('aria-expanded','true');}};
+  $('headerFindTool').onclick=()=>{close();$('openCommandSearch').click();};
+  function go(id,action){
+    const node=id==='guidePdf'?document.querySelector('.guide-link'):$(id);if(!node)return;
+    if(action){
+      if(node.disabled){
+        const reasons={undoButton:'There is no chart change to undo.',redoButton:'There is no chart change to redo.',
+          editLastText:'Add and select an editable text layer first.',
+          quickTextLayer:isPatternLocked()?'Unlock Pattern Lock before painting a text layer.':'Add and select an editable text layer first.'};
+        return toast(reasons[id]||'Open an editable project and select a stitch or layer first.');
+      }
+      node.click();return;
+    }
+    const section=node.closest('.settings-section');
+    if(section)revealSettingsSection(section);
+    if(node.closest('.sidebar')){projects.dataset.hidden='0';refreshWorkspaceLayout();}
+    for(let el=node;el;el=el.parentElement)if(el.tagName==='DETAILS')el.open=true;
+    if(id==='imageFile'){node.click();return;}
+    node.scrollIntoView({block:'center'});if(node.tabIndex<0)node.tabIndex=-1;node.focus({preventScroll:true});
+  }
+  const menu={
+    File:[['New Project','newName'],['Open Project','projectSearch'],['Print / Export PDF','exportPdf',true],['Share Project','shareProject',true],['Back Up This Project','exportProject',true],['Back Up All Projects','exportAll',true],['Restore Backup','restoreProject',true],['Save Snapshot','saveCheckpoint',true]],
+    Edit:[['Select','toolSelect',true],['Paint','toolPaint',true],['Erase','toolErase',true],['Undo','undoButton',true],['Redo','redoButton',true],['Edit Lettering','editLastText',true],['Text Layer Paint / Erase','quickTextLayer',true],['Rows & Columns','openChartStructure',true],['Editable Layers','layerList']],
+    View:[['Single Chart','singleChart',true],['Dual Chart','dualChart',true],['Crochet View','crochetView',true],['Show / Hide Projects','toggleProjects',true],['Show / Hide Settings','toggleSettings',true],['Zoom In','zoomIn',true],['Zoom Out','zoomOut',true],['Fit Chart','fitChart',true],['Center Chart','resetView',true]],
+    Tools:[['Text to Chart','textInput'],['Image to Chart','imageFile'],['Stitch Scanner','openStitchStudio',true],['Yarn Palette','legend'],['Finished Size Calculator','sizePanel'],['Smart Cleanup & Quality','patternHealth']],
+    Help:[['Find a Tool','openCommandSearch',true],['Guided Tutorial','quickTutorial',true],['User Guide PDF','guidePdf',true],['About Studio','studioBuildBadge']]
+  };
+  for(const [label,commands] of Object.entries(menu)){
+    const detail=document.createElement('details'),summary=document.createElement('summary'),items=document.createElement('div');
+    summary.textContent=label;items.className='app-menu-items';
+    summary.onclick=()=>{for(const other of categories.querySelectorAll('details[open]'))if(other!==detail)other.open=false;};
+    for(const [name,id,action] of commands){
+      if(id!=='guidePdf'&&!$(id))continue;
+      const button=document.createElement('button');button.type='button';button.className='button ghost';button.textContent=name;
+      button.onclick=()=>{close(true);go(id,action);};items.append(button);
+    }
+    detail.append(summary,items);categories.append(detail);
+  }
+  window.StudioHandleBack=()=>{
+    const modal=[...document.querySelectorAll('dialog[open]')].filter(dialog=>dialog.matches(':modal')).at(-1);
+    if(modal){
+      if(modal.dispatchEvent(new Event('cancel',{cancelable:true})))modal.close();
+      return true;
+    }
+    if(nav.classList.contains('menu-open')||nav.querySelector('details[open]')){close(true);return true;}
+    if(matchMedia('(max-width:920px)').matches&&!inCrochetView()&&projects.dataset.hidden!=='1'){
+      projects.click();projects.focus();return true;
+    }
+    return false;
+  };
+  document.addEventListener('pointerdown',e=>{if(!nav.contains(e.target))close();});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&(nav.classList.contains('menu-open')||nav.querySelector('details[open]'))){e.preventDefault();close(true);}
+  });
+}
+
+function setupSettingsLayout(){
+  const inspector=document.querySelector('.inspector'),jump=$('jumpSettings');
+  const sections=[...inspector.querySelectorAll(':scope > .inspector-section,:scope > .settings-card')];
+  const make=(tag,cls,label)=>{
+    const el=document.createElement(tag);el.className=cls;el.textContent=label;
+    if(tag==='button')el.type='button';
+    return el;
+  };
+  let saved={};
+  try{saved=JSON.parse(localStorage.getItem(settingsLayoutKey))||{};}catch{}
+  const strings=value=>Array.isArray(value)?value.filter(v=>typeof v==='string'):[];
+  const collapsed=new Set(strings(saved.collapsed)),favorites=new Set(strings(saved.favorites));
+  const defaults=[];
+  let order=[];
+  function persist(){
+    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
+  }
+  function navigate(section){
+    revealSettingsSection(section);
+    const heading=section.querySelector('.settings-section-toggle');
+    heading.scrollIntoView({block:'center'});heading.focus({preventScroll:true});
+    heading.classList.add('settings-highlight');
+    setTimeout(()=>heading.classList.remove('settings-highlight'),1400);
+  }
+  function renderShortcuts(){
+    jump.replaceChildren(new Option('Choose a section',''));
+    const host=$('favoriteSettings');host.replaceChildren();
+    for(const key of order){
+      const section=settingsSections.get(key),label=section.dataset.settingsLabel;
+      jump.add(new Option(label,key));
+      if(favorites.has(key)){
+        const shortcut=make('button','button ghost',label);
+        shortcut.onclick=()=>navigate(section);host.append(shortcut);
+      }
+    }
+    if(host.children.length){
+      const title=make('strong','muted','Favorite Settings');
+      host.prepend(title);
+    }
+  }
+  function renderOrder(){
+    for(const key of order)inspector.append(settingsSections.get(key));
+    renderShortcuts();
+  }
+  function move(key,to,focus){
+    const from=order.indexOf(key);
+    if(to<0||to>=order.length||from===to)return;
+    order.splice(from,1);order.splice(to,0,key);
+    renderOrder();persist();focus?.focus({preventScroll:true});
+    $('settingsLayoutStatus').textContent=settingsSections.get(key).dataset.settingsLabel+' moved to position '+(to+1)+' of '+order.length+'.';
+  }
+  for(const section of sections){
+    const original=section.querySelector(':scope > .section-title,:scope > .inspector-heading,:scope > .eyebrow,:scope > summary');
+    if(!original)continue;
+    const raw=(original.querySelector('h2,.eyebrow')||original).textContent.trim();
+    const label=raw===raw.toUpperCase()?raw.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/\bPdf\b/g,'PDF'):raw;
+    const key=section.id||raw.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    section.dataset.settingsLabel=label;section.dataset.settingsKey=key;
+    section.classList.add('settings-section');original.classList.add('settings-original-heading');
+    if(section.tagName==='DETAILS')section.open=true;
+    settingsSections.set(key,section);defaults.push(key);
+    const head=make('div','settings-section-header','');
+    const toggle=make('button','settings-section-toggle',label);
+    function setOpen(open){
+      section.classList.toggle('settings-collapsed',!open);toggle.setAttribute('aria-expanded',String(open));
+      if(open)collapsed.delete(key);else collapsed.add(key);
+    }
+    setOpen(!collapsed.has(key));
+    toggle.onclick=()=>{setOpen(section.classList.contains('settings-collapsed'));persist();};
+    section.addEventListener('settings-open',()=>{setOpen(true);persist();});
+    const star=make('button','settings-favorite','');
+    function renderStar(){
+      const starred=favorites.has(key);
+      star.textContent=starred?'★':'☆';star.setAttribute('aria-pressed',String(starred));
+      star.setAttribute('aria-label',(starred?'Remove favorite: ':'Favorite: ')+label);
+    }
+    renderStar();
+    star.onclick=()=>{if(favorites.has(key))favorites.delete(key);else favorites.add(key);renderStar();renderShortcuts();persist();};
+    const controls=make('div','settings-reorder','');
+    for(const [label,delta] of [['Up',-1],['Down',1]]){
+      const button=make('button','',delta<0?'↑':'↓');button.setAttribute('aria-label','Move '+raw+' '+label.toLowerCase());
+      button.onclick=()=>move(key,order.indexOf(key)+delta,button);controls.append(button);
+    }
+    const grip=make('button','settings-grip','↕');grip.setAttribute('aria-label','Drag '+label+' to reorder');
+    grip.onpointerdown=e=>{if(e.button===0)grip.setPointerCapture(e.pointerId);};
+    grip.onpointerup=e=>{
+      if(!grip.hasPointerCapture(e.pointerId))return;
+      const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('.settings-section');
+      if(target)move(key,order.indexOf(target.dataset.settingsKey),grip);
+    };
+    controls.append(grip);head.append(toggle,star,controls);section.prepend(head);
+  }
+  order=[...new Set([...strings(saved.order).filter(key=>settingsSections.has(key)),...defaults])];
+  renderOrder();
+  jump.onchange=()=>{const section=settingsSections.get(jump.value);jump.value='';navigate(section);};
+  const customize=$('customizeSettings'),reset=$('resetSettingsOrder'),status=$('settingsLayoutStatus');
+  customize.onclick=()=>{
+    const editing=inspector.classList.toggle('settings-customizing');
+    customize.textContent=editing?'Done':'Customize Layout';customize.setAttribute('aria-pressed',String(editing));
+    reset.hidden=status.hidden=!editing;
+    status.textContent=editing?'Drag sections or use their Up and Down buttons.':'';
+  };
+  reset.onclick=()=>{order=defaults.slice();renderOrder();persist();status.textContent='Default section order restored.';};
+}
 function setupCommandPalette(){
  const commands=[
+  ['New project','#newName','Edit','Start a blank chart','create start crochet project'],
+  ['Recycle Bin','#projectBin','Edit','Find and restore deleted projects','where deleted project trash recover'],
+  ['Chart dimensions','#colsInput','Edit','Resize from the top, bottom, left or right edge','remove rows from bottom make chart bigger add remove columns resize'],
+  ['Rows & Columns','#openChartStructure','Edit','Insert or delete a line at the selected stitch','add a row insert delete column middle'],
+  ['Edit lettering','#editLastText','Edit','Select a text layer to change its wording','change a word edit existing text letters'],
+  ['Paint or erase lettering','#quickTextLayer','Edit','Select an unlocked text layer to paint or erase its stitches','erase a letter paint text layer'],
+  ['Layer lock','#layerList','Edit','Find the lock control on the desired editable layer','protect text layer'],
+  ['Crochet View','#crochetView','Crochet','Open the focused chart and current-row instructions','full screen focus progress'],
+  ['Row Color Instructions','#crochetView','Crochet','Open Crochet View to follow yarn changes by row','show yarn colors color sequence colorwork'],
+  ['Yarn Palette','#legend','Edit','See and manage chart yarn colors','show yarn colors color palette legend'],
+  ['Stitch Scanner','#openStitchStudio','Edit','Open the offline symbol scanner and stitch reference','identify scan crochet symbol'],
+  ['Back up all projects','#exportAll','Edit','Save a ZIP of your projects','save all my projects export backup'],
+  ['Restore backup','#restoreProject','Edit','Import saved ZIP project copies','import zip restore'],
+  ['Share project','#shareProject','Edit','Share a ZIP copy of the current project','send project zip'],
+  ['Show or hide Projects','#toggleProjects','Edit','Give the chart more space or show the library','hide projects sidebar show project workspace'],
+  ['Customize Layout','#customizeSettings','Edit','Rearrange whole Settings sections','rearrange settings move reorder workspace'],
+  ['Zoom chart','#zoomIn','Edit','Make the chart appear larger without changing dimensions','make chart bigger magnify'],
+  ['Guided tutorial','#quickTutorial','Edit','Find an introduction to the Studio','help tutorial learn'],
   ['Import photo','#imageFile','Create'],['Grayscale conversion','#conversionMode','Create'],['Detect imported grid','#detectGrid','Create'],
   ['Background cleanup','#removeBackground','Create'],['Advanced chart resize','#smartResize','Edit'],['Editable layers','#layerPanel','Edit'],
   ['Text and lettering','#textInput','Create'],['Yarn color replacement','#replaceEverywhere','Edit'],['Shapes','#shapeKind','Edit'],
   ['Undo and redo','#undoButton','Edit'],['Pattern lock','#patternLock','Edit'],['Guided crochet','#openGuide','Crochet'],
   ['Go to row and column','#goToCell','Crochet'],['Work sections','#workSectionSelect','Crochet'],
-  ['Printable PDF','#exportPdf','Edit'],['Written instructions PDF','#exportWrittenPdf','Edit'],['PNG image export','#exportPng','Edit'],
+  ['Printable PDF','#exportPdf','Edit','Print or save the chart as a PDF','print my chart export PDF'],['Written instructions PDF','#exportWrittenPdf','Edit'],['PNG image export','#exportPng','Edit'],
   ['Project backup','#exportAll','Edit'],['Project integrity','#runIntegrityCheck','Edit'],['Storage usage','#refreshStorage','Edit'],
   ['Export preview','#previewExport','Edit'],['Project gallery','#projectSearch','Edit']
  ];
+ for(const section of settingsSections.values()){
+   const heading=section.querySelector('.settings-section-toggle');
+   heading.id='settings-heading-'+section.dataset.settingsKey;
+   commands.push([section.dataset.settingsLabel,'#'+heading.id,'Edit','Open this Settings section']);
+ }
  const results=$('commandResults'),query=$('commandQuery'),dialog=$('commandDialog');
+ const toolKey='studio.tool.shortcuts.v1';
+ let shortcuts={};
+ try{shortcuts=JSON.parse(localStorage.getItem(toolKey))||{};}catch{}
+ const known=new Set(commands.map(([label])=>label));
+ const clean=list=>Array.isArray(list)?list.filter(label=>known.has(label)):[];
+ const favoriteTools=new Set(clean(shortcuts.favorites));
+ let recentTools=clean(shortcuts.recent).slice(0,6);
+ function saveTools(){
+   try{localStorage.setItem(toolKey,JSON.stringify({favorites:[...favoriteTools],recent:recentTools}));}catch{}
+ }
  let jumping=false;
  function update(){
-  results.replaceChildren();const q=query.value.trim().toLowerCase();let count=0;
-  for(const [label,selector,mode] of commands.filter(([label,,mode])=>!q||label.toLowerCase().includes(q)||mode.toLowerCase().includes(q)).slice(0,16)){
-   const node=document.querySelector(selector);if(!node)continue;count++;
+  results.replaceChildren();
+  const q=query.value.trim().toLowerCase(),words=q.match(/[a-z0-9]+/g)||[];
+  const score=([label,,mode,description='',aliases=''])=>{
+    const title=label.toLowerCase(),all=[title,aliases.toLowerCase(),description.toLowerCase(),mode.toLowerCase()].join(' ');
+    if(!words.length)return 1;
+    const hits=words.filter(word=>all.includes(word)).length;
+    if(!hits)return 0;
+    return (title.includes(q)?60:0)+(aliases.toLowerCase().includes(q)?45:0)+hits*8+words.filter(word=>title.includes(word)).length*3;
+  };
+  function add([label,selector,mode,description='']){
+   const node=document.querySelector(selector);if(!node)return;
+   const row=document.createElement('div');row.className='command-entry';
    const btn=document.createElement('button');btn.type='button';btn.className='command-result';
-   const name=document.createElement('strong');name.textContent=label;const where=document.createElement('small');where.textContent=mode;
+   const name=document.createElement('strong');name.textContent=label;
+   const where=document.createElement('small');where.textContent=mode+(description?' · '+description:'');
    btn.append(name,where);
-   btn.addEventListener('click',()=>{
+   btn.onclick=()=>{
     jumping=true;dialog.close();setStudioMode(mode.toLowerCase());
-    const root=node.closest('.inspector');if(root){$('toggleSettings').dataset.hidden='0';refreshWorkspaceLayout();}
-    for(let el=node.parentElement;el;el=el.parentElement)if(el.tagName==='DETAILS')el.open=true;
+    const section=node.closest('.settings-section');
+    if(section)revealSettingsSection(section);
+    if(node.closest('.sidebar')){$('toggleProjects').dataset.hidden='0';refreshWorkspaceLayout();}
+    for(let el=node;el;el=el.parentElement)if(el.tagName==='DETAILS')el.open=true;
+    recentTools=[label,...recentTools.filter(item=>item!==label)].slice(0,6);saveTools();
     if(node.id==='imageFile'){node.click();return;}
     node.scrollIntoView({behavior:'auto',block:'center'});
     if(node.tabIndex<0)node.tabIndex=-1;
-    node.focus({preventScroll:true});
-   });results.append(btn);
+    node.focus({preventScroll:true});node.classList.add('settings-highlight');
+    setTimeout(()=>node.classList.remove('settings-highlight'),1400);
+    if(node.disabled)toast(description||'This tool needs an active project or selection.');
+   };
+   const star=document.createElement('button');star.type='button';star.className='command-star';
+   const render=()=>{const on=favoriteTools.has(label);star.textContent=on?'★':'☆';star.setAttribute('aria-pressed',String(on));star.setAttribute('aria-label',(on?'Remove favorite: ':'Favorite: ')+label);};
+   render();
+   star.onclick=()=>{
+     if(favoriteTools.has(label))favoriteTools.delete(label);else favoriteTools.add(label);
+     saveTools();render();
+     for(const other of results.querySelectorAll('.command-star'))if(other!==star&&other.dataset.tool===label){
+       other.textContent=star.textContent;for(const attr of ['aria-pressed','aria-label'])other.setAttribute(attr,star.getAttribute(attr));
+     }
+   };
+   star.dataset.tool=label;row.append(btn,star);results.append(row);
   }
-  if(!count){const msg=document.createElement('p');msg.textContent='No matching Studio tools.';results.append(msg);}
+  function group(title,list){
+   if(!list.length)return;
+   const heading=document.createElement('h3');heading.textContent=title;results.append(heading);
+   list.forEach(add);
+  }
+  const ranked=commands.map(command=>({command,score:score(command)})).filter(item=>item.score>0).sort((a,b)=>b.score-a.score).map(item=>item.command);
+  if(!q){
+    group('Favorite Tools',commands.filter(([label])=>favoriteTools.has(label)));
+    group('Recently Used',recentTools.map(label=>commands.find(command=>command[0]===label)).filter(Boolean));
+  }
+  group(q?'Search results':'Search All Tools',q?ranked.slice(0,20):ranked);
+  if(!ranked.length){const msg=document.createElement('p');msg.textContent='No matching Studio tools.';results.append(msg);}
  }
  function open(){if(dialog.open)return;jumping=false;dialog.showModal();query.value='';update();query.focus();}
  $('openCommandSearch').addEventListener('click',open);
@@ -3699,6 +4057,8 @@ function hookEvents(){
     if(name===active.name)return;snapshot({label:'Rename project'});active.name=name.slice(0,70);scheduleSave();refreshInspector();refreshProjectList();
   });
   $('applyDimensions').addEventListener('click',editDimensions);
+  $('confirmDimensions').onclick=()=>void confirmDimensions().catch(error=>toast(error.message));
+  $('dimensionPreviewDialog').addEventListener('close',()=>{dimensionRequest=null;});
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
   $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);$('mirrorChart').addEventListener('click',mirrorChart);
   for(const [id,mode] of [['markStitch','mark'],['markRow','row']]){
@@ -3930,7 +4290,9 @@ async function initialize(){
   if(invalidProjects.size)saveAlert(`${invalidProjects.size} stored project(s) failed validation. Originals remain untouched. Open Studio Diagnostics to export the raw record.`);
   setupReliabilityTools();
   setupServiceWorkerUpdates();
+  setupSettingsLayout();
   setupPolishTools();
+  setupAppNavigation();
   if(studioReadOnly)setTabReadOnly(false);
 }
 initialize().catch(e=>{status('Unable to open workspace',true);toast(e.message);});

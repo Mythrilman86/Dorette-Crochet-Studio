@@ -85,3 +85,11 @@ The owner reported that 2.1.0 is installed and working on the Samsung Galaxy S24
 - Structural changes shift chart and layer stitches. Deleted-line reminders move to the nearest surviving line. Inserted cells start in the background color and incomplete. Previous row completion is retained on the surviving stitches.
 - Text layers retain the remapped stitch entries, including hand edits, and remain editable. Regenerating the lettering shape still requires confirmation when it would replace those entries. If a reference photo is attached, Studio keeps it and hides its overlay so the user can review alignment. Existing checkpoints and design versions remain separate historical records.
 - The current scanner remains the default. Recognition experiments remain outside this milestone.
+
+## Version 2.2.0 physical-device verification
+
+The owner confirmed eight checks on the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra, including in-app updating, project retention, Crochet View Row Color Instructions, middle-column insertion, populated-row deletion with Undo/Redo, Pattern and Layer Lock, offline reopening, and S Pen selection, zoom and panning on the tablet. These results apply to 2.2.0.
+
+## Version 2.3 workspace development
+
+The edge controls state where rows and columns are added or removed. The Settings milestone adds collapsible headings, section navigation, local favorites, and whole-section ordering. Find a Tool uses local keywords and aliases, with separate favorite and recent tool lists. The app menu routes to existing controls. Projects opens as a drawer on smaller screens and remembers visibility separately from Settings. Full ZIP backups can optionally include workspace preferences. Restore asks before applying them. The bundled guide begins with the current quick-start pages and keeps the earlier illustrated reference. Physical Android back-button and S Pen checks, native upgrade verification, and release verification remain pending.
