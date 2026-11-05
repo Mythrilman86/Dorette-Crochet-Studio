@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "1.8.4",
-    "notes": "Adds optional Android update notifications, verified downloads and Android installation confirmation."
+    "version": "2.0.0",
+    "notes": "Adds full-screen Crochet View, local scanner photo tools, expanded stitch guidance, native ZIP sharing, project pinning, custom categories, and a Recycle Bin."
   },
   "ios": null,
-  "version": "1.8.4",
-  "notes": "Adds optional Android update notifications, verified downloads and Android installation confirmation."
+  "version": "2.0.0",
+  "notes": "Adds full-screen Crochet View, local scanner photo tools, expanded stitch guidance, native ZIP sharing, project pinning, custom categories, and a Recycle Bin."
 }

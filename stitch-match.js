@@ -57,25 +57,40 @@ function components(mask, width, height) {
   return boxes;
 }
 
-function normalizedMask(mask, width, box) {
+function normalizedMask(mask, width, box, preserveThin = false) {
   const output = new Uint8Array(MASK_SIDE ** 2);
   const scale = 26 / Math.max(box.w, box.h);
   const offsetX = (MASK_SIDE - box.w * scale) / 2;
   const offsetY = (MASK_SIDE - box.h * scale) / 2;
   for (let y = 0; y < MASK_SIDE; y++) {
     for (let x = 0; x < MASK_SIDE; x++) {
-      const sx = Math.floor((x + .5 - offsetX) / scale);
-      const sy = Math.floor((y + .5 - offsetY) / scale);
-      if (sx >= 0 && sx < box.w && sy >= 0 && sy < box.h) {
-        output[y * MASK_SIDE + x] = mask[(box.y + sy) * width + box.x + sx];
+      if (!preserveThin || scale >= 1) {
+        const sx = Math.floor((x + .5 - offsetX) / scale);
+        const sy = Math.floor((y + .5 - offsetY) / scale);
+        if (sx >= 0 && sx < box.w && sy >= 0 && sy < box.h) {
+          output[y * MASK_SIDE + x] = mask[(box.y + sy) * width + box.x + sx];
+        }
+      } else {
+        // Preserve hairline strokes when reducing a large source symbol.
+        const left = Math.max(0, Math.floor((x - offsetX) / scale));
+        const right = Math.min(box.w, Math.ceil((x + 1 - offsetX) / scale));
+        const top = Math.max(0, Math.floor((y - offsetY) / scale));
+        const bottom = Math.min(box.h, Math.ceil((y + 1 - offsetY) / scale));
+        for (let sy = top; sy < bottom && !output[y * MASK_SIDE + x]; sy++) {
+          for (let sx = left; sx < right; sx++) {
+            if (!mask[(box.y + sy) * width + box.x + sx]) continue;
+            output[y * MASK_SIDE + x] = 1;
+            break;
+          }
+        }
       }
     }
   }
   return output;
 }
 
-function rankSymbols(mask, width, box, templates) {
-  const sample = normalizedMask(mask, width, box);
+function rankSymbols(mask, width, box, templates, preserveThin = false) {
+  const sample = normalizedMask(mask, width, box, preserveThin);
   const scores = new Map();
   for (const {id, pixels} of templates) {
     let intersection = 0, union = 0;
@@ -94,4 +109,40 @@ function matchConfidence(matches) {
     ? 'Clear shape match' : 'Uncertain';
 }
 
-if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence};
+function adjustScanPixels(rgba, exposure, contrast) {
+  const factor = 1 + contrast / 100;
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    for (let channel = 0; channel < 3; channel++) {
+      const index = offset + channel;
+      rgba[index] = (rgba[index] - 128) * factor + 128 + exposure;
+    }
+  }
+  return rgba;
+}
+
+function sameScanRegion(a, b) {
+  const width = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+  const height = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  return width * height >= .75 * Math.min(a.w * a.h, b.w * b.h);
+}
+
+function buildStitchTemplates(entries, preserveThin = false) {
+  const supported = new Set(["ch", "sc", "hdc", "dc", "tr", "dtr"]);
+  const sample = document.createElement('canvas');
+  sample.width = sample.height = 48;
+  const ctx = sample.getContext('2d', {willReadFrequently:true});
+  const shapes = entries.filter(entry => supported.has(entry.id))
+    .map(entry => ({id:entry.id, path:entry.path}));
+  shapes.push({id:'sc', path:'M24 10v28M10 24h28'});
+  return shapes.flatMap(({id,path}) => [2, 3, 5].map(lineWidth => {
+    ctx.clearRect(0, 0, 48, 48);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = lineWidth;
+    ctx.stroke(new Path2D(path));
+    const mask = inkMask(ctx.getImageData(0, 0, 48, 48).data, 48, 48);
+    const box = components(mask, 48, 48).sort((a,b) => b.area - a.area)[0];
+    return {id, pixels:normalizedMask(mask, 48, box, preserveThin)};
+  }));
+}
+
+if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence, adjustScanPixels, sameScanRegion};

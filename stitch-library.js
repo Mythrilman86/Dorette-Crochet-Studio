@@ -16,12 +16,16 @@ const stitchEntries = [
     ['Yarn over three times.','Insert the hook and pull up a loop with a yarn over.','Yarn over and pull through two loops four times, one pair at a time.'], 'Try it beside a treble to compare the extra height.'],
   ['sc2tog','Single crochet two together','dc2tog','Double crochet two together','M10 39L24 8l14 31',
     ['Insert the hook in the first stitch and pull up a loop.','Insert the hook in the next stitch and pull up a loop.','Yarn over and draw through all three loops.'], 'Work it near a row edge to decrease by one stitch.'],
+  ['sc3tog','Single crochet three together','dc3tog','Double crochet three together','M9 39L24 8l15 31m-15-31v31',
+    ['Insert the hook in each of the next three stitches in turn, yarn over, and draw up one loop from each.','Yarn over and draw through all four loops on the hook.','Count one completed stitch over three base stitches.'], 'Practice on the middle three stitches of a swatch to see a two-stitch decrease.'],
   ['dc2tog','Double crochet two together','tr2tog','Treble crochet two together','M9 40L24 7l15 33M15 7h18M10 25h12m4 0h12',
     ['Start a US double crochet in the first stitch and stop after the first pull through two.','Start another in the next stitch and stop at the same point.','Yarn over and pull through the three remaining loops.'], 'Use one where the pattern shows two tall stitches merging at their tops.'],
   ['shell','Five double crochet shell','shell','Five treble crochet shell','M24 41L4 19m20 22L13 9m11 32V5m0 36L35 9M24 41l20-22',
     ['Locate the single stitch or space marked by the pattern.','Work five US double crochets into that same place.','Continue at the next stitch or space specified by your pattern.'], 'Try a shell in a chain space and watch the posts fan out. The legend sets the count.'],
   ['puff','Puff stitch','puff','Puff stitch','M24 43Q0 23 24 5Q48 23 24 43M24 5v38',
     ['Yarn over, insert in the indicated space and draw up a long loop.','Repeat in the same space for the number of loops your pattern specifies.','Yarn over and close the loops as directed by the pattern.'], 'Compare three draw-ups in one space with a taller or fuller puff in your own pattern.'],
+  ['popcorn','Five double crochet popcorn','popcorn','Five treble crochet popcorn','M24 43Q2 25 9 10m15 33L17 7m7 36V5m0 38L31 7m-7 36Q46 25 39 10M9 10Q24 0 39 10',
+    ['Work five US double crochets in the same base unless your pattern specifies another count.','Remove the hook from the live loop and insert it through the first stitch in the group.','Pick up the live loop and pull it through the first stitch. Close or secure the group as the pattern directs.'], 'Compare the raised cluster with a puff. A popcorn groups finished stitches before joining them.'],
   ['picot','Chain-three picot','picot','Chain-three picot','M12 39Q0 18 24 9Q48 18 36 39Z',
     ['Chain three.','Slip stitch into the base specified by the pattern to close the little loop.'], 'Use one between groups of stitches on a practice edging.'],
   ['flo','Front loop only','flo','Front loop only','M10 29Q24 9 38 29',
@@ -31,18 +35,46 @@ const stitchEntries = [
   ['fpdc','Front post double crochet','fptr','Front post treble crochet','M12 5h24M24 5v30q0 12 12 7m-20-20 16-6',
     ['Yarn over and insert front to back beside the post, then back to front on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Work around a tall stitch in the previous row to raise a ridge.'],
   ['bpdc','Back post double crochet','bptr','Back post treble crochet','M12 5h24M24 5v30q0 12-12 7m4-20 16-6',
-    ['Yarn over and insert back to front beside the post, then front to back on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Alternate with front post stitches to practice textured ribbing.']
-].map(([id,us,ukCode,uk,path,steps,example]) => ({id,us,ukCode,uk,path,steps,example}));
+    ['Yarn over and insert back to front beside the post, then front to back on the other side.','Yarn over and pull a loop around the post.','Yarn over and pull through two loops twice.'], 'Alternate with front post stitches to practice textured ribbing.'],
+  ['inc','Single crochet increase','inc','Double crochet increase','M24 41L11 10m13 31L37 10m-31 0h10m16 0h10',
+    ['Work one US single crochet in the indicated stitch.','Insert the hook into that same stitch again and work a second single crochet.','Count two stitches above the one base stitch.'], 'Work one increase at each edge to widen a practice swatch.'],
+  ['v-st','Double crochet V-stitch','v-st','Treble crochet V-stitch','M24 41L9 7m15 34L39 7M4 7h10m20 0h10M19 15q5-8 10 0',
+    ['Work a US double crochet in the marked stitch or space.','Chain the number shown in the pattern.','Work another double crochet into the same stitch or space.'], 'On the next practice row, find the chain space between the two posts.'],
+  ['bobble','Double crochet bobble','bobble','Treble crochet bobble','M24 42Q1 27 24 7q23 20 0 35m0-35v35m-13-35h26',
+    ['Start several US double crochets in the same stitch. Stop each one before the final yarn-over.','Keep the unfinished loops on the hook.','Yarn over and pull through the remaining loops as the pattern directs.'], 'Practice from the wrong side and compare the raised bump on the right side.'],
+  ['mr','Magic ring','mr','Magic ring','M31 27q1-9-8-9q-11 0-11 11q0 13 14 13q16-1 16-16q0-19-20-19q-15 0-17 14m32 17 8 7',
+    ['Make an adjustable loop with the yarn tail free.','Draw the working yarn through the loop and secure it as your pattern directs.','Work the first round around the loop and tail, then pull the tail to close the center.'], 'Count the stitches in the first round before closing the center. Secure the tail when finishing.']
+].map(([id,us,ukCode,uk,path,steps,example]) => ({
+  id,us,ukCode,uk,path,steps,example,
+  category: ['sc2tog','sc3tog','dc2tog','inc'].includes(id) ? 'Shaping' :
+    ['shell','puff','picot','v-st','bobble','popcorn'].includes(id) ? 'Texture' :
+    ['flo','blo','fpdc','bpdc'].includes(id) ? 'Placement' : 'Foundations'
+}));
 
-function searchStitches(query, terms = 'both') {
+function searchStitches(query, terms = 'both', category = '') {
   const words = query.trim().toLowerCase().split(/\s+/);
   return stitchEntries.filter(stitch => {
+    if (category && stitch.category !== category) return false;
     const fields = terms === 'us' ? [stitch.id, stitch.us] :
       terms === 'uk' ? [stitch.ukCode, stitch.uk] :
         [stitch.id, stitch.us, stitch.ukCode, stitch.uk];
+    fields.push(stitch.category);
     if (stitch.id === 'sl' && terms !== 'uk') fields.push('sl st', 'slip st');
     return words.every(word => fields.some(field => field.toLowerCase().includes(word)));
   });
 }
 
-if (typeof module !== 'undefined') module.exports = {stitchEntries, searchStitches};
+const crochetHelp = [
+  {title:'Uneven or narrowing edges', match:/uneven|narrow|edge|missing stitch/i,
+    text:'Mark the first and last stitches before turning. Count the stitches after each row. Check whether the turning chain counts as a stitch in your pattern, and look for a skipped end stitch or an extra stitch in the chain.'},
+  {title:'Curling fabric', match:/curl|curling|wavy/i,
+    text:'Check whether the foundation is tighter than the rows above it. Make a small test swatch with a looser foundation and relaxed tension. Follow the yarn label before washing or blocking.'},
+  {title:'Increasing and decreasing', match:/increas|decreas|shap/i,
+    text:'An increase makes more than one stitch in a single base. A decrease joins multiple bases into one stitch. Check the pattern for the stitch type, placement, and expected count.'},
+  {title:'Working in joined or continuous rounds', match:/round|spiral|join/i,
+    text:'Use a marker at the start of each round. A joined round closes where the pattern specifies, often with a slip stitch. A continuous round moves into the next stitch without joining. Count at the marker and follow the pattern for turning chains and increases.'},
+  {title:'Reading a chart or written pattern', match:/chart|legend|symbol|pattern|abbreviat|read.*row/i,
+    text:'Start with the pattern legend and check its US or UK terminology. Follow the row or round numbers and arrows. Count the stitches in a repeat before working it across the chart.'}
+];
+
+if (typeof module !== 'undefined') module.exports = {stitchEntries, searchStitches, crochetHelp};

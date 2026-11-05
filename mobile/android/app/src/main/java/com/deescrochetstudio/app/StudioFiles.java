@@ -1,6 +1,7 @@
 package com.deescrochetstudio.app;
 
 import android.app.Activity;
+import android.content.ClipData;
 import android.content.Intent;
 import android.util.Base64;
 import androidx.activity.result.ActivityResult;
@@ -17,6 +18,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.UUID;
 
 @CapacitorPlugin(name = "StudioFiles")
 public class StudioFiles extends Plugin {
@@ -104,6 +106,50 @@ public class StudioFiles extends Plugin {
                 clearExport();
             }
             call.resolve(new JSObject().put("saved", true));
+        });
+    }
+
+    @PluginMethod
+    public void share(PluginCall call) {
+        String name = call.getString("name", "");
+        if (pendingExport == null || !name.matches("[A-Za-z0-9_-]{1,90}\\.zip")) {
+            call.reject("No valid ZIP is available to share.");
+            return;
+        }
+        File root = new File(getContext().getCacheDir(), "studio-shares");
+        File[] previous = root.listFiles();
+        if (previous != null) {
+            long cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L;
+            for (File folder : previous) {
+                File[] files = folder.listFiles();
+                if (files == null || folder.lastModified() >= cutoff) continue;
+                for (File file : files) file.delete();
+                folder.delete();
+            }
+        }
+        File folder = new File(root, UUID.randomUUID().toString());
+        File shared = new File(folder, name);
+        if (!folder.mkdirs() || !pendingExport.renameTo(shared)) {
+            folder.delete();
+            call.reject("Could not prepare the ZIP for sharing.");
+            return;
+        }
+        pendingExport = null;
+        getActivity().runOnUiThread(() -> {
+            try {
+                android.net.Uri uri = FileProvider.getUriForFile(getContext(),
+                    getContext().getPackageName() + ".fileprovider", shared);
+                Intent intent = new Intent(Intent.ACTION_SEND).setType("application/zip")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setClipData(ClipData.newRawUri(name, uri));
+                getActivity().startActivity(Intent.createChooser(intent, "Share crochet project"));
+                call.resolve(new JSObject().put("saved", true));
+            } catch (RuntimeException error) {
+                shared.delete();
+                folder.delete();
+                call.reject("Could not open Android sharing.", error);
+            }
         });
     }
 

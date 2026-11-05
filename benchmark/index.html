@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; img-src blob:; connect-src 'none'">
+<title>Studio scanner benchmark</title>
+<h1>Studio scanner benchmark</h1>
+<p>Select catalog.json and the local source files together. Only local files are read.</p>
+<input id="dataset" type="file" multiple>
+<button id="run" type="button">Run benchmark</button>
+<pre id="results" aria-live="polite"></pre>
+<script src="../stitch-library.js" defer></script>
+<script src="../stitch-match.js" defer></script>
+<script src="run.js" defer></script>
+</html>

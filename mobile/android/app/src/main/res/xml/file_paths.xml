@@ -2,4 +2,5 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="studio_guide" path="guide/" />
     <cache-path name="studio_updates" path="studio-updates/" />
+    <cache-path name="studio_shares" path="studio-shares/" />
 </paths>

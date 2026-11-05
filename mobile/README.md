@@ -1,6 +1,6 @@
 # Dee’s Crochet Studio mobile
 
-Build 1.8.4 uses the v1.8.1 Complete engine and the scanner/layout already present in the website source. The Android application ID and iOS bundle identifier are both `com.deescrochetstudio.app`. Both platforms bundle the web files and illustrated PDF. The app uses the existing local storage origins, schema and ZIP format.
+Build 2.0.0 uses the v1.8.1 Complete engine and the scanner/layout already present in the website source. The Android application ID and iOS bundle identifier are both `com.deescrochetstudio.app`. Both platforms bundle the web files and illustrated PDF. The app uses the existing local storage origins, schema and ZIP format.
 
 ## Install and preserve your projects
 
@@ -29,7 +29,7 @@ On a Mac, run `npm ci` and `npm run sync:ios` from `mobile`, then open `ios/App/
 
 ## Android signing and migration
 
-- The 1.8.2 and 1.8.3 Samsung installs use the certificate SHA-256 `18e1b2ee1bfcc482a8d89633fd449858d81cd590c54c6721610e60f21a9e35bb`. The retained private debug keystore was verified against this fingerprint. Keep an encrypted private backup of the keystore. For a local continuity build, set `STUDIO_DEBUG_KEYSTORE` to the absolute path of that retained standard Android debug keystore, then run `assembleRelease -PstudioContinuity` to make the non-debuggable GitHub APK. Confirm both APKs have the same certificate using `apksigner verify --print-certs`, and check the package ID and version code before installing. Use a higher version code for the next tester delivery.
+- The 1.8.2 through 1.8.4 Samsung installs use the certificate SHA-256 `18e1b2ee1bfcc482a8d89633fd449858d81cd590c54c6721610e60f21a9e35bb`. The retained private debug keystore was verified against this fingerprint. Keep an encrypted private backup of the keystore. For a local continuity build, set `STUDIO_DEBUG_KEYSTORE` to the absolute path of that retained standard Android debug keystore, then run `assembleRelease -PstudioContinuity` to make the non-debuggable GitHub APK. Confirm both APKs have the same certificate using `apksigner verify --print-certs`, and check the package ID and version code before installing. Use a higher version code for the next tester delivery.
 - GitHub's debug build uses the runner's disposable key and is for CI. Publish a continuity APK only after testing an in-place upgrade on an emulator with a saved project. Keep the continuity key out of Git, CI artifacts and the Play signing process.
 - Build the Play bundle with `bundleRelease -PstudioPlay`. After approval, sign it with the registered upload key and validate it on a Play testing track. Play App Signing supplies the certificate on installed Play builds. Before switching signing channels, export a ZIP outside the app and verify it by restoring a copy in a separate installation. Keep the original ZIP and confirm the restored projects open before relying on the new installation.
 

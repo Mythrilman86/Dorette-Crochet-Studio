@@ -77,9 +77,11 @@ function uiSettings(p=active){
   const u=p?.ui||{};
   return {showProgress:u.showProgress!==false,patternLock:!!u.patternLock,stylusOnly:!!u.stylusOnly,largeTouch:!!u.largeTouch};
 }
+function inCrochetView(){return document.body.classList.contains('crochet-view');}
 function isPatternLocked(){return uiSettings().patternLock;}
 function editBlocked(action='edit the chart'){
   if(studioReadOnly||!Ops.canWrite()){toast('This tab is read-only.');return true;}
+  if(inCrochetView()){toast('Exit Crochet View to '+action+'.');return true;}
   if(!isPatternLocked())return false;
   toast('Unlock Pattern lock to '+action+'.');
   return true;
@@ -133,13 +135,100 @@ function dbRequest(storeType,action) {
     if (!db) return reject(new Error('Local database unavailable'));
     const tx=db.transaction('projects',storeType), store=tx.objectStore('projects');
     let result;
-    try {result=action(store);}catch(e){reject(e);return;}
+    try {result=action(store);}catch(e){tx.abort();reject(e);return;}
     tx.oncomplete=()=>resolve(result?.result);
     tx.onerror=()=>reject(tx.error);
     tx.onabort=()=>reject(tx.error||new Error('Storage transaction aborted'));
   });
 }
+const defaultCategories=['Other','Blankets','Garments','Gifts','Practice'];
+const catalogId='studio:category-catalog';
+const recycledProjects=new Map();
+let customCategories=[], organizationBusy=false;
+
+function normalizeCategory(value){
+  if(typeof value!=='string')return '';
+  const name=value.trim().replace(/\s+/g,' ').normalize('NFC');
+  return name.length<=48&&/^[\p{L}\p{N}][\p{L}\p{M}\p{N} &()._’'-]*$/u.test(name)?name:'';
+}
+function categoryKey(name){return name.toLowerCase();}
+function categoryCatalog(names){
+  const catalog=new Map(defaultCategories.map(name=>[categoryKey(name),name]));
+  for(const value of names){
+    const name=normalizeCategory(value);
+    if(name&&!catalog.has(categoryKey(name)))catalog.set(categoryKey(name),name);
+  }
+  return catalog;
+}
+function loadProjectRecords(items){
+  const meta=items.find(record=>record?.id===catalogId);
+  const catalog=categoryCatalog(Array.isArray(meta?.categories)?meta.categories:[]);
+  recycledProjects.clear();
+  for(const project of items){
+    if(project?.id===catalogId)continue;
+    const check=reliability.auditProject(project);
+    if(!check.ok){invalidProjects.set(String(project?.id||'invalid-'+invalidProjects.size),{raw:project,check});continue;}
+    const name=normalizeCategory(project.category)||'Other';
+    if(!catalog.has(categoryKey(name)))catalog.set(categoryKey(name),name);
+    project.category=catalog.get(categoryKey(name));
+    (project.trashedAt&&!project.pinned?recycledProjects:projects).set(project.id,project);
+  }
+  customCategories=[...catalog.values()].slice(defaultCategories.length);
+}
 async function loadProjects(){return dbRequest('readonly',store=>store.getAll());}
+async function organizeProjects(records,removed,categories,apply,{copies=false}={}){
+  if(organizationBusy||studioReadOnly||!Ops.canWrite()||memoryOnly){
+    toast('Project organization needs writable local storage. Try again when saving is available.');
+    return false;
+  }
+  organizationBusy=true;
+  const layout=document.querySelector('.layout');
+  layout.inert=true;
+  try{
+    await flushSave();
+    if(!Ops.canWrite())throw new Error('The editing lock was lost.');
+    await dbRequest('readwrite',store=>{
+      for(const record of records){
+        if(copies)store.add(record);else store.put(record);
+      }
+      for(const id of removed)store.delete(id);
+      if(categories)store.put({id:catalogId,categories});
+    });
+    if(categories)customCategories=categories;
+    apply();
+    refreshProjectList();
+    return true;
+  }catch(error){
+    toast('Could not save project organization: '+error.message);
+    return false;
+  }finally{
+    organizationBusy=false;
+    layout.inert=false;
+  }
+}
+function readProjectBackup(payload){
+  const trash=payload?.organization?.recycleBin??[];
+  const names=payload?.organization?.categories??[];
+  if(payload?.app!=='dorette-crochet-studio'||payload.version!==1||
+      !Array.isArray(payload.projects)||!Array.isArray(trash)||!Array.isArray(names)||
+      payload.projects.length+trash.length<1||payload.projects.length+trash.length>1000||names.length>1000){
+    throw new Error('Not a supported Dorette backup');
+  }
+  const catalog=categoryCatalog(customCategories.concat(names));
+  function restore(record){
+    const project=validateBackup(record);
+    const key=categoryKey(project.category);
+    if(!catalog.has(key))catalog.set(key,project.category);
+    project.category=catalog.get(key);
+    return project;
+  }
+  const restored=payload.projects.map(restore);
+  const recycled=trash.map(record=>{
+    if(record?.pinned===true)throw new Error('A pinned project cannot be restored into the Recycle Bin');
+    return {...restore(record),trashedAt:new Date().toISOString()};
+  });
+  return {projects:restored,recycled,categories:[...catalog.values()].slice(defaultCategories.length)};
+}
 function refreshSaveState(){
  if(memoryOnly){setSavePhase('blocked');return;}
  if(failedWrites.size){setSavePhase('failed',failedWrites.values().next().value);return;}
@@ -182,9 +271,202 @@ function flushSave(){
  if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(active)queueWrite(active).catch(()=>{});}
  return writeChain;
 }
+const pinnedDeleteMessage='Cannot Delete Pinned Project. This project is pinned and protected from deletion. To delete it, you must unpin it first.';
+function projectButton(label,action){
+  const button=document.createElement('button');
+  button.type='button';button.className='button ghost';button.textContent=label;
+  button.addEventListener('click',action);
+  return button;
+}
+async function changeProjectFlags(project,changes){
+  if(projects.get(project.id)!==project)return;
+  await organizeProjects([{...project,...changes}],[],null,()=>Object.assign(project,changes));
+}
+function deletionAllowed(project){
+  if(!project.pinned)return true;
+  alert(pinnedDeleteMessage);
+  return false;
+}
+async function recycleProject(project){
+  if(projects.get(project.id)!==project||!deletionAllowed(project))return;
+  const record={...project,trashedAt:new Date().toISOString()};
+  const replacement=projects.size===1?blankProject('My First Chart',79,117):null;
+  const saved=await organizeProjects(replacement?[record,replacement]:[record],[],null,()=>{
+    projects.delete(project.id);
+    recycledProjects.set(project.id,record);
+    if(replacement)projects.set(replacement.id,replacement);
+    if(activeId===project.id)selectProject(projects.keys().next().value);
+  });
+  if(saved)toast('Moved to the Recycle Bin.');
+}
+async function restoreRecycled(project){
+  if(recycledProjects.get(project.id)!==project)return;
+  const {trashedAt,...record}=project;
+  if(projects.has(record.id))record.id=uid();
+  const saved=await organizeProjects([record],[],null,()=>{
+    recycledProjects.delete(project.id);
+    projects.set(record.id,record);
+  });
+  if(saved)toast('Project restored from the Recycle Bin.');
+}
+async function purgeRecycled(items){
+  if(!items.length||items.some(project=>recycledProjects.get(project.id)!==project||!deletionAllowed(project)))return;
+  const label=items.length===1?'“'+items[0].name+'”':items.length+' projects';
+  if(!confirm('Permanently delete '+label+'? This cannot be undone.'))return;
+  const ids=items.map(project=>project.id);
+  const saved=await organizeProjects([],ids,null,()=>ids.forEach(id=>recycledProjects.delete(id)));
+  if(saved)toast('Permanently deleted '+label+'.');
+}
+async function duplicateProject(project){
+  if(projects.get(project.id)!==project)return;
+  const copy=structuredClone(project);
+  copy.id=uid();copy.name=(project.name.slice(0,65)+' copy');copy.pinned=false;
+  copy.createdAt=copy.updatedAt=new Date().toISOString();
+  const saved=await organizeProjects([copy],[],null,()=>{
+    projects.set(copy.id,copy);
+    selectProject(copy.id);
+  },{copies:true});
+  if(saved)toast('Project duplicated.');
+}
+function projectMenu(project){
+  const menu=document.createElement('details');menu.className='project-menu';
+  const toggle=document.createElement('summary');toggle.textContent='⋮';
+  toggle.setAttribute('aria-label','Actions for '+project.name);
+  menu.append(toggle);
+  const actions=document.createElement('div');actions.className='project-menu-actions';menu.append(actions);
+  function add(label,fn){
+    actions.append(projectButton(label,()=>{
+      menu.open=false;
+      toggle.focus();
+      fn();
+    }));
+  }
+  add(project.pinned?'Unpin':'Pin',()=>changeProjectFlags(project,{pinned:!project.pinned}));
+  add(project.favorite?'Remove from Favorites':'Add to Favorites',()=>changeProjectFlags(project,{favorite:!project.favorite}));
+  add('Rename Project',()=>{
+    const name=prompt('Rename project',project.name)?.trim().slice(0,70);
+    if(name&&name!==project.name)changeProjectFlags(project,{name}).then(()=>{if(active===project)refreshInspector();});
+  });
+  add('Duplicate Project',()=>duplicateProject(project));
+  add('Export Project',()=>exportBackup(false,false,project));
+  add('Move to Recycle Bin',()=>recycleProject(project));
+  menu.addEventListener('keydown',event=>{if(event.key==='Escape'){menu.open=false;toggle.focus();}});
+  return menu;
+}
+function renderRecycleBin(){
+  const list=$('projectBinList');list.replaceChildren();
+  $('projectBinCount').textContent=recycledProjects.size;
+  $('emptyProjectBin').disabled=!recycledProjects.size;
+  for(const project of recycledProjects.values()){
+    const row=document.createElement('div');row.className='project-bin-row';
+    const name=document.createElement('strong');name.textContent=project.name;
+    row.append(name,projectButton('Restore Project',()=>restoreRecycled(project)),
+      projectButton('Delete Permanently',()=>purgeRecycled([project])));
+    list.append(row);
+  }
+}
+const addCategoryValue=':add',manageCategoryValue=':manage';
+function refreshCategorySelectors(){
+  const categories=defaultCategories.concat(customCategories);
+  for(const id of ['categoryFilter','projectCategory','newProjectCategory']){
+    const select=$(id);
+    const current=id==='projectCategory'?(active?.category||'Other'):select.value;
+    const options=categories.map(name=>new Option(name,name));
+    if(id==='categoryFilter')options.unshift(new Option('All categories',''));
+    else options.push(new Option('Manage Categories…',manageCategoryValue),new Option('＋ Add New Category…',addCategoryValue));
+    select.replaceChildren(...options);
+    select.value=categories.includes(current)?current:(id==='categoryFilter'?'':'Other');
+  }
+}
+let categoryEdit;
+function showCategoryName({selector,project,oldName}={}){
+  categoryEdit={selector,project,oldName};
+  $('categoryNameTitle').textContent=oldName?'Rename category':'Add category';
+  $('categoryNameSave').textContent=oldName?'Rename Category':'Add Category';
+  $('categoryName').value=oldName||'';
+  $('categoryNameError').textContent='';
+  $('categoryNameDialog').showModal();
+  $('categoryName').focus();
+}
+function categoryRecords(name){return [...projects.values(),...recycledProjects.values()].filter(project=>project.category===name);}
+async function changeCategoryAssignments(records,name,categories){
+  return organizeProjects(records.map(project=>({...project,category:name})),[],categories,()=>{
+    for(const project of records)project.category=name;
+    if(active)refreshInspector();
+  });
+}
+function renderCategoryManager(){
+  const list=$('categoryManagerList');list.replaceChildren();
+  for(const name of defaultCategories.concat(customCategories)){
+    const row=document.createElement('div');row.className='category-manager-row';
+    const title=document.createElement('strong');const count=categoryRecords(name).length;
+    title.textContent=name+' ('+count+')';row.append(title);
+    if(customCategories.includes(name)){
+      row.append(projectButton('Rename',()=>showCategoryName({oldName:name})));
+      const replacement=document.createElement('select');
+      replacement.setAttribute('aria-label','Reassign projects in '+name+' to');
+      replacement.replaceChildren(...defaultCategories.concat(customCategories).filter(value=>value!==name).map(value=>new Option(value,value)));
+      replacement.value='Other';
+      if(count)row.append(replacement);
+      row.append(projectButton('Delete',async()=>{
+        if(!confirm(count?'Delete category “'+name+'” and move its '+count+' project(s) to “'+replacement.value+'”?':'Delete category “'+name+'”?'))return;
+        if(await changeCategoryAssignments(categoryRecords(name),replacement.value,customCategories.filter(value=>value!==name)))renderCategoryManager();
+      }));
+    }
+    list.append(row);
+  }
+}
+function setupProjectOrganization(){
+  $('emptyProjectBin').addEventListener('click',()=>purgeRecycled([...recycledProjects.values()]));
+  for(const id of ['projectCategory','newProjectCategory']){
+    const selector=$(id);
+    selector.addEventListener('focus',()=>{selector.dataset.previous=selector.value;});
+    selector.addEventListener('change',async()=>{
+      const value=selector.value;
+      const project=id==='projectCategory'?active:null;
+      const previous=project?.category||selector.dataset.previous||'Other';
+      if(value===addCategoryValue||value===manageCategoryValue){
+        selector.value=[...selector.options].some(option=>option.value===previous)?previous:'Other';
+        if(value===addCategoryValue)showCategoryName({selector,project});
+        else {renderCategoryManager();$('categoryManager').showModal();}
+      }else if(project){
+        selector.value=previous;
+        await changeCategoryAssignments([project],value,null);
+      }else selector.dataset.previous=value;
+    });
+  }
+  $('categoryManagerAdd').addEventListener('click',()=>showCategoryName());
+  $('categoryNameCancel').addEventListener('click',()=>$('categoryNameDialog').close());
+  $('categoryNameForm').addEventListener('submit',async event=>{
+    event.preventDefault();
+    const {selector,project,oldName}=categoryEdit;
+    const name=normalizeCategory($('categoryName').value);
+    const error=$('categoryNameError');
+    if(!name){error.textContent='Enter a category name of up to 48 characters using letters, numbers, spaces or common punctuation.';return;}
+    const catalog=categoryCatalog(customCategories.filter(value=>value!==oldName));
+    if(catalog.has(categoryKey(name))){error.textContent='A category with that name already exists.';return;}
+    const next=oldName?customCategories.map(value=>value===oldName?name:value):customCategories.concat(name);
+    const records=oldName?categoryRecords(oldName):project?[project]:[];
+    $('categoryNameSave').disabled=true;
+    try{
+      if(!await changeCategoryAssignments(records,name,next)){error.textContent='The category could not be saved.';return;}
+      if(selector){selector.value=name;selector.dataset.previous=name;}
+      $('categoryNameDialog').close();
+      if($('categoryManager').open)renderCategoryManager();
+    }finally{$('categoryNameSave').disabled=false;}
+  });
+}
+
 function refreshProjectList(){
   const list=$('projectList');list.replaceChildren();
   $('projectCount').textContent=projects.size;
+  refreshCategorySelectors();
+  renderRecycleBin();
+  const groups = new Map();
+  for(const [pin,label] of [[true,'Pinned projects'],[false,'Other projects']]){
+    const group=document.createElement('section');group.className='project-group';group.hidden=true;
+    const heading=document.createElement('h3');heading.textContent=label;group.append(heading);list.append(group);groups.set(pin,group);
+  }
   const query=String($('projectSearch')?.value||'').toLowerCase(),filter=$('categoryFilter')?.value||'',only=$('onlyFavorites')?.checked;
   [...projects.values()].filter(p=>p.name.toLowerCase().includes(query)||String(p.category||'Other').toLowerCase().includes(query)).filter(p=>(!filter||filter===(p.category||'Other'))&&(!only||p.favorite)).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).forEach(p=>{
     const item=document.createElement('div');item.className='gallery-item'+(p.id===activeId?' active':'');
@@ -198,16 +480,18 @@ function refreshProjectList(){
       const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
     }
     const choose=document.createElement('button');choose.type='button';choose.className='gallery-choose';
-    const title=document.createElement('strong');title.textContent=p.name;
+    const title=document.createElement('strong');title.textContent=(p.pinned?'📌 ':'')+p.name;
     const meta=document.createElement('small');meta.textContent=`${p.cols} × ${p.rows} · ${p.category||'Other'}`;
     choose.append(title,meta);choose.addEventListener('click',()=>selectProject(p.id));
     const fav=document.createElement('button');fav.type='button';fav.className='gallery-favorite';fav.textContent=p.favorite?'★':'☆';fav.title='Toggle favorite';fav.setAttribute('aria-label','Favorite '+p.name);
-    fav.addEventListener('click',()=>{if(p===active)snapshot({label:'Change project favorite'});p.favorite=!p.favorite;queueWrite(p);refreshProjectList();});
-    item.append(thumb,choose,fav);list.append(item);
+    fav.addEventListener('click',()=>changeProjectFlags(p,{favorite:!p.favorite}));
+    item.append(thumb,choose,fav,projectMenu(p));
+    const group=groups.get(p.pinned===true);group.hidden=false;group.append(item);
   });
 }
 
 function selectProject(id) {
+  if(!projects.has(id))return;
   if(runningImageJob)cancelImageJob();
   invalidateChartCache();
   v16ShapeProposal=null;
@@ -256,7 +540,7 @@ function refreshInspector(){
 function undoState(){
   return {name:active.name,cols:active.cols,rows:active.rows,cells:active.cells.slice(),done:active.done.slice(),rowDone:active.rowDone.slice(),palette:active.palette.map(p=>({...p})),referenceImage:active.referenceImage,
     referenceMirrored:!!active.referenceMirrored,opacity:active.opacity,photoCrop:{...currentCrop()},imagePlacement:active.imagePlacement||'contain',conversionSettings:{...conversionSettings()},converted:active.converted,
-    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,category:active.category||'Other',favorite:!!active.favorite,notes:active.notes||'',annotations:structuredClone(active.annotations||[]),versions:(active.versions||[]).slice(),ui:{...uiSettings(active)}};
+    workDirection:{...active.workDirection},guide:{...active.guide},gauge:{...active.gauge},yarnInfo:structuredClone(active.yarnInfo),checkpoints:structuredClone(active.checkpoints),layers:structuredClone(active.layers||[]),technique:active.technique||'rows',diagonalIndex:active.diagonalIndex||0,sectionSize:active.sectionSize||25,notes:active.notes||'',annotations:structuredClone(active.annotations||[]),versions:(active.versions||[]).slice(),ui:{...uiSettings(active)}};
 }
 let designHistoryLabels=[],redoHistoryLabels=[];
 let motifPreview=null;
@@ -282,23 +566,26 @@ function restoreUndoState(state){
   lastText=null;$('editLastText').disabled=true;
   pendingCleanup=null;selectedLayerId=null;editingLayerId=null;
   discardPreview(false);clearTextPreview();
-  Object.assign(active,state);
+  const {category,favorite,...chartState}=state;
+  Object.assign(active,chartState);
   invalidateChartCache();window.DorettePattern.ensure(active);
   if(selected&&(selected.col>active.cols||selected.row>active.rows))selected=null;
   syncImage();scheduleSave();refreshInspector();refreshProjectList();
 }
+function canUseHistory(labels){return !inCrochetView()||(labels.at(-1)||'').startsWith('Progress:');}
 function undo(){
-  if(!active||!undoStack.length||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(designHistoryLabels.at(-1)||'')&&editBlocked('undo chart edits')))return;
+  if(!active||!undoStack.length||!canUseHistory(designHistoryLabels)||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(designHistoryLabels.at(-1)||'')&&editBlocked('undo chart edits')))return;
   redoStack.push(undoState());redoHistoryLabels.push(designHistoryLabels.pop()||'Design edit');restoreUndoState(undoStack.pop());
   $('undoButton').disabled=!undoStack.length;$('redoButton').disabled=false;renderDesignHistory();toast('Undone — use Redo to restore.');
 }
 function redo(){
-  if(!active||!redoStack.length||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(redoHistoryLabels.at(-1)||'')&&editBlocked('redo chart edits')))return;
+  if(!active||!redoStack.length||!canUseHistory(redoHistoryLabels)||(isPatternLocked()&&!/^(Progress:|Pattern lock)/.test(redoHistoryLabels.at(-1)||'')&&editBlocked('redo chart edits')))return;
   undoStack.push(undoState());designHistoryLabels.push(redoHistoryLabels.pop()||'Design edit');restoreUndoState(redoStack.pop());
   $('undoButton').disabled=false;$('redoButton').disabled=!redoStack.length;renderDesignHistory();toast('Change redone.');
 }
 function updateSelection(){
   updateProgressUndo();
+  if(inCrochetView())renderCrochetProgress();
   $("markRow").setAttribute("aria-pressed",String(progressBrush==="row"));
   $("markRow").textContent=progressBrush==="row"?"✓ Mark row mode on":"✓ Mark row";
   $("markStitch").setAttribute("aria-pressed",String(progressBrush==="mark"));
@@ -330,6 +617,7 @@ function updateProgress(){
   $('progressText').textContent=`${format(done)} / ${format(total)} stitches`;
   $('progressPercent').textContent=pct+'%';$('progressBar').style.width=pct+'%';
   updateDashboard();
+  if(inCrochetView())renderCrochetProgress(done,total);
 }
 function updateDashboard(){
   if(!active)return;
@@ -402,14 +690,14 @@ function setTool(tool){
   if(textPreview&&tool!=="select"&&tool!=="pan")clearTextPreview();
   if(!EDIT_TOOLS.includes(tool))return;
   if(pendingConversion){toast('Apply or discard the preview before editing stitches.');return;}
-  if(isPatternLocked() && !['select','pan'].includes(tool)){editBlocked('use editing tools');return;}
+  if((isPatternLocked()||inCrochetView()) && !['select','pan'].includes(tool)){editBlocked('use editing tools');return;}
   editorTool=tool;
   updateToolUI();updateTextControls();updateDashboard();
 }
 function selectPaintColor(index,activate=true){
   if(!active||pendingConversion||!Number.isInteger(index)||index<0||index>=active.palette.length)return;
   $('paintColor').value=String(index);
-  if(activate && !isPatternLocked())editorTool='paint';
+  if(activate&&!isPatternLocked()&&!inCrochetView())editorTool='paint';
   $('textColor').value=String(index);
   updateToolUI();
 }
@@ -455,12 +743,12 @@ function updateLegend(){
   renderLayers();
 }
 function updateProgressUndo(){
-  $('undoProgress').disabled=!undoStack.length||!!pendingConversion;
-  $('redoProgress').disabled=!redoStack.length||!!pendingConversion;
+  $('undoProgress').disabled=!undoStack.length||!!pendingConversion||!canUseHistory(designHistoryLabels);
+  $('redoProgress').disabled=!redoStack.length||!!pendingConversion||!canUseHistory(redoHistoryLabels);
 }
 function progressSnapshot(){snapshot({label:'Progress: crochet action'});}
 function markStitch(){
-  if(pendingConversion||!selected||!active)return;
+  if(pendingConversion||!selected||!active||studioReadOnly)return;
   const i=indexFor(selected.col,selected.row);progressSnapshot();
   if(active.rowDone[selected.row-1]){
     // Expand the completed row into individual stitch flags, then unmark the selected stitch.
@@ -1046,7 +1334,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     drawTextPreviewOverlay(ctx,textPreview,cols,rows);
   }
   if(selected&&!pendingConversion){
-    ctx.fillStyle='rgba(124,89,206,.21)';
+    ctx.fillStyle=v16Prefs.highContrast?'rgba(94,34,175,.40)':'rgba(124,89,206,.21)';
     ctx.fillRect(M+(selected.col-1)*CELL,M,CELL,bh);
     ctx.fillRect(M,M+(rows-selected.row)*CELL,bw,CELL);
   }
@@ -1095,7 +1383,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   }
   if(selected&&!pendingConversion){
     const x=M+(selected.col-1)*CELL,y=M+(rows-selected.row)*CELL;
-    ctx.strokeStyle='#6133c8';ctx.lineWidth=2.8/s;ctx.strokeRect(x+1/s,y+1/s,CELL-2/s,CELL-2/s);
+    ctx.strokeStyle=v16Prefs.highContrast?'#1b0e2e':'#6133c8';ctx.lineWidth=(v16Prefs.highContrast?4:2.8)/s;ctx.strokeRect(x+1/s,y+1/s,CELL-2/s,CELL-2/s);
   }
   if(areaSelection&&!pendingConversion){
     const left=Math.min(areaSelection.start.col,areaSelection.end.col),right=Math.max(areaSelection.start.col,areaSelection.end.col);
@@ -1114,16 +1402,16 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     if(c!==highlightedX&&highlightedX>=0&&Math.abs(c-highlightedX)*CELL*s<28*numberScale)continue;
     if(c!==cols-1&&c!==highlightedX&&(cols-1-c)*CELL*s<28*numberScale)continue;
     const x=M+(c+.5)*CELL,num=String(c+1),chosen=c===highlightedX;
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(x-11*numberScale/s,M-22*numberScale/s,22*numberScale/s,20*numberScale/s);ctx.fillRect(x-11*numberScale/s,M+bh+2*numberScale/s,22*numberScale/s,20*numberScale/s);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,x,M-12*numberScale/s);ctx.fillText(num,x,M+bh+12*numberScale/s);
+    if(chosen){ctx.fillStyle=v16Prefs.highContrast?'#29134d':'#e9dcff';ctx.fillRect(x-11*numberScale/s,M-22*numberScale/s,22*numberScale/s,20*numberScale/s);ctx.fillRect(x-11*numberScale/s,M+bh+2*numberScale/s,22*numberScale/s,20*numberScale/s);}
+    ctx.fillStyle=chosen?(v16Prefs.highContrast?'#fff':'#5f32bb'):'#695b77';ctx.fillText(num,x,M-12*numberScale/s);ctx.fillText(num,x,M+bh+12*numberScale/s);
   }
   for(let r=minRow;r<maxRow;r++){
     const row=rows-r,chosen=r===highlightedY;
     if((row-1)%interval!==0&&!chosen&&row!==rows)continue;
     if(!chosen&&highlightedY>=0&&Math.abs(r-highlightedY)*CELL*s<13*numberScale)continue;
     const y=M+(r+.5)*CELL,num=String(row);
-    if(chosen){ctx.fillStyle='#e9dcff';ctx.fillRect(M-31*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);ctx.fillRect(M+bw+4*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);}
-    ctx.fillStyle=chosen?'#5f32bb':'#695b77';ctx.fillText(num,M-18*numberScale/s,y);ctx.fillText(num,M+bw+18*numberScale/s,y);
+    if(chosen){ctx.fillStyle=v16Prefs.highContrast?'#29134d':'#e9dcff';ctx.fillRect(M-31*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);ctx.fillRect(M+bw+4*numberScale/s,y-10*numberScale/s,27*numberScale/s,20*numberScale/s);}
+    ctx.fillStyle=chosen?(v16Prefs.highContrast?'#fff':'#5f32bb'):'#695b77';ctx.fillText(num,M-18*numberScale/s,y);ctx.fillText(num,M+bw+18*numberScale/s,y);
   }
   ctx.restore();
 }
@@ -1586,7 +1874,7 @@ function readZip(bytes){
   }
   return files;
 }
-function backupPayload(items){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items};}
+function backupPayload(items,organization){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items,...(organization?{organization}: {})};}
 function slug(name){return (name||'crochet-chart').trim().replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'').slice(0,45)||'crochet-chart';}
 async function download(blob,name){
   if(window.StudioMobile?.nativeFiles){
@@ -1643,17 +1931,28 @@ function runPdfJob(kind){
  }catch(e){if(worker){worker.terminate();worker=null;}fallback();}
 }
 function exportPdf(){runPdfJob('chart');}
-function exportBackup(all=false){
-  flushSave();const items=all?[...projects.values()]:[active];
-  if(!items.length)return;
-  const bad=items.map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
+async function exportBackup(all=false, share=false, project=active){
+  flushSave();const items=all?[...projects.values()]:[project];
+  if(!items.length||!items[0])return;
+  const bad=(all?items.concat([...recycledProjects.values()]):items).map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
   if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
-  const payload=JSON.stringify(backupPayload(items));
+  const payload=JSON.stringify(backupPayload(items,all?{categories:customCategories,recycleBin:[...recycledProjects.values()]}:undefined));
   const readme=`Dorette Crochet Studio backup\nExported: ${new Date().toISOString()}\nProjects: ${items.length}\n\nRestore using the Restore backup button inside Dorette Crochet Studio.\nThis ZIP includes backup.json with project data, progress, yarn colors, and any embedded reference images.\nDo not extract or modify the ZIP before restoring. Store a copy in Google Drive.\n`;
   const bytes=makeZip({'README.txt':readme,'backup.json':payload});
   const date=new Date().toISOString().slice(0,10);
-  const filename=`Dorette-${all?'All-Projects':slug(active.name)}-${date}.zip`;
-  download(new Blob([bytes],{type:'application/zip'}),filename);
+  const filename=`Dorette-${all?'All-Projects':slug(project.name)}-${date}.zip`;
+  const blob=new Blob([bytes],{type:'application/zip'});
+  if(share){
+    const file=new File([blob],filename,{type:blob.type});
+    try{
+      if(window.StudioMobile?.nativeFiles){await window.StudioMobile.share(blob,filename);return;}
+      if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}
+    }catch(error){
+      if(error.name!=='AbortError')toast('Could not share the ZIP. Use Back up this project to save a copy.');
+      return;
+    }
+  }
+  download(blob,filename);
   if(!window.StudioMobile?.nativeFiles)toast(`Backup downloaded (${items.length} project${items.length===1?'':'s'}). Upload the ZIP to Google Drive.`);
 }
 function validateBackup(p){
@@ -1668,7 +1967,7 @@ function validateBackup(p){
   const safe=validatePatternExtras(p);
   return {id:uid(),name:p.name.trim()+' (restored)',cols:p.cols,rows:p.rows,cells:p.cells.slice(),done:p.done.slice(),rowDone:p.rowDone.slice(),
     palette:p.palette.map(c=>({hex:c.hex,name:c.name,symbol:c.symbol})),referenceImage:p.referenceImage||null,
-    referenceMirrored:p.referenceMirrored===true,opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',conversionSettings:conversionSettings(p),converted:!!p.converted,...safe,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    pinned:p.pinned===true,referenceMirrored:p.referenceMirrored===true,opacity:clamp(Number(p.opacity)||0,0,1),photoCrop:currentCrop(p),imagePlacement:p.imagePlacement==='stretch'?'stretch':'contain',conversionSettings:conversionSettings(p),converted:!!p.converted,...safe,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 }
 async function restoreBackup(file){
   if(!file)return;
@@ -1681,26 +1980,28 @@ async function restoreBackup(file){
       if(!zip['backup.json'])throw new Error('ZIP does not contain backup.json');
       payload=JSON.parse(textDecoder.decode(zip['backup.json']));
     }
-    if(payload?.app!=='dorette-crochet-studio'||payload?.version!==1||!Array.isArray(payload.projects)||payload.projects.length<1||payload.projects.length>100)throw new Error('Not a supported Dorette backup');
-    const restored=payload.projects.map(validateBackup); // Check everything BEFORE changing existing data.
-    const writes=restored.map(p=>{projects.set(p.id,p);return queueWrite(p);});
-    const saved=await Promise.allSettled(writes);
-    selectProject(restored[0].id);
-    if(saved.some(result=>result.status==='rejected'))toast('Copies opened. Some could not save to this device. Retry saving or export a backup.');
-    else toast('Restored '+restored.length+' project(s) as new copies.');
+    const restored=readProjectBackup(payload);
+    const saved=await organizeProjects(restored.projects.concat(restored.recycled),[],restored.categories,()=>{
+      for(const project of restored.projects)projects.set(project.id,project);
+      for(const project of restored.recycled)recycledProjects.set(project.id,project);
+      if(restored.projects.length)selectProject(restored.projects[0].id);
+    },{copies:true});
+    if(saved)toast('Restored '+(restored.projects.length+restored.recycled.length)+' project(s) as new copies.');
   }catch(e){toast('Could not restore: '+e.message);}
 }
 
-async function removeActiveProject(){
-  if(!active||studioReadOnly||!Ops.canWrite()||!confirm(`Delete “${active.name}” from this device? Make a backup first. This cannot be undone.`))return;
-  flushSave();const id=activeId;
-  if(!memoryOnly){try{await writeChain.catch(()=>{});if(!Ops.canWrite())throw Error('This tab no longer owns the editing lock');await dbRequest('readwrite',store=>store.delete(id));}catch(e){toast('Deletion could not be saved: '+e.message);return;}}
-  projects.delete(id);failedWrites.delete(id);refreshSaveState();
-  if(projects.size===0){const p=blankProject('My First Chart',79,117);projects.set(p.id,p);queueWrite(p);}
-  selectProject(projects.keys().next().value);toast('Project deleted from local storage.');
-}
+async function removeActiveProject(){if(active)await recycleProject(active);}
 // v1.0 - All computations use SAVED project cells; preview pixels never alter them.
 const Pattern=window.DorettePattern;
+window.StudioCurrentRowHelp=()=>{
+  if(!active)return null;
+  const row=selected?.row||active.guide?.row||1;
+  const direction=Pattern.direction(active,row)==='rtl'?'Right to left':'Left to right';
+  const chart=compositeProject(active);
+  return {row,direction,runs:Pattern.runs(chart,row).map(run=>({
+    count:run.count,yarn:chart.palette[run.color]?.name||'Yarn '+(run.color+1)
+  }))};
+};
 function queuePatternRender(){
   clearTimeout(patternRenderTimer);
   patternRenderTimer=setTimeout(()=>{patternRenderTimer=null;renderRowSequence();renderGuide();renderInventoryEstimates();},100);
@@ -1813,12 +2114,28 @@ function applyAreaFill(){
   snapshot();const changed=Pattern.rectangle(active,start.col,start.row,end.col,end.row,c);
   active.converted=true;scheduleSave();updateLegend();requestDraw();toast(`${format(changed)} stitches filled as a rectangle.`);updateAreaStatus();
 }
+function renderCrochetProgress(done,total){
+  const cell=selected;
+  if(!active||!cell)return;
+  if(done===undefined)({done,total}=completionCounts(active));
+  const start=(active.rows-cell.row)*active.cols;
+  const rowMarked=!!active.rowDone[cell.row-1];
+  let rowCount=rowMarked?active.cols:0;
+  if(!rowMarked)for(let col=0;col<active.cols;col++)rowCount+=active.done[start+col]?1:0;
+  $('dockProgress').textContent=`Row ${cell.row}, column ${cell.col} · ${rowCount}/${active.cols} in row · ${format(done)}/${format(total)} total · ${format(total-done)} remaining`;
+  $('dockToggleStitch').textContent=rowMarked||active.done[start+cell.col-1]?'Unmark stitch':'Mark stitch';
+  $('dockToggleRow').textContent=rowMarked?'Clear row mark':'Mark row';
+  $('dockToggleStitch').disabled=$('dockToggleRow').disabled=!!pendingConversion||studioReadOnly;
+}
 function renderGuide(){
   if(!active||($('guideDialog').hidden&&!document.body.classList.contains('crochet-view')))return;
   Pattern.ensure(active);
   const {guide:g}=active,row=g.row,pos=g.position;
   const dir=Pattern.direction(active,row),runs=Pattern.runs(compositeProject(active),row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(compositeProject(active),row,pos);
   const completed=!!active.done[idx]||!!active.rowDone[row-1];
+  $('focusFirstDirection').value=active.workDirection.first;
+  $('focusAlternateRows').checked=active.workDirection.alternate;
+  $('focusHighContrast').checked=!!v16Prefs.highContrast;
   $('guideTitle').textContent=`Row ${row} of ${active.rows} — ${dir==='rtl'?'Right to left':'Left to right'}`;
   $('guideStatus').textContent=`Stitch ${pos+1} / ${active.cols} • Column ${col} • ${completed?'Already completed':'Not yet completed'}${g.finished?' • CHART FINISHED':''}`;
   $('guideCurrent').textContent=g.finished?'All stitches reached!':'Stitch '+(pos+1)+' — '+active.palette[run.color].symbol+' • '+active.palette[run.color].name+' ('+run.count+' consecutive)';
@@ -1923,19 +2240,37 @@ function validatePatternExtras(p){
   const safe={workDirection:{first:direction.first==='ltr'?'ltr':'rtl',alternate:direction.alternate!==false},
     guide:{row:clamp(Math.round(Number(guide.row)||1),1,p.rows),position:clamp(Math.round(Number(guide.position)||0),0,p.cols-1),finished:!!guide.finished},
     gauge:{swatchStitches:Math.max(1,Number(gauge.swatchStitches)||100),swatchYards:Math.max(0,Number(gauge.swatchYards)||0),overage:clamp(Number(gauge.overage)||0,0,100)},
-    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),technique:['rows','tapestry','single','c2c'].includes(p.technique)?p.technique:'rows',diagonalIndex:clamp(Math.floor(Number(p.diagonalIndex)||0),0,p.cols*p.rows-1),sectionSize:[20,25,30,40].includes(p.sectionSize)?p.sectionSize:25,category:['Other','Blankets','Garments','Gifts','Practice'].includes(p.category)?p.category:'Other',favorite:!!p.favorite,notes:String(p.notes||'').slice(0,1500),versions:savedVersions,annotations:savedNotes,ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
+    yarnInfo:structuredClone(info),checkpoints:structuredClone(checkpoints),layers:validateLayers(p),technique:['rows','tapestry','single','c2c'].includes(p.technique)?p.technique:'rows',diagonalIndex:clamp(Math.floor(Number(p.diagonalIndex)||0),0,p.cols*p.rows-1),sectionSize:[20,25,30,40].includes(p.sectionSize)?p.sectionSize:25,category:normalizeCategory(p.category)||'Other',favorite:!!p.favorite,notes:String(p.notes||'').slice(0,1500),versions:savedVersions,annotations:savedNotes,ui:{showProgress:ui.showProgress!==false,patternLock:!!ui.patternLock,stylusOnly:!!ui.stylusOnly,largeTouch:!!ui.largeTouch}};
   return safe;
 }
+let guideHiddenBeforeFocus;
+function setFocusGuide(open){
+  $('guideDialog').hidden=!open;
+  $('focusGuideDetails').setAttribute('aria-expanded',String(open));
+  if(open)renderGuide();
+}
 function setCrochetView(enabled){
+  if(enabled&&(!active||pendingConversion))return toast('Finish the chart preview before opening Crochet View.');
+  if(enabled===inCrochetView())return;
   document.body.classList.toggle('crochet-view',enabled);
+  $('focusGuideDetails').hidden=!enabled;
+  $('focusGuideSettings').hidden=!enabled;
   void updateWakeLock();
   $('crochetView').setAttribute('aria-pressed',String(enabled));
   $('crochetView').textContent=enabled?'Exit Crochet View':'Crochet View';
   if(enabled&&active&&!pendingConversion){
+    progressBrush=null;
+    areaSelection=null;
     setTool('select');
     clearTextPreview();
-    $('guideDialog').hidden=false;
+    guideHiddenBeforeFocus=$('guideDialog').hidden;
+    setFocusGuide(document.body.classList.contains('unpinned-dock'));
+    resizeCanvas();
     focusGuideCell();
+    $('crochetView').focus({preventScroll:true});
+  }else{
+    $('guideDialog').hidden=guideHiddenBeforeFocus;
+    $('crochetView').focus({preventScroll:true});
   }
 }
 
@@ -2015,6 +2350,8 @@ function hookPatternEvents(){
   });
   $('dockStitch').addEventListener('click',()=>guideNext());
   $('dockRun').addEventListener('click',()=>guideNext(true));
+  $('dockToggleStitch').addEventListener('click',markStitch);
+  $('dockToggleRow').addEventListener('click',markRow);
   $('undoProgress').addEventListener('click',undo);
   $('redoProgress').addEventListener('click',redo);
   $('goToCell').addEventListener('submit',ev=>{
@@ -2039,6 +2376,10 @@ function hookPatternEvents(){
   });
   $('crochetView').addEventListener('click',()=>setCrochetView(!document.body.classList.contains('crochet-view')));
   $('resumeCrochet').addEventListener('click',()=>setCrochetView(true));
+  $('focusGuideDetails').addEventListener('click',()=>setFocusGuide($('guideDialog').hidden));
+  window.addEventListener('keydown',ev=>{
+    if(ev.key==='Escape'&&inCrochetView()&&!document.querySelector('dialog[open]'))setCrochetView(false);
+  });
   $('saveMotif').addEventListener('click',()=>{
     if(!active||pendingConversion||!areaSelection)return toast('Select an area to save as a motif.');
     if(motifs.length>=30)return toast('The motif library holds up to 30 motifs.');
@@ -2057,8 +2398,27 @@ function hookPatternEvents(){
     if(m&&confirm('Remove “'+m.name+'” from this device’s motif library?'))saveMotifs(motifs.filter(item=>item.id!==m.id));
   });
   renderMotifs();
-  $('rowFirstDirection').addEventListener('change',ev=>{snapshot();active.workDirection.first=ev.target.value==='ltr'?'ltr':'rtl';scheduleSave();renderRowSequence();renderGuide();});
-  $('rowAlternate').addEventListener('change',ev=>{snapshot();active.workDirection.alternate=ev.target.checked;scheduleSave();renderRowSequence();renderGuide();});
+  const changeDirection=(key,value)=>{
+    if(!active||pendingConversion||studioReadOnly||active.workDirection[key]===value)return;
+    const guide=active.guide;
+    const col=Pattern.colAt(active,guide.row,guide.position);
+    snapshot({label:'Progress: row direction'});
+    active.workDirection[key]=value;
+    $('rowFirstDirection').value=active.workDirection.first;
+    $('rowAlternate').checked=active.workDirection.alternate;
+    guide.position=Pattern.direction(active,guide.row)==='rtl'?active.cols-col:col-1;
+    scheduleSave();renderRowSequence();renderGuide();requestDraw();
+  };
+  for(const id of ['rowFirstDirection','focusFirstDirection']){
+    $(id).addEventListener('change',ev=>changeDirection('first',ev.target.value==='ltr'?'ltr':'rtl'));
+  }
+  for(const id of ['rowAlternate','focusAlternateRows']){
+    $(id).addEventListener('change',ev=>changeDirection('alternate',ev.target.checked));
+  }
+  $('focusHighContrast').addEventListener('change',ev=>{
+    $('highContrastGrid').checked=ev.target.checked;
+    $('highContrastGrid').dispatchEvent(new Event('change'));
+  });
   $('instructionRow').addEventListener('change',ev=>setInstructionRow(ev.target.value));
   $('rowPrev').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)-1));
   $('rowNext').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)+1));
@@ -2068,7 +2428,10 @@ function hookPatternEvents(){
   });
   $('openGuide').addEventListener('click',()=>{if(pendingConversion)return toast('Apply or discard the current chart preview first.');
     $('guideDialog').hidden=false;focusGuideCell();});
-  $('closeGuide').addEventListener('click',()=>{$('guideDialog').hidden=true;});
+  $('closeGuide').addEventListener('click',()=>{
+    if(inCrochetView()){setFocusGuide(false);$('focusGuideDetails').focus();}
+    else $('guideDialog').hidden=true;
+  });
   $('guideNext').addEventListener('click',()=>guideNext());$('guideRun').addEventListener('click',()=>guideNext(true));$('guidePrev').addEventListener('click',guideBack);
   $('guidePrevRow').addEventListener('click',()=>guideChangeRow(-1));$('guideNextRow').addEventListener('click',()=>guideChangeRow(1));
   for(const [field,key,min,max] of [['gaugeStitches','swatchStitches',1,100000],['gaugeYards','swatchYards',0,100000],['gaugeOverage','overage',0,100]]){
@@ -2592,9 +2955,9 @@ function hookNextEvents(){
   refreshTextFavorites();
   $('saveTextFavorite').addEventListener('click',saveTextFavorite);$('applyTextFavorite').addEventListener('click',loadTextFavorite);$('deleteTextFavorite').addEventListener('click',deleteTextFavorite);$('centerSelectionText').addEventListener('click',centerTextInArea);
  for(const id of ['projectSearch','categoryFilter','onlyFavorites'])$(id).addEventListener('input',refreshProjectList);
- $('projectCategory').addEventListener('change',e=>{if(!active)return;snapshot();active.category=e.target.value;scheduleSave();refreshProjectList();});
+ setupProjectOrganization();
  $('projectNotes').addEventListener('change',e=>{if(!active)return;snapshot();active.notes=e.target.value.slice(0,1500);scheduleSave();});
- $('duplicateProject').addEventListener('click',()=>{if(!active)return;flushSave();const p=structuredClone(active);p.id=uid();p.name=(active.name+' copy').slice(0,70);p.createdAt=new Date().toISOString();p.updatedAt=p.createdAt;projects.set(p.id,p);queueWrite(p);selectProject(p.id);toast('Project duplicated; the original remains untouched.');});
+ $('duplicateProject').addEventListener('click',()=>{if(active)duplicateProject(active);});
  $('techniquePreset').addEventListener('change',e=>{if(!active)return;snapshot();active.technique=e.target.value;active.diagonalIndex=0;scheduleSave();renderDiagonalInfo();});
  $('diagonalNext').addEventListener('click',()=>diagonalMove(1));$('diagonalBack').addEventListener('click',()=>diagonalMove(-1));
  $('workSectionSize').addEventListener('change',e=>{if(!active)return;snapshot({label:'Change work sections'});active.sectionSize=Number(e.target.value);scheduleSave();refreshSections();updatePdfEstimate();requestDraw();});
@@ -3048,14 +3411,14 @@ function setupCommandPalette(){
  dialog.addEventListener('close',()=>{if(!jumping)$('openCommandSearch').focus({preventScroll:true});});
  query.addEventListener('input',update);
  query.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();dialog.close();return;}if(e.key==='Enter'){const first=results.querySelector('button');if(first){e.preventDefault();first.click();}}});
- window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();}});
+ window.addEventListener('keydown',e=>{if(!inCrochetView()&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();open();}});
 }
 function setupPolishTools(){
  // Read-only tabs remain viewable, but design, progress and backup UI actions cannot write.
  const blockReadonly=e=>{
    if(!studioReadOnly)return;
    const target=e.target.closest?.('button, input, select, textarea, summary, a');
-   if(!target||target.closest('#tabLockBanner')||target.classList.contains('gallery-choose')||(target.tagName==='A'&&target.hasAttribute('download')&&target.protocol==='blob:')||['headerExport','exportProject','exportAll','singleChart','dualChart','fitChart','zoomIn','zoomOut','resetView'].includes(target.id))return;
+   if(!target||target.closest('#tabLockBanner')||target.classList.contains('gallery-choose')||(target.tagName==='A'&&target.hasAttribute('download')&&target.protocol==='blob:')||['headerExport','exportProject','shareProject','exportAll','singleChart','dualChart','fitChart','zoomIn','zoomOut','resetView'].includes(target.id))return;
    e.preventDefault();e.stopImmediatePropagation();
    toast('This tab is read-only. Close the editing tab, then choose Retry editing.');
  };
@@ -3143,7 +3506,7 @@ function hookEvents(){
   $('newProjectForm').addEventListener('submit',ev=>{
     ev.preventDefault();const presets={square:[50,50],blanket:[120,165],border:[120,24],initials:[40,30]},dims=presets[$('projectTemplate').value]||[Number($('newCols').value),Number($('newRows').value)],cols=dims[0],rows=dims[1];
     if(!validDimensions(cols,rows)){toast('Choose 1–200 columns and 1–300 rows.');return;}
-    const p=blankProject($('newName').value,cols,rows);projects.set(p.id,p);queueWrite(p);selectProject(p.id);
+    const p=blankProject($('newName').value,cols,rows);p.category=$('newProjectCategory').value||'Other';projects.set(p.id,p);queueWrite(p);selectProject(p.id);
     $('newProjectDetails').open=false;toast('New crochet project created.');
   });
   $('projectName').addEventListener('change',()=>{
@@ -3333,6 +3696,7 @@ function hookEvents(){
   $('textUp').addEventListener('click',()=>nudgeText(0,1));
   $('textDown').addEventListener('click',()=>nudgeText(0,-1));
   hookPatternEvents();hookAdvanced();
+  $('shareProject').addEventListener('click',()=>exportBackup(false,true));
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());
@@ -3354,11 +3718,7 @@ async function retryEditing(){
    const preferred=activeId;
    const items=await loadProjects();
    projects.clear();invalidProjects.clear();
-   for(const p of items){
-     const check=reliability.auditProject(p);
-     if(check.ok)projects.set(p.id,p);
-     else invalidProjects.set(String(p?.id||'invalid-'+invalidProjects.size),{raw:p,check});
-   }
+   loadProjectRecords(items);
    reloadingProjects=false;setTabReadOnly(true);
    if(!projects.size){
      const p=blankProject('My First Chart',79,117);projects.set(p.id,p);await queueWrite(p);
@@ -3376,7 +3736,7 @@ async function initialize(){
   setChartLayout(chartLayout,false);
   try{
     db=await openDatabase();const items=await loadProjects();
-    for(const p of items){const check=reliability.auditProject(p);if(check.ok)projects.set(p.id,p);else invalidProjects.set(String(p?.id||'invalid-'+invalidProjects.size),{raw:p,check});}
+    loadProjectRecords(items);
   }catch(e){memoryOnly=true;setSavePhase('blocked',e.message);toast('Local saving is unavailable. Keep private backups in a normal browser window.');}
   if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);if(!memoryOnly&&!studioReadOnly)await queueWrite(sample).catch(()=>{});}
   let preferred=null;try{preferred=localStorage.getItem('dorette-active-project');}catch{}

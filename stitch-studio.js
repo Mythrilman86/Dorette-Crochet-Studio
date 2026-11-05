@@ -3,11 +3,12 @@
   const dialog = get('Studio');
   const mode = get('Mode');
   const canvas = get('Image');
+  const original = document.createElement('canvas');
   const source = document.createElement('canvas');
+  let angle = 0;
   const cropFields = [...get('Crop').querySelectorAll('input')];
   const video = get('Live').querySelector('video');
   const status = text => { get('Status').textContent = text; };
-  const supported = new Set(['ch', 'sc', 'hdc', 'dc', 'tr', 'dtr']);
   const known = new Map(stitchEntries.map(entry => [entry.id, entry]));
   let crop, drag, stream, templates, imageRequest = 0, cameraRequest = 0;
   let marks = [];
@@ -51,13 +52,145 @@
     dc2tog: [[3,2,true],[4,2,true],[3,3]]
   };
 
+  const references = [
+    {id:'symbols', title:'Craft Yarn Council chart symbols', url:'https://www.craftyarncouncil.com/standards/crochet-chart-symbols', keywords:'chart diagram symbol legend'},
+    {id:'terms', title:'Craft Yarn Council crochet abbreviations', url:'https://www.craftyarncouncil.com/standards/crochet-abbreviations', keywords:'terms abbreviations us uk stitch'},
+    {id:'hooks', title:'Craft Yarn Council hook sizes', url:'https://www.craftyarncouncil.com/standards/hooks-and-needles', keywords:'hook yarn gauge tension size'},
+    {id:'images', title:'Openverse openly licensed images', url:'https://openverse.org/', keywords:'image photo picture reference'}
+  ];
+  const bookmarkKey = 'studio.crochet.references';
+  let bookmarks = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(bookmarkKey) || '[]');
+    if (Array.isArray(saved)) bookmarks = saved.filter(id => references.some(ref => ref.id === id));
+  } catch {}
+
+  const commonsKey = 'studio.crochet.commons';
+  let commonsBookmarks = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(commonsKey) || '[]');
+    if (Array.isArray(saved)) commonsBookmarks = saved.filter(validCommonsResult).slice(0, 50);
+  } catch {}
+
+  function validCommonsResult(result) {
+    return Number.isSafeInteger(result?.pageid) && result.pageid > 0 &&
+      typeof result.title === 'string' && result.title.length <= 240 && result.title.startsWith('File:');
+  }
+
+  function renderCommons(target, results) {
+    target.replaceChildren();
+    for (const ref of results) {
+      const item = element('li', '', target);
+      const link = element('a', ref.title.slice(5), item);
+      link.href = 'https://commons.wikimedia.org/?curid=' + ref.pageid;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      const saved = commonsBookmarks.some(bookmark => bookmark.pageid === ref.pageid);
+      element('button', saved ? 'Remove bookmark' : 'Bookmark', item).onclick = () => {
+        if (!saved && commonsBookmarks.length >= 50) {
+          get('OnlineStatus').textContent = 'Remove a saved reference before adding another.';
+          return;
+        }
+        const next = saved ? commonsBookmarks.filter(bookmark => bookmark.pageid !== ref.pageid) : [...commonsBookmarks, ref];
+        try {
+          localStorage.setItem(commonsKey, JSON.stringify(next));
+          commonsBookmarks = next;
+          if (target !== get('OnlineBookmarks')) renderCommons(target, results);
+          renderCommons(get('OnlineBookmarks'), commonsBookmarks);
+        } catch { get('OnlineStatus').textContent = 'This device could not save the bookmark.'; }
+      };
+    }
+  }
+
+  async function searchCommons(event) {
+    event.preventDefault();
+    const status = get('OnlineStatus');
+    const query = get('OnlineQuery').value.trim();
+    const button = event.currentTarget.querySelector('button');
+    if (!query || button.disabled) return;
+    if (!navigator.onLine) { status.textContent = 'You’re offline. Saved references are still available.'; return; }
+    const url = new URL('https://commons.wikimedia.org/w/api.php');
+    url.search = new URLSearchParams({action:'query', list:'search', format:'json', formatversion:'2',
+      origin:'*', srnamespace:'6', srlimit:'8', srprop:'', srsearch:'crochet ' + query});
+    button.disabled = true;
+    status.textContent = 'Searching Wikimedia Commons…';
+    try {
+      const response = await fetch(url, {credentials:'omit', redirect:'error', signal:AbortSignal.timeout(8000)});
+      if (!response.ok) throw new Error('Search unavailable');
+      const data = await response.json();
+      const results = Array.isArray(data.query?.search)
+        ? data.query.search.filter(validCommonsResult).slice(0,8).map(({pageid,title})=>({pageid,title})) : [];
+      renderCommons(get('OnlineResults'), results);
+      status.textContent = results.length ? 'Open a source to check its description, creator and reuse license.' : 'No matching files found.';
+    } catch { status.textContent = 'Search is unavailable. Try again later or use saved references.'; }
+    finally { button.disabled = false; }
+  }
+
+  function renderHelp() {
+    const question = get('Question').value.trim();
+    const answers = get('Answers');
+    answers.replaceChildren();
+    for (const topic of crochetHelp.filter(item => !question || item.match.test(question))) {
+      const item = element('article', '', answers);
+      element('h4', topic.title, item);
+      element('p', topic.text, item);
+    }
+    if (question) {
+      const terms = question.toLowerCase().match(/[a-z0-9-]+/g) || [];
+      const candidates = stitchEntries.filter(entry => {
+        const text = question.toLowerCase();
+        return text.includes(entry.us.toLowerCase()) || text.includes(entry.uk.toLowerCase())
+          || terms.includes(entry.id) || terms.includes(entry.ukCode);
+      }).slice(0, 6);
+      for (const entry of candidates) {
+        element('button', 'Read ' + entry.us + ' (US)', answers).onclick = () => openEntry(entry.id);
+      }
+      if (!answers.childElementCount) element('p', 'No matching offline guidance. Try a stitch name, abbreviation, or a shorter question.', answers);
+    }
+    function list(target, items) {
+      target.replaceChildren();
+      for (const ref of items) {
+        const item = element('li', '', target);
+        const link = element('a', ref.title, item);
+        link.href = ref.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        const saved = bookmarks.includes(ref.id);
+        element('button', saved ? 'Remove bookmark' : 'Bookmark', item).onclick = () => {
+          const next = saved ? bookmarks.filter(id => id !== ref.id) : [...bookmarks, ref.id];
+          try {
+            localStorage.setItem(bookmarkKey, JSON.stringify(next));
+            bookmarks = next;
+            get('ReferenceStatus').textContent = saved ? 'Bookmark removed.' : 'Reference saved on this device.';
+            renderHelp();
+          } catch { get('ReferenceStatus').textContent = 'This device could not save the bookmark.'; }
+        };
+      }
+    }
+    const words = question.toLowerCase().split(/\W+/).filter(word => word.length > 2);
+    const relevant = references.filter(ref => words.some(word => ref.keywords.includes(word)));
+    list(get('Links'), relevant.length ? relevant : references);
+    list(get('Bookmarks'), references.filter(ref => bookmarks.includes(ref.id)));
+  }
+
+  function openEntry(id) {
+    get('Search').value = '';
+    get('Category').value = '';
+    showLibrary();
+    const entry = document.getElementById('stitchEntry-' + id);
+    entry.open = true;
+    entry.querySelector('summary').focus();
+    entry.scrollIntoView({block:'nearest'});
+  }
+
   function showLibrary() {
     const results = get('Entries');
     results.replaceChildren();
-    const entries = searchStitches(get('Search').value, get('Terms').value);
+    const entries = searchStitches(get('Search').value, get('Terms').value, get('Category').value);
     if (!entries.length) element('p', 'No matching stitches.', results);
     for (const entry of entries) {
       const card = element('details', '', results);
+      card.id = 'stitchEntry-' + entry.id;
       element('summary', 'US ' + entry.us + ' (' + usCode(entry) + ') · UK ' +
         entry.uk + ' (' + entry.ukCode + ')', card).prepend(glyph(entry));
       const steps = element('ol', '', card);
@@ -66,13 +199,14 @@
         const stage = loopStages[entry.id]?.[index];
         if (stage) item.append(loopDiagram(...stage));
       });
-      element('p', 'Practice example · ' + entry.example, card);
+      element('p', entry.category + ' · Practice example · ' + entry.example, card);
     }
   }
 
   function refresh() {
     if (!crop) return;
     const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(source, 0, 0);
     ctx.lineWidth = 2;
     ctx.font = 'bold 14px sans-serif';
@@ -106,14 +240,53 @@
 
   function loadSource(image, width, height) {
     const scale = Math.min(1, 1200 / Math.max(width, height));
-    source.width = canvas.width = Math.max(1, Math.round(width * scale));
-    source.height = canvas.height = Math.max(1, Math.round(height * scale));
-    source.getContext('2d', {willReadFrequently:true}).drawImage(image, 0, 0, source.width, source.height);
+    original.width = Math.max(1, Math.round(width * scale));
+    original.height = Math.max(1, Math.round(height * scale));
+    original.getContext('2d').drawImage(image, 0, 0, original.width, original.height);
+    angle = 0;
+    for (const field of ['Angle', 'Exposure', 'Contrast']) get(field).value = 0;
     marks = [];
     get('Preview').hidden = false;
     status('Image ready. Crop around the area you want to inspect.');
-    wholeImage();
+    renderAdjustedPhoto(true);
+  }
+
+  function renderAdjustedPhoto(resetCrop) {
+    const radians = angle * Math.PI / 180;
+    const sin = Math.abs(Math.sin(radians)), cos = Math.abs(Math.cos(radians));
+    const {width, height} = original;
+    source.width = canvas.width = Math.max(1, Math.round(width * cos + height * sin));
+    source.height = canvas.height = Math.max(1, Math.round(width * sin + height * cos));
+    const ctx = source.getContext('2d', {willReadFrequently:true});
+    ctx.save();
+    ctx.translate(source.width / 2, source.height / 2);
+    ctx.rotate(radians);
+    ctx.drawImage(original, -width / 2, -height / 2);
+    ctx.restore();
+    const exposure = get('Exposure').valueAsNumber, contrast = get('Contrast').valueAsNumber;
+    if (exposure || contrast) {
+      const pixels = ctx.getImageData(0, 0, source.width, source.height);
+      adjustScanPixels(pixels.data, exposure, contrast);
+      ctx.putImageData(pixels, 0, 0);
+    }
+    if (resetCrop) wholeImage();
+    else for (const mark of marks) mark.matches = [];
     showMarks();
+  }
+
+  function setAngle(value, reset = false) {
+    if (!crop || !Number.isFinite(value)) { get('Angle').value = angle; return; }
+    const next = ((Math.round(value) + 180) % 360 + 360) % 360 - 180;
+    if (next !== angle && marks.length && !confirm('Rotation clears current marks. Rotate this photo?')) {
+      get('Angle').value = angle;
+      return;
+    }
+    const rotated = next !== angle;
+    if (rotated) marks = [];
+    angle = next;
+    get('Angle').value = angle;
+    if (reset) { get('Exposure').value = 0; get('Contrast').value = 0; }
+    renderAdjustedPhoto(rotated || reset);
   }
 
   async function readPhoto(file) {
@@ -151,26 +324,10 @@
   }
 
   function getTemplates() {
-    if (templates) return templates;
-    const sample = document.createElement('canvas');
-    sample.width = sample.height = 48;
-    const ctx = sample.getContext('2d', {willReadFrequently:true});
-    const shapes = stitchEntries.filter(entry => supported.has(entry.id))
-      .map(entry => ({id:entry.id, path:entry.path}));
-    shapes.push({id:'sc', path:'M24 10v28M10 24h28'});
-    templates = shapes.flatMap(({id,path}) => [2, 3, 5].map(lineWidth => {
-      ctx.clearRect(0, 0, 48, 48);
-      ctx.lineCap = 'round';
-      ctx.lineWidth = lineWidth;
-      ctx.stroke(new Path2D(path));
-      const mask = inkMask(ctx.getImageData(0, 0, 48, 48).data, 48, 48);
-      const box = components(mask, 48, 48).sort((a,b) => b.area - a.area)[0];
-      return {id, pixels:normalizedMask(mask, 48, box)};
-    }));
-    return templates;
+    return templates ??= buildStitchTemplates(stitchEntries);
   }
 
-  function scan() {
+  function scan(asRegion = false) {
     if (mode.value === 'fabric') {
       status('Uncertain. Compare the enlarged photo with a known swatch or the stitch guide. Yarn texture, tension, viewing angle, and front versus back can hide the stitch structure.');
       return;
@@ -178,20 +335,34 @@
     const {x,y,w,h} = crop;
     const pixels = source.getContext('2d').getImageData(x,y,w,h).data;
     const mask = inkMask(pixels, w, h);
-    const boxes = components(mask, w, h).filter(box => box.area >= 9);
-    if (!boxes.length || (mode.value === 'symbol' && boxes.length !== 1)) {
-      status('Uncertain. Try a tighter crop with a clean background, or mark the crop manually.');
+    let boxes = components(mask, w, h).filter(box => box.area >= 9);
+    if (boxes.length > 100) {
+      status('Too many marks. Crop a smaller section or remove existing marks.');
       return;
     }
-    if (boxes.length > 100 || marks.length + boxes.length > 100) {
-      status('Too many marks. Crop a smaller section or remove existing marks.');
+    if (asRegion && boxes.length) {
+      const left = Math.min(...boxes.map(box => box.x)), top = Math.min(...boxes.map(box => box.y));
+      const right = Math.max(...boxes.map(box => box.x + box.w)), bottom = Math.max(...boxes.map(box => box.y + box.h));
+      boxes = [{x:left, y:top, w:right-left, h:bottom-top}];
+    }
+    if (!boxes.length || (mode.value === 'symbol' && boxes.length !== 1)) {
+      status('Uncertain. Try a tighter crop with a clean background, or mark the crop manually.');
       return;
     }
     const detected = boxes.map(box => ({
       box:{...box, x:x + box.x, y:y + box.y},
       matches:rankSymbols(mask, w, box, getTemplates()), id:'', confirmed:false
     }));
-    marks = mode.value === 'symbol' ? detected : marks.concat(detected);
+    const newMarks = detected.filter(next => !marks.some(mark => sameScanRegion(mark.box, next.box)));
+    if (mode.value !== 'symbol' && marks.length + newMarks.length > 100) {
+      status('Too many marks. Crop a smaller section or remove existing marks.');
+      return;
+    }
+    if (mode.value === 'symbol' && marks.some(mark => mark.confirmed)) {
+      status('Remove the confirmed mark before replacing it with a new scan.');
+      return;
+    }
+    marks = mode.value === 'symbol' ? detected : marks.concat(newMarks);
     status('Review the marks against the pattern legend. Touching symbols may share a box and specks can create extra boxes.');
     showMarks();
   }
@@ -244,9 +415,20 @@
         mark.confirmed = confirm.checked = false;
         confirm.disabled = !mark.id;
         updateSummary();
+        readInstructions.hidden = !mark.id;
       };
       confirm.onchange = () => { mark.confirmed = confirm.checked; updateSummary(); };
       const actions = element('div', '', card);
+      const readInstructions = element('button', 'Read stitch instructions', actions);
+      readInstructions.hidden = !mark.id;
+      readInstructions.onclick = () => openEntry(mark.id);
+      element('button', 'Compare this box again', actions).onclick = () => {
+        const {x,y,w,h} = mark.box;
+        const rgba = source.getContext('2d').getImageData(x,y,w,h).data;
+        const mask = inkMask(rgba,w,h);
+        mark.matches = mask.some(Boolean) ? rankSymbols(mask,w,{x:0,y:0,w,h},getTemplates()) : [];
+        showMarks();
+      };
       actions.className = 'stitch-controls';
       element('button', 'Select this box', actions).onclick = () => {
         setCrop(mark.box);
@@ -270,10 +452,29 @@
   dialog.addEventListener('close', stopCamera);
   get('Search').oninput = showLibrary;
   get('Terms').onchange = showLibrary;
+  get('Category').onchange = showLibrary;
+  get('Question').oninput = renderHelp;
+  get('OnlineSearch').addEventListener('submit', searchCommons);
+  renderCommons(get('OnlineBookmarks'), commonsBookmarks);
+  get('ExplainRow').onclick = () => {
+    const details = window.StudioCurrentRowHelp?.();
+    const panel = get('RowExplanation');
+    panel.replaceChildren();
+    if (!details) { element('p', 'Open a chart to explain a row.', panel); return; }
+    element('h4', 'Row ' + details.row + ' · ' + details.direction, panel);
+    const steps = element('ol', '', panel);
+    for (const run of details.runs) {
+      element('li', run.count + (run.count === 1 ? ' stitch with ' : ' stitches with ') + run.yarn, steps);
+    }
+    element('p', 'These are chart color instructions. Follow your pattern for stitch type, turning chains, and repeats.', panel);
+  };
+  dialog.addEventListener('close', () => get('RowExplanation').replaceChildren());
   mode.onchange = () => {
     stopCamera();
-    get('Photo').hidden = mode.value === 'library';
-    get('Add').hidden = mode.value === 'fabric';
+    get('Photo').hidden = ['library','help'].includes(mode.value);
+    get('Help').hidden = mode.value !== 'help';
+    if (!get('Help').hidden) renderHelp();
+    get('Add').hidden = get('AnalyzeRegion').hidden = mode.value === 'fabric';
     get('Analyze').textContent = mode.value === 'fabric' ? 'Check fabric photo' : 'Scan crop';
     status(crop ? 'Image ready. Adjust the crop for this tool.' : 'Choose an image to start.');
     showMarks();
@@ -322,10 +523,24 @@
     else setCrop(crop);
   });
   get('Reset').onclick = wholeImage;
-  get('Analyze').onclick = scan;
+  get('Analyze').onclick = () => scan();
+  get('AnalyzeRegion').onclick = () => scan(true);
+  get('Angle').onchange = () => setAngle(get('Angle').valueAsNumber);
+  get('RotateLeft').onclick = () => setAngle(angle - 90);
+  get('RotateRight').onclick = () => setAngle(angle + 90);
+  get('ResetPhoto').onclick = () => setAngle(0, true);
+  for (const field of ['Exposure', 'Contrast']) get(field).onchange = () => {
+    if (crop) renderAdjustedPhoto(false);
+  };
   get('Add').onclick = () => {
     if (marks.length >= 100 && mode.value === 'chart') { status('Remove a mark before adding another.'); return; }
-    if (mode.value === 'symbol') marks = [];
+    if (mode.value === 'symbol') {
+      if (marks.some(mark => mark.confirmed)) {
+        status('Remove the confirmed mark before replacing it with a manual mark.');
+        return;
+      }
+      marks = [];
+    }
     marks.push({box:{...crop}, matches:[], id:'', confirmed:false});
     showMarks();
   };
