@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.3.2",
-    "notes": "Adds visible Settings drag feedback and edge auto-scroll, bulk Recycle Bin actions, and extra Crochet View menu clearance on Android tablets."
+    "version": "2.3.3",
+    "notes": "Adds a collapsible Crochet View toolbar on phones while preserving chart position and crochet progress."
   },
   "ios": null,
-  "version": "2.3.2",
-  "notes": "Adds visible Settings drag feedback and edge auto-scroll, bulk Recycle Bin actions, and extra Crochet View menu clearance on Android tablets."
+  "version": "2.3.3",
+  "notes": "Adds a collapsible Crochet View toolbar on phones while preserving chart position and crochet progress."
 }

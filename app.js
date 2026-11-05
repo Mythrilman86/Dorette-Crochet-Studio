@@ -2382,6 +2382,9 @@ function renderGuide(){
   $('dockStitch').disabled=!!g.finished;
   $('dockRun').disabled=!!g.finished;
   $('dockStatus').textContent=g.finished?'Chart finished':`Row ${row} · ${active.palette[run.color].name} · ${run.lastStep-pos+1} left in run`;
+  $('phoneCrochetSummary').textContent=g.finished?'Chart finished':`Row ${row} · ${active.palette[run.color].name} · ${run.lastStep-pos+1} left`;
+  const phoneControl=$('phoneCrochetControls');
+  phoneControl.setAttribute('aria-label',(phoneControl.getAttribute('aria-expanded')==='true'?'Collapse':'Expand')+' crochet controls · '+$('phoneCrochetSummary').textContent);
   $('guideRun').textContent=g.finished?'Color run complete':`Complete color run (${run.lastStep-pos+1})`;
   $('guidePrevRow').disabled=row===1;$('guideNextRow').disabled=row===active.rows;
 }
@@ -2478,6 +2481,22 @@ function setFocusGuide(open){
   $('guideDialog').hidden=!open;
   $('focusGuideDetails').setAttribute('aria-expanded',String(open));
   if(open)renderGuide();
+}
+function setupPhoneCrochetControls(){
+  const key='studio.phone.crochet-controls.expanded',button=$('phoneCrochetControls');
+  function apply(expanded){
+    button.setAttribute('aria-expanded',String(expanded));
+    button.setAttribute('aria-label',(expanded?'Collapse':'Expand')+' crochet controls · '+$('phoneCrochetSummary').textContent);
+    document.body.classList.toggle('phone-crochet-expanded',expanded);
+  }
+  let expanded=false;
+  try{expanded=localStorage.getItem(key)==='true';}catch{}
+  apply(expanded);
+  button.onclick=()=>{
+    expanded=!expanded;
+    apply(expanded);
+    try{localStorage.setItem(key,String(expanded));}catch{}
+  };
 }
 function setCrochetView(enabled){
   if(enabled&&(!active||pendingConversion))return toast('Finish the chart preview before opening Crochet View.');
@@ -4441,6 +4460,7 @@ async function initialize(){
   setupSettingsLayout();
   setupPolishTools();
   setupAppNavigation();
+  setupPhoneCrochetControls();
   $('toggleBulkProjects').onclick=()=>{bulkMode=!bulkMode;bulkProjects.clear();refreshProjectList();};
   $('selectVisibleProjects').onclick=()=>{for(const project of visibleBulkProjects())bulkProjects.add(project.id);refreshProjectList();};
   $('clearBulkProjects').onclick=()=>{bulkProjects.clear();refreshProjectList();};

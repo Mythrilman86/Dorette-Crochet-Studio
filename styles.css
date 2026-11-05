@@ -291,7 +291,7 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .crochet-view:not(.unpinned-dock)>.topbar,.crochet-view:not(.unpinned-dock)>.update-notice{visibility:hidden}
 .crochet-view:not(.unpinned-dock) #saveAlert:not([hidden]),.crochet-view:not(.unpinned-dock) #tabLockBanner:not([hidden]){position:fixed;inset:0 0 auto;z-index:26}
 .crochet-view:not(.unpinned-dock) .toast{z-index:27}
-.crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog,#focusRowColors){display:none}
+.crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog,#focusRowColors,#phoneCrochetControls){display:none}
 .crochet-view:not(.unpinned-dock) #chartViews{display:flex;flex:1 0 140px;min-height:140px}
 .crochet-view:not(.unpinned-dock) #overviewPane,.crochet-view:not(.unpinned-dock) .chart-pane h2,.crochet-view:not(.unpinned-dock) .working-chart-heading,.crochet-view:not(.unpinned-dock) .canvas-note,
 .crochet-view:not(.unpinned-dock) #openCommandSearch,.crochet-view:not(.unpinned-dock) .toolbar-hint{display:none}
@@ -356,5 +356,16 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 .settings-customizing .settings-navigation{position:sticky;top:0;z-index:2}.settings-customizing #settingsJump,.settings-customizing .settings-favorites{display:none}
 .settings-customizing .settings-dragging{border-color:#6c319d;outline:2px solid #6c319d;box-shadow:0 3px 10px #54287d55;background:#f8efff}
 .settings-customizing .settings-drop-before{box-shadow:0 -5px #5a2489}.settings-customizing .settings-drop-after{box-shadow:0 5px #5a2489}
-@media(min-width:600px) and (min-height:600px){.native-android.crochet-view .crochet-view-actions{padding-top:max(16px,env(safe-area-inset-top))}}
+@media(min-width:600px) and (min-height:600px){
+  .native-android.crochet-view .crochet-view-actions{padding-top:calc(48px + env(safe-area-inset-top, 0px))}
+  .native-android:not(.crochet-view)>.topbar{height:calc(106px + env(safe-area-inset-top, 0px));padding-top:calc(32px + env(safe-area-inset-top, 0px))}
+}
 #recycleSelectionControls[hidden]{display:none}#recycleSelectionControls .button,#toggleRecycleSelection{min-height:44px;white-space:normal}.recycle-select-row{display:flex;align-items:center;gap:8px;min-height:44px}.recycle-select-row input{width:20px;height:20px}
+#phoneCrochetControls{display:none}
+@media (pointer:coarse) and (max-width:599px), (pointer:coarse) and (orientation:landscape) and (max-height:599px){
+  .crochet-view .workspace>#phoneCrochetControls{display:flex;flex:none;align-items:center;justify-content:space-between;gap:10px;min-width:0;min-height:44px;padding:6px 12px;border:1px solid #cbb8e0;border-radius:9px;background:#eee5f7;color:#392352;text-align:left;font-weight:750;transition:background-color .15s}
+  #phoneCrochetSummary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .phone-crochet-chevron{flex:none;width:.55em;height:.55em;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg)}
+  #phoneCrochetControls[aria-expanded=true] .phone-crochet-chevron{transform:rotate(225deg)}
+  .crochet-view:not(.phone-crochet-expanded) .workspace>#crochetProgressControls,.crochet-view:not(.phone-crochet-expanded) .workspace>#chartNavigationControls{display:none}
+}
