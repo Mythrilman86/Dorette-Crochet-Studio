@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.1.0",
-    "notes": "Moves Single/Dual beside the working chart and adds upright vertical lettering, independent letter sizing, and direct text-layer painting and erasing. Adds optional offline scanner photo preparation; the established recognizer remains the default."
+    "version": "2.2.0",
+    "notes": "Adds row color instructions inside Crochet View, insert and delete anywhere in the chart, and clearer lettering layer locks and brush targeting."
   },
   "ios": null,
-  "version": "2.1.0",
-  "notes": "Moves Single/Dual beside the working chart and adds upright vertical lettering, independent letter sizing, and direct text-layer painting and erasing. Adds optional offline scanner photo preparation; the established recognizer remains the default."
+  "version": "2.2.0",
+  "notes": "Adds row color instructions inside Crochet View, insert and delete anywhere in the chart, and clearer lettering layer locks and brush targeting."
 }
