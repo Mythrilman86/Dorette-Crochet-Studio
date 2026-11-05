@@ -14,6 +14,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
+    <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button></nav>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
   <div id="tabLockBanner" class="reliability-alert conflict-alert" role="alert" hidden><strong>Read-only in this tab.</strong><span id="tabLockMessage">Another Studio tab is editing local projects. Close that tab to prevent overwrites.</span><button id="retryEditing" class="button secondary" type="button">Retry editing</button></div>
@@ -33,7 +34,7 @@
   </section>
   <main class="layout">
     <aside class="sidebar" aria-label="Projects">
-      <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
+      <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span><button id="collapseProjects" class="button ghost" type="button">Hide Projects</button></div>
       <label class="field">Filter projects <input id="projectSearch" placeholder="Search name or category"></label><label class="field">Category filter <select id="categoryFilter"><option value="">All categories</option><option>Blankets</option><option>Garments</option><option>Gifts</option><option>Practice</option><option>Other</option></select></label><label class="toggle"><input id="onlyFavorites" type="checkbox"> Favorites only</label><div id="projectList" class="project-list"></div><details class="project-bin" id="projectBin"><summary>Recycle Bin (<span id="projectBinCount">0</span>)</summary><div id="projectBinList"></div><button id="emptyProjectBin" class="button ghost" type="button">Empty Recycle Bin</button></details>
       <details id="newProjectDetails" class="new-project"><summary>＋ New crochet project</summary>
         <form id="newProjectForm" class="stack form-fields">
@@ -153,10 +154,17 @@
     </section>
 
     <aside class="inspector" aria-label="Project settings">
+      <div class="settings-navigation">
+        <h2>Settings</h2>
+        <label class="field">Jump to Section<select id="jumpSettings"><option value="">Choose a section</option></select></label>
+        <div class="settings-favorites" id="favoriteSettings" aria-label="Favorite Settings"></div>
+        <div class="settings-layout-actions"><button id="customizeSettings" class="button ghost" type="button" aria-pressed="false">Customize Layout</button><button id="resetSettingsOrder" class="button ghost" type="button" hidden>Reset to Default</button></div>
+        <p id="settingsLayoutStatus" class="muted" role="status" hidden></p>
+      </div>
       <section class="settings-card"><div class="inspector-heading"><span class="eyebrow">PROJECT DETAILS</span><h2>Chart settings</h2></div>
       <label class="field">Project category<select id="projectCategory"><option>Other</option><option>Blankets</option><option>Garments</option><option>Gifts</option><option>Practice</option></select></label><button id="duplicateProject" class="button ghost block" type="button">Duplicate current project</button><label class="field">Project name<input id="projectName" maxlength="70" placeholder="Project name"></label>
       <div class="pair"><label class="field">Columns<input id="colsInput" type="number" min="1" max="200"></label><label class="field">Rows<input id="rowsInput" type="number" min="1" max="300"></label></div>
-      <div class="pair"><label class="field">Row Edge<select id="dimensionRowEdge"><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label class="field">Column Edge<select id="dimensionColumnEdge"><option value="right">Right</option><option value="left">Left</option></select></label></div>
+      <div class="pair"><label class="field">Add/remove rows at:<select id="dimensionRowEdge"><option value="top">Top</option><option value="bottom">Bottom</option></select></label><label class="field">Add/remove columns at:<select id="dimensionColumnEdge"><option value="right">Right</option><option value="left">Left</option></select></label></div>
       <button class="button secondary block" id="applyDimensions" type="button">Apply dimensions</button><label class="toggle"><input id="safeEdits" type="checkbox" checked> Apply major changes to a separate project copy (recommended)</label><details class="next-soft" open><summary>Advanced canvas resize / crop</summary><p class="muted">Change canvas size without stretching artwork, or choose scaling. New chart dimensions must be 1–200 columns and 1–300 rows.</p><label>Mode<select id="resizeMode"><option value="canvas">Expand / crop canvas (no stretching)</option><option value="scale">Scale entire chart (nearest-stitch)</option></select></label><label>Anchor<select id="resizeAnchor"><option value="center">Center</option><option value="left">Left / bottom</option><option value="right">Right / top</option><option value="top">Top</option><option value="bottom">Bottom</option></select></label><button id="smartResize" type="button" class="button secondary block">Apply advanced resize</button></details></section>
       <div class="section-divider"></div>
       <div class="inspector-section"><span class="eyebrow">STITCH PROGRESS</span><div class="progress-label"><strong id="progressText">0 / 9,243</strong><span id="progressPercent">0%</span></div><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><label class="toggle"><input id="showProgressOverlay" type="checkbox" checked> Show completed shading on chart</label><p class="muted">Completing a row counts all stitches in it. Completion stays separate from yarn colors.</p></div>
@@ -335,7 +343,7 @@
         <p class="muted">Creates a real PDF on this device. Your saved project and backup ZIPs are not changed. It does not print the source photograph.</p>
       </div>
       <div class="section-divider"></div>
-      <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="shareProject" class="button ghost block" type="button">Share this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
+      <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="shareProject" class="button ghost block" type="button">Share this project (ZIP)</button><label class="toggle"><input id="includeWorkspacePreferences" type="checkbox"> Include workspace preferences in full backups</label><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
       <div class="section-divider"></div>
       <button id="deleteProject" class="text-button danger">Move current project to Recycle Bin</button>
     </aside>
