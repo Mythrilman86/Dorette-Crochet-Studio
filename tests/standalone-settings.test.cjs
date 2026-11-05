@@ -35,3 +35,28 @@ test('write failure rolls back previously applied preference keys',()=>{
   assert.throws(()=>api.writeStandaloneSettings(storage,{chart:'single',phoneControls:true,safeEdits:false},['chart','phoneControls','safeEdits']),/quota/);
   assert.deepEqual([...map],[['dorette-chart-layout','dual']]);
 });
+
+test('missing, null, malformed and mismatched checksums leave preferences untouched',async()=>{
+  const categories={chart:'single'};
+  const file={application:'com.deescrochetstudio.app.settings',format:1,studioVersion:'2.3.4',exportedAt:'2026-11-05T00:00:00Z',categories};
+  const values=new Map([['dorette-chart-layout','dual']]);
+  const storage={getItem:key=>values.get(key),setItem:(key,value)=>values.set(key,value)};
+  async function apply(raw){
+    const {values}=await api.decodeSettingsFile(raw);
+    api.writeStandaloneSettings(storage,values,['chart']);
+  }
+  await assert.rejects(apply(file),/missing.*checksum/i);
+  await assert.rejects(apply({...file,sha256:null}),/missing.*checksum/i);
+  for(const sha256 of ['',42,'g'.repeat(64),'a'.repeat(63)]){
+    await assert.rejects(apply({...file,sha256}),/invalid.*checksum/i);
+  }
+  await assert.rejects(apply({...file,sha256:'0'.repeat(64)}),/integrity/i);
+  assert.deepEqual([...values],[['dorette-chart-layout','dual']]);
+  await apply({...file,sha256:await api.settingsDigest(categories)});
+  assert.equal(values.get('dorette-chart-layout'),'single');
+});
+
+test('checksum generation fails closed when SHA-256 is unavailable',async()=>{
+  const digest=vm.runInNewContext(code+'\nsettingsDigest',{TextEncoder});
+  await assert.rejects(digest({chart:'dual'}),/SHA-256 is unavailable/);
+});

@@ -2181,17 +2181,16 @@ function readStandaloneSettings(storage){
   return normalizeSettingsCategories({chart:'dual',safeEdits:true,phoneControls:false,...data}).values;
 }
 async function settingsDigest(value){
-  if(!globalThis.crypto?.subtle)return null;
+  if(!globalThis.crypto?.subtle?.digest)throw Error('SHA-256 is unavailable in this environment. Open Studio in the installed app or a secure browser page.');
   const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)));
   return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
 }
 async function decodeSettingsFile(raw){
   if(!raw||raw.application!==standaloneSettingsId||raw.format!==1||typeof raw.studioVersion!=='string'||
      raw.studioVersion.length>30||typeof raw.exportedAt!=='string'||!Number.isFinite(Date.parse(raw.exportedAt)))throw Error('Choose a supported Dee’s Crochet Studio settings file.');
-  if(raw.sha256!==undefined&&raw.sha256!==null){
-    const actual=await settingsDigest(raw.categories);
-    if(!actual||raw.sha256!==actual)throw Error('The settings file failed its integrity check.');
-  }
+  if(raw.sha256==null)throw Error('The settings file is missing its SHA-256 checksum.');
+  if(typeof raw.sha256!=='string'||!/^[0-9a-f]{64}$/i.test(raw.sha256))throw Error('The settings file has an invalid SHA-256 checksum.');
+  if(raw.sha256.toLowerCase()!==await settingsDigest(raw.categories))throw Error('The settings file failed its integrity check. Export a fresh copy and try again.');
   const result=normalizeSettingsCategories(raw.categories);
   if(!Object.keys(result.values).length)throw Error('The file has no supported settings to import.');
   return result;
