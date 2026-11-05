@@ -112,7 +112,13 @@ Rendering caches composed colors and visible chart tiles by revision. The existi
 - Save requests already serialize and report success after transaction completion. Pending debounce now flushes when the document backgrounds and retains its original project ID. An aborted write still leaves the last committed IndexedDB record intact. No recovery copy can recover changes that never reached storage.
 - Progress totals now skip fully marked rows and are shared within selection and progress refreshes. Run node scripts/benchmark-progress.mjs to repeat the isolated calculation check. Median milliseconds at 79 × 117, 120 × 165, and 200 × 300 with half the rows marked were 0.014 → 0.002, 0.029 → 0.005, and 0.089 → 0.015 on the development host. This measures the calculation only, not frame rate or touch latency.
 - Command and backup dialogs now honor dynamic viewport height and safe areas, retain scrolling, and show keyboard focus. The phone toolbar and tablet menu rules are unchanged.
-- Remaining quality gates include extended Android background and near-quota recovery, full chart interaction and memory traces at each size, backup preview evaluation, and physical Samsung checks.
+- Remaining quality gates include extended Android background and near-quota recovery, full chart interaction and memory traces at each size, and physical Samsung checks.
+
+### Backup preview and recovery policy
+
+Project restore checks ZIP entry CRCs and validates the project payload before asking for confirmation. The preview reports active and recycled project counts. Cancel leaves both projects and preferences alone. Confirm restores copies in the existing transaction, with a separate choice for compatible workspace preferences after success. Standalone Settings & Layout JSON keeps its independent checksum and import path.
+
+Keep the last committed IndexedDB record as the recovery point. A separate journal in the same storage would consume additional quota, and replaying a second copy without revision checks could overwrite a newer save. Reconsider a journal if background and quota testing shows a reproducible loss of confirmed work. A recovery design would need bounded retention, schema validation, an atomic revision check and explicit recovery of older drafts as copies.
 
 ### Release checklist
 
