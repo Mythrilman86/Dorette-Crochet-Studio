@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.2.0",
-    "notes": "Adds row color instructions inside Crochet View, insert and delete anywhere in the chart, and clearer lettering layer locks and brush targeting."
+    "version": "2.3.0",
+    "notes": "Adds customizable Settings, Find a Tool shortcuts, application menus, a Projects drawer, transferable workspace preferences and edge resize previews."
   },
   "ios": null,
-  "version": "2.2.0",
-  "notes": "Adds row color instructions inside Crochet View, insert and delete anywhere in the chart, and clearer lettering layer locks and brush targeting."
+  "version": "2.3.0",
+  "notes": "Adds customizable Settings, Find a Tool shortcuts, application menus, a Projects drawer, transferable workspace preferences and edge resize previews."
 }

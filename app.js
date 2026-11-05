@@ -3690,13 +3690,19 @@ function setupAppNavigation(){
   function go(id,action){
     const node=id==='guidePdf'?document.querySelector('.guide-link'):$(id);if(!node)return;
     if(action){
-      if(node.disabled)return toast('Select a project, stitch, or layer before using this action.');
+      if(node.disabled){
+        const reasons={undoButton:'There is no chart change to undo.',redoButton:'There is no chart change to redo.',
+          editLastText:'Add and select an editable text layer first.',
+          quickTextLayer:isPatternLocked()?'Unlock Pattern Lock before painting a text layer.':'Add and select an editable text layer first.'};
+        return toast(reasons[id]||'Open an editable project and select a stitch or layer first.');
+      }
       node.click();return;
     }
     const section=node.closest('.settings-section');
     if(section)revealSettingsSection(section);
     if(node.closest('.sidebar')){projects.dataset.hidden='0';refreshWorkspaceLayout();}
     for(let el=node;el;el=el.parentElement)if(el.tagName==='DETAILS')el.open=true;
+    if(id==='imageFile'){node.click();return;}
     node.scrollIntoView({block:'center'});if(node.tabIndex<0)node.tabIndex=-1;node.focus({preventScroll:true});
   }
   const menu={
@@ -3717,6 +3723,18 @@ function setupAppNavigation(){
     }
     detail.append(summary,items);categories.append(detail);
   }
+  window.StudioHandleBack=()=>{
+    const modal=[...document.querySelectorAll('dialog[open]')].filter(dialog=>dialog.matches(':modal')).at(-1);
+    if(modal){
+      if(modal.dispatchEvent(new Event('cancel',{cancelable:true})))modal.close();
+      return true;
+    }
+    if(nav.classList.contains('menu-open')||nav.querySelector('details[open]')){close(true);return true;}
+    if(matchMedia('(max-width:920px)').matches&&!inCrochetView()&&projects.dataset.hidden!=='1'){
+      projects.click();projects.focus();return true;
+    }
+    return false;
+  };
   document.addEventListener('pointerdown',e=>{if(!nav.contains(e.target))close();});
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'&&(nav.classList.contains('menu-open')||nav.querySelector('details[open]'))){e.preventDefault();close(true);}
