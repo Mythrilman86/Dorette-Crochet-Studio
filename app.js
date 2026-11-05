@@ -731,19 +731,23 @@ function updateTextControls(){
   $('textRow').max=String(maxRow);
   const tc=$('textColor'),prev=tc.value;
   tc.replaceChildren();
+  tc.add(new Option('Choose a letter yarn…',''));
   active.palette.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=`${c.symbol} · ${c.name}`;tc.append(o);});
   const black=active.palette.findIndex(c=>c.hex.toLowerCase()==='#000000');
-  tc.value=prev!==''&&active.palette[Number(prev)]?prev:String(Math.max(0,black));
+  const fallback=active.palette.findIndex(c=>letterColorDistance(c,active.palette[0])>=65);
+  tc.value=prev!==''&&active.palette[Number(prev)]?prev:black>=0?String(black):
+    active.palette.length===SYMBOLS.length&&fallback>=0?String(fallback):'';
   updateTextColorStatus();
   if(textPreview)buildTextPreview();
 }
+function letterColorDistance(color,background){
+  return Math.hypot(...[1,3,5].map(i=>parseInt(color.hex.slice(i,i+2),16)-parseInt(background.hex.slice(i,i+2),16)));
+}
 function updateTextColorStatus(){
   if(!active)return;
-  const color=active.palette[Number($('textColor').value)],background=active.palette[0];
-  if(!color)return;
-  $('textColorSwatch').style.backgroundColor=color.hex;
-  const distance=Math.hypot(...[1,3,5].map(i=>parseInt(color.hex.slice(i,i+2),16)-parseInt(background.hex.slice(i,i+2),16)));
-  $('textColorStatus').textContent=distance<65?'This yarn is close to the chart background. Choose a contrasting yarn for readable lettering.':'';
+  const value=$('textColor').value,color=value===''?null:active.palette[Number(value)];
+  $('textColorSwatch').style.backgroundColor=color?.hex||'';
+  $('textColorStatus').textContent=!color?'Choose a letter yarn or add black.':letterColorDistance(color,active.palette[0])<65?'This yarn is close to the chart background. Choose a contrasting yarn for readable lettering.':'';
   const hasBlack=active.palette.some(c=>c.hex.toLowerCase()==='#000000');
   const add=$('addTextBlack');
   add.hidden=hasBlack;
@@ -1344,6 +1348,10 @@ function buildTextPreview(){
   if(!active)return null;
   const feedback=$('textFitStatus');
   feedback.textContent='';
+  if($('textColor').value===''){
+    feedback.textContent='Choose a letter yarn before previewing or applying text.';
+    textPreview=null;requestDraw();return null;
+  }
   const config=previewTextConfig();
   if(!Number.isInteger(config.height)||config.height<5||config.height>100){
     feedback.textContent='Enter a whole letter height from 5 to 100 stitches.';
@@ -2950,6 +2958,8 @@ function putTextOnLayer(){
  const replace=editingLayerId?(active.layers||[]).findIndex(l=>l.id===editingLayerId):-1;
  const previous=active.layers?.[replace];
  if(editingLayerId&&(!previous||previous.locked))return toast('Select an unlocked text layer before updating it.');
+ if((!previous||previous.source?.color!==preview.color)&&letterColorDistance(active.palette[preview.color],active.palette[0])<65&&
+   !confirm('This letter yarn may blend into the chart background. Apply it anyway?'))return;
  const config=previewTextConfig();
  let entries=preview.cells.map(cell=>[indexFor(cell.col,cell.row),preview.color]);
  if(previous?.source?.handEdited){
@@ -2972,7 +2982,7 @@ function putTextOnLayer(){
  const layer={id:previous?.id??uid(),name:'Text: '+preview.text.slice(0,40),type:'text',visible:previous?.visible??true,locked:false,entries,source:config};
  setLayerAndRefresh(layer,replace>=0?replace:null);
  editingLayerId=null;lastText={config:{...previewTextConfig()},original:new Map()};$('editLastText').disabled=false;
- clearTextPreview();toast('Text saved as a separate editable layer.');
+ clearTextPreview();$('textColor').value='';updateTextControls();toast('Text saved as a separate editable layer.');
 }
 function applyMotifLayer(){
  if(!active||!motifPreview||pendingConversion||editBlocked('apply motif'))return;
@@ -4594,6 +4604,9 @@ function hookEvents(){
   $('clearTextPreview').addEventListener('click',()=>{clearTextPreview();toast('Text preview cleared.');});
   $('applyText').addEventListener('click',applyTextPreview);
   $('editLastText').addEventListener('click',editLastText);
+  $('newLettering').addEventListener('click',()=>{
+    clearTextPreview();$('textInput').value='';$('textColor').value='';updateTextControls();$('textInput').focus();
+  });
   $('placeText').addEventListener('click',()=>{
     if(!active||pendingConversion||editBlocked('place text'))return;
     progressBrush=false;updateSelection();
