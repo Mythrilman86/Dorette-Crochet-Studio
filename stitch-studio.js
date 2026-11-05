@@ -56,6 +56,8 @@
     {id:'symbols', title:'Craft Yarn Council chart symbols', url:'https://www.craftyarncouncil.com/standards/crochet-chart-symbols', keywords:'chart diagram symbol legend'},
     {id:'terms', title:'Craft Yarn Council crochet abbreviations', url:'https://www.craftyarncouncil.com/standards/crochet-abbreviations', keywords:'terms abbreviations us uk stitch'},
     {id:'hooks', title:'Craft Yarn Council hook sizes', url:'https://www.craftyarncouncil.com/standards/hooks-and-needles', keywords:'hook yarn gauge tension size'},
+    {id:'guild', title:'Crochet Guild of America beginner stitches and videos', url:'https://crochet.org/learn-to-crochet/', keywords:'beginner video tutorial instructions technique stitch symbol left right hand'},
+    {id:'yarnspirations', title:'Yarnspirations step-by-step crochet tutorials', url:'https://www.yarnspirations.com/pages/how-to-crochet-for-absolute-beginners', keywords:'beginner video tutorial instructions pattern chart troubleshoot technique chain stitch'},
     {id:'images', title:'Openverse openly licensed images', url:'https://openverse.org/', keywords:'image photo picture reference'}
   ];
   const bookmarkKey = 'studio.crochet.references';
@@ -287,6 +289,7 @@
     get('Angle').value = angle;
     if (reset) { get('Exposure').value = 0; get('Contrast').value = 0; }
     renderAdjustedPhoto(rotated || reset);
+    return true;
   }
 
   async function readPhoto(file) {
@@ -395,8 +398,15 @@
         const list = element('ol', '', card);
         for (const {id,score} of mark.matches) {
           const entry = known.get(id);
-          element('li', entry.us + ' (' + id + ') · ' + Math.round(score * 100) + '% overlap', list)
-            .prepend(glyph(entry));
+          const row = element('li', entry.us + ' (' + id + ') · ' + Math.round(score * 100) + '% overlap ', list);
+          row.prepend(glyph(entry));
+          const use = element('button', 'Use ' + entry.us, row);
+          use.type = 'button';
+          use.onclick = () => {
+            if (select.value === id) return;
+            select.value = id;
+            select.onchange();
+          };
         }
       }
       const label = element('label', 'Stitch from pattern legend', card);
@@ -525,6 +535,35 @@
   get('Reset').onclick = wholeImage;
   get('Analyze').onclick = () => scan();
   get('AnalyzeRegion').onclick = () => scan(true);
+  function cropMask() {
+    const {x,y,w,h} = crop;
+    const pixels = source.getContext('2d').getImageData(x,y,w,h).data;
+    return inkMask(pixels,w,h);
+  }
+
+  get('AutoCrop').onclick = () => {
+    if (!crop) return;
+    const box = suggestInkCrop(cropMask(), crop.w, crop.h);
+    if (!box) { status('No clear ink boundary. Adjust the crop manually.'); return; }
+    setCrop({...box,x:crop.x+box.x,y:crop.y+box.y});
+    status('Crop fitted to ink. Review the orange outline before scanning.');
+  };
+  get('Deskew').onclick = () => {
+    if (!crop) return;
+    const correction = suggestScanRotation(cropMask(), crop.w, crop.h);
+    if (!correction) { status('No clear tilted rows. Use the angle field for manual rotation.'); return; }
+    if (setAngle(angle + correction)) status('Straightened printed rows. Review the image before scanning.');
+  };
+  get('AutoTones').onclick = () => {
+    if (!crop) return;
+    const pixels = original.getContext('2d').getImageData(0,0,original.width,original.height).data;
+    const tones = suggestScanTones(pixels,0,0);
+    if (!tones) { status('No clear lighting adjustment. Try the exposure and contrast controls.'); return; }
+    get('Exposure').value = tones.exposure;
+    get('Contrast').value = tones.contrast;
+    renderAdjustedPhoto(false);
+    status('Lighting adjusted. Review the image before scanning.');
+  };
   get('Angle').onchange = () => setAngle(get('Angle').valueAsNumber);
   get('RotateLeft').onclick = () => setAngle(angle - 90);
   get('RotateRight').onclick = () => setAngle(angle + 90);

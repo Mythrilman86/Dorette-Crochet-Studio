@@ -101,7 +101,8 @@ async function benchmark(files) {
   const catalog = JSON.parse(await catalogFile.text());
   const templates = buildStitchTemplates(stitchEntries);
   const experimentalTemplates = buildStitchTemplates(stitchEntries, true);
-  const results = [], experimental = [], missing = [];
+  const variedTemplates = buildStitchTemplates(stitchEntries, false, true);
+  const results = [], experimental = [], varied = [], missing = [];
   for (const item of catalog) {
     const rendition = item.testedFile && files.get(item.testedFile);
     const file = rendition || files.get(item.file);
@@ -114,9 +115,10 @@ async function benchmark(files) {
       await image.decode();
       results.push({...item,runs:scanSample(image,item,templates)});
       experimental.push({...item,runs:scanSample(image,item,experimentalTemplates,true)});
+      varied.push({...item,runs:scanSample(image,item,variedTemplates)});
     } finally { URL.revokeObjectURL(url); }
   }
-  return {defaultTotals:summarize(results),experimentalTotals:summarize(experimental),missing,results,experimental};
+  return {defaultTotals:summarize(results),experimentalTotals:summarize(experimental),variedTotals:summarize(varied),missing,results,experimental,varied};
 }
 
 document.getElementById('run').addEventListener('click', async event => {

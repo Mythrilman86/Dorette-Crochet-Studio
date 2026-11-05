@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.0.0",
-    "notes": "Adds full-screen Crochet View, local scanner photo tools, expanded stitch guidance, native ZIP sharing, project pinning, custom categories, and a Recycle Bin."
+    "version": "2.1.0",
+    "notes": "Moves Single/Dual beside the working chart and adds upright vertical lettering, independent letter sizing, and direct text-layer painting and erasing. Adds optional offline scanner photo preparation; the established recognizer remains the default."
   },
   "ios": null,
-  "version": "2.0.0",
-  "notes": "Adds full-screen Crochet View, local scanner photo tools, expanded stitch guidance, native ZIP sharing, project pinning, custom categories, and a Recycle Bin."
+  "version": "2.1.0",
+  "notes": "Moves Single/Dual beside the working chart and adds upright vertical lettering, independent letter sizing, and direct text-layer painting and erasing. Adds optional offline scanner photo preparation; the established recognizer remains the default."
 }

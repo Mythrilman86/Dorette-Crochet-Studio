@@ -74,3 +74,34 @@ test('downsampling keeps one-pixel strokes between sample centers', () => {
   const rows=Array.from({length:32},(_,y)=>normalized.slice(y*32,(y+1)*32));
   assert.ok(rows.filter(row=>row.some(Boolean)).length>=24);
 });
+
+test('crop fitting ignores isolated specks and leaves a review margin', () => {
+  const {suggestInkCrop} = require('../stitch-match.js');
+  const mask = new Uint8Array(100 * 80);
+  assert.equal(suggestInkCrop(mask, 100, 80), null);
+  for (let y = 20; y < 40; y++) mask.fill(1, y * 100 + 30, y * 100 + 40);
+  mask[1] = 1;
+  assert.deepEqual(suggestInkCrop(mask, 100, 80), {x:27,y:17,w:16,h:26});
+});
+
+test('straightening estimates a supported tilt and abstains on an isolated stroke', () => {
+  const {suggestScanRotation} = require('../stitch-match.js');
+  const mask = new Uint8Array(120 * 90);
+  for (const row of [14, 34, 54]) {
+    for (let x = 10; x < 110; x++) mask[(row + Math.round(x * .14)) * 120 + x] = 1;
+  }
+  assert.ok(Math.abs(suggestScanRotation(mask, 120, 90) + 8) <= 1);
+  mask.fill(0, 34 * 120);
+  assert.equal(suggestScanRotation(mask, 120, 90), 0);
+});
+
+test('lighting adjustment expands tonal range and abstains on uniform images', () => {
+  const {suggestScanTones} = require('../stitch-match.js');
+  const pixels = new Uint8ClampedArray(100 * 4);
+  for (let i = 0; i < pixels.length; i += 4) pixels.set([150,150,150,255], i);
+  assert.equal(suggestScanTones(pixels, 0, 0), null);
+  for (let i = 0; i < 80; i += 4) pixels.set([100,100,100,255], i);
+  const {exposure,contrast} = suggestScanTones(pixels, 0, 0);
+  adjustScanPixels(pixels, exposure, contrast);
+  assert.ok(pixels[80] - pixels[0] > 50);
+});

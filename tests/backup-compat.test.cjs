@@ -5,12 +5,12 @@ const vm = require('node:vm');
 
 function engine(file) {
   const source = readFileSync(file, 'utf8').replace(/^initialize\(\)\.catch.*$/m,
-    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, readProjectBackup: typeof readProjectBackup === "function" ? readProjectBackup : undefined, DB_NAME, DB_VERSION };');
+    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, readProjectBackup: typeof readProjectBackup === "function" ? readProjectBackup : undefined, deletionAllowed: typeof deletionAllowed === "function" ? deletionAllowed : undefined, DB_NAME, DB_VERSION };');
   const window = { addEventListener() {} };
   const element = { getContext: () => ({}), addEventListener() {} };
   vm.runInNewContext(source, {
     window, document: { getElementById: () => element },
-    TextEncoder, TextDecoder, structuredClone, crypto
+    TextEncoder, TextDecoder, structuredClone, crypto, alert() {}
   });
   return window.backupApi;
 }
@@ -43,17 +43,24 @@ test('legacy ZIP projects round-trip between website and mobile', () => {
 });
 
 test('organization backups preserve pins, favorites, custom categories and recycle data', () => {
-  const {backupPayload, readProjectBackup} = engine('dist/app.js');
+  const {backupPayload, readProjectBackup, makeZip, readZip, deletionAllowed} = engine('dist/app.js');
   const chart = {
     id:'existing', name:'Sample', cols:1, rows:1, cells:[0], done:[1], rowDone:[1],
     palette:[{hex:'#ffffff',name:'White',symbol:'A'}], notes:'Keep this note',
-    category:'  Winter   gifts ', favorite:true, pinned:true
+    category:'  Winter   gifts ', favorite:true, pinned:true,
+    layers:[{id:'motif',name:'Motif',type:'motif',visible:false,locked:true,entries:[[0,0]],source:null}]
   };
   const payload = backupPayload([chart], {
     categories:['Winter gifts','WINTER GIFTS','blankets','Unused'],
     recycleBin:[{...chart,pinned:false,favorite:false,trashedAt:'2026-11-04T00:00:00Z'}]
   });
-  const restored = readProjectBackup(payload);
+  const zip = makeZip({'backup.json':JSON.stringify(payload)});
+  const restored = readProjectBackup(JSON.parse(new TextDecoder().decode(readZip(zip)['backup.json'])));
+  assert.equal(deletionAllowed(restored.projects[0]), false);
+  assert.equal(deletionAllowed(restored.recycled[0]), true);
+  assert.equal(JSON.stringify(restored.projects[0].layers), JSON.stringify(chart.layers));
+  assert.equal(restored.projects[0].palette[0].hex, chart.palette[0].hex);
+  assert.equal(restored.projects[0].rowDone[0], 1);
   assert.deepEqual(Array.from(restored.categories), ['Winter gifts','Unused']);
   assert.equal(restored.projects[0].category, 'Winter gifts');
   assert.equal(restored.projects[0].pinned, true);
