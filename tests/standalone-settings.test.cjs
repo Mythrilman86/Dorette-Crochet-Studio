@@ -31,7 +31,7 @@ test('selected categories import without touching project keys or unselected pre
 test('write failure rolls back previously applied preference keys',()=>{
   const map=new Map([['dorette-chart-layout','dual']]);
   const storage={getItem:key=>map.get(key)??null,removeItem:key=>map.delete(key),
-    setItem(key,v){if(key==='dorette-safe-edits')throw Error('quota');map.set(key,v);}};
+    setItem(key,v){if(key==='dorette-safe-edits-opt-in')throw Error('quota');map.set(key,v);}};
   assert.throws(()=>api.writeStandaloneSettings(storage,{chart:'single',phoneControls:true,safeEdits:false},['chart','phoneControls','safeEdits']),/quota/);
   assert.deepEqual([...map],[['dorette-chart-layout','dual']]);
 });
