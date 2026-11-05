@@ -64,15 +64,22 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         p.checkpoints=[{...history,id:'cp',name:'Previous',at:p.createdAt}];
         return p;
       };
-      const originals=[build('Alpha',true),build('Beta',false),build('Trash',false)];
-      const trash=originals[2];trash.trashedAt=trash.createdAt;
-      ok(await organizeProjects(originals,[],['Fixture category'],()=>{
-        for(const p of originals.slice(0,2))projects.set(p.id,p);
+      const originals=[build('Alpha',true),build('Beta',false),build('Gamma',false),build('Trash',false)];
+      const trash=originals[3];trash.trashedAt=trash.createdAt;
+      const previousIds=[...projects.keys(),...recycledProjects.keys()];
+      ok(await organizeProjects(originals,previousIds,['Fixture category'],()=>{
+        projects.clear();recycledProjects.clear();
+        for(const p of originals.slice(0,3))projects.set(p.id,p);
         recycledProjects.set(trash.id,trash);
+        selectProject(originals[0].id);
       }), 'seed saved');
       let blob;download=value=>{blob=value;};
       await exportBackup(true);
       ok(blob,'real export');
+      const archive=readZip(new Uint8Array(await blob.arrayBuffer()));
+      const payload=JSON.parse(textDecoder.decode(archive['backup.json']));
+      ok(JSON.stringify(payload.projects.map(p=>p.id))===JSON.stringify(originals.slice(0,3).map(p=>p.id)),'exact active export IDs');
+      ok(payload.organization.recycleBin.length===1&&payload.organization.recycleBin[0].id===trash.id,'exact recycled export ID');
       const file=new File([blob],'fixture.zip');
       const disk=()=>dbRequest('readonly',store=>store.getAll());
       const before=JSON.stringify(await disk());
@@ -90,7 +97,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       ok(JSON.stringify(await disk())===before,'aborted transaction rollback');
       await restoreBackup(file);
       const rows=await disk();
+      const priorRows=JSON.parse(before);
+      ok(rows.length===priorRows.length+originals.length,'exact number of restored copies');
       for(const old of originals){
+        ok(JSON.stringify(rows.find(p=>p.id===old.id))===JSON.stringify(priorRows.find(p=>p.id===old.id)),old.name+' original unchanged');
         const copy=rows.find(p=>p.name===old.name+' (restored)');
         ok(copy&&copy.id!==old.id,'copy '+old.name);
         for(const field of ['cols','rows','cells','done','rowDone','palette','notes','guide','category','pinned','checkpoints']){
