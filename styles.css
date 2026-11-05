@@ -331,7 +331,7 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .settings-section-header .settings-favorite{width:44px;flex:none;font-size:1.1rem}
 .settings-section-header .settings-reorder{display:none}.settings-customizing .settings-section-header .settings-reorder{display:flex;flex:none}.settings-reorder button{min-width:33px}.settings-reorder .settings-grip{touch-action:none;cursor:grab}
 .inspector.settings-customizing>.settings-section,.inspector>.settings-section.settings-revealed{display:flex!important}
-.inspector.settings-customizing{columns:1;display:block}
+.inspector.settings-customizing{columns:auto;display:block}
 .settings-highlight{outline:3px solid #7255ae;outline-offset:-3px}
 @media(max-width:640px){.settings-section-toggle{font-size:.9rem}.settings-reorder button{min-width:34px}}
 .command-entry{display:flex;align-items:stretch;gap:5px}.command-entry .command-result{flex:1;min-width:0}.command-star{min-width:44px;border:1px solid #d8c9e8;border-radius:8px;background:#faf7fd;color:#392352;font-size:1.1rem}#commandResults h3{font-size:.9rem;margin-top:8px}
@@ -352,3 +352,9 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 #jumpSettings button{text-align:left}
 .crochet-view .crochet-view-actions .app-navigation{position:relative}
 #bulkProjectControls[hidden]{display:none}.bulk-project-row{grid-column:1/-1;display:flex;align-items:center;gap:7px;min-height:48px;flex-wrap:wrap}.bulk-project-row input[type=checkbox]{width:20px;height:20px;flex:none}
+.inspector.settings-customizing{max-height:min(78dvh,850px);overflow-y:scroll;overscroll-behavior-y:contain;scrollbar-gutter:stable;scrollbar-color:#80629f #eee6f7;align-self:start;scroll-padding-top:155px}
+.settings-customizing .settings-navigation{position:sticky;top:0;z-index:2}.settings-customizing #settingsJump,.settings-customizing .settings-favorites{display:none}
+.settings-customizing .settings-dragging{border-color:#6c319d;outline:2px solid #6c319d;box-shadow:0 3px 10px #54287d55;background:#f8efff}
+.settings-customizing .settings-drop-before{box-shadow:0 -5px #5a2489}.settings-customizing .settings-drop-after{box-shadow:0 5px #5a2489}
+@media(min-width:600px) and (min-height:600px){.native-android.crochet-view .crochet-view-actions{padding-top:max(16px,env(safe-area-inset-top))}}
+#recycleSelectionControls[hidden]{display:none}#recycleSelectionControls .button,#toggleRecycleSelection{min-height:44px;white-space:normal}.recycle-select-row{display:flex;align-items:center;gap:8px;min-height:44px}.recycle-select-row input{width:20px;height:20px}
