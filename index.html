@@ -157,6 +157,7 @@
     <aside class="inspector" aria-label="Project settings">
       <div class="settings-navigation">
         <h2>Settings</h2>
+        <details id="settingsLayoutBackup"><summary>Settings &amp; Layout Backup</summary><p class="muted">Transfer your Studio preferences in a JSON file. Use project ZIP backups separately for charts and progress.</p><div class="stack"><button id="exportStandaloneSettings" class="button ghost" type="button">Export Settings &amp; Layout</button><button id="importStandaloneSettings" class="button ghost" type="button">Import Settings &amp; Layout</button><input id="settingsImportFile" type="file" accept=".json,application/json" hidden></div></details>
         <details id="settingsJump"><summary>Choose a Section</summary><div id="jumpSettings" role="group" aria-label="Jump to Section"></div></details>
         <div class="settings-favorites" id="favoriteSettings" aria-label="Favorite Settings"></div>
         <div class="settings-layout-actions"><button id="customizeSettings" class="button ghost" type="button" aria-pressed="false">Customize Layout</button><button id="resetSettingsOrder" class="button ghost" type="button" hidden>Reset to Default</button></div>
@@ -350,6 +351,11 @@
     </aside>
   </main>
   <dialog id="tutorialDialog" class="compare-dialog"><div class="compare-head"><h2>Studio guided tour</h2><button id="closeTutorial" class="button ghost" type="button">Close ✕</button></div><div id="tutorialContent" class="tutorial-content"></div><div class="pair"><button id="tutorialPrev" class="button ghost" type="button">← Previous</button><button id="tutorialNext" class="button primary" type="button">Next →</button></div></dialog>
+  <dialog id="settingsImportDialog" class="command-dialog" aria-labelledby="settingsImportTitle"><form method="dialog" class="stack">
+    <h2 id="settingsImportTitle">Review Settings &amp; Layout</h2><p>Choose which categories to restore. They replace the corresponding preferences on this device. Projects and progress stay in place.</p>
+    <div id="settingsImportCategories" class="stack"></div><p id="settingsImportStatus" role="status"></p>
+    <div class="pair"><button id="applySettingsImport" type="button" class="button primary">Import selected settings</button><button value="cancel" class="button ghost" autofocus>Cancel</button></div>
+  </form></dialog>
   <dialog id="commandDialog" class="command-dialog" aria-label="Find a Studio feature">
     <div class="compare-head"><h2>Find a Studio tool</h2><button id="closeCommandSearch" class="button ghost" type="button">Close ✕</button></div>
     <label class="field">Search commands<input id="commandQuery" type="search" placeholder="Try grayscale, resize, PDF, progress, or layers" autocomplete="off" aria-controls="commandResults"></label>

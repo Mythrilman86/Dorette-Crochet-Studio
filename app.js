@@ -2125,10 +2125,140 @@ async function restoreWorkspacePreferences(input){
   if(!preferences||!confirm('Restore workspace preferences from this backup? Choose Cancel to keep this device’s current layout. Your projects have already been restored.'))return;
   await flushSave();
   if(needsSave())return toast('Workspace preferences could not be applied while a save is pending.');
-  for(const [key,storageKey] of Object.entries(workspacePreferenceKeys)){
-    if(preferences[key]!==undefined)localStorage.setItem(storageKey,key==='chart'?preferences[key]:JSON.stringify(preferences[key]));
-  }
+  writeStandaloneSettings(localStorage,preferences,Object.keys(workspacePreferenceKeys));
   location.reload();
+}
+
+const standaloneSettingsId='com.deescrochetstudio.app.settings';
+const settingsBackupLimit=256*1024;
+const settingsCategories={
+  sections:'Section order, expansion and favorites',tools:'Favorite and recent tools',
+  panels:'Panel visibility',display:'Appearance and accessibility',chart:'Single or Dual Chart',
+  safeEdits:'Safe-copy editing default',phoneControls:'Phone Crochet View toolbar',
+  lettering:'Saved lettering styles',references:'Favorite reference shortcuts'
+};
+const standaloneKeys={...workspacePreferenceKeys,safeEdits:'dorette-safe-edits',
+  phoneControls:'studio.phone.crochet-controls.expanded',lettering:'dorette-text-styles-v1',references:'studio.crochet.references'};
+function normalizeSettingsCategories(input){
+  if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Missing settings categories.');
+  const values=sanitizeWorkspacePreferences({...input,version:1})||{};
+  delete values.version;
+  const skipped=[];
+  for(const [key,value] of Object.entries(input)){
+    if(Object.hasOwn(values,key))continue;
+    if((key==='safeEdits'||key==='phoneControls')&&typeof value==='boolean'){values[key]=value;continue;}
+    if(key==='references'&&Array.isArray(value)){
+      values[key]=[...new Set(value.filter(v=>['symbols','terms','hooks','guild','yarnspirations','images'].includes(v)))].slice(0,50);
+      if(values[key].length<value.length)skipped.push(settingsCategories[key]);
+      continue;
+    }
+    if(key==='lettering'&&Array.isArray(value)){
+      const options={textStyle:/^(regular|bold|outline)$/,letterSpacing:/^[0-3]$/,textWrap:/^(0|8|12|16)$/,textLayout:/^(straight|diagonal|curve)$/,textAngle:/^(0|90|180|270)$/,textDirection:/^(horizontal|vertical)$/,textScale:/^\d{1,3}$/,textWidth:/^\d{0,3}$/};
+      values[key]=[];
+      for(const entry of value.slice(0,35)){
+        if(!entry||typeof entry.id!=='string'||entry.id.length>85||typeof entry.name!=='string'||entry.name.length>60||!entry.options||typeof entry.options!=='object')continue;
+        const safe={};
+        for(const [id,v] of Object.entries(entry.options)){
+          if(Object.hasOwn(options,id)&&typeof v==='string'&&options[id].test(v)&&
+             (id!=='textScale'||Number(v)>=5&&Number(v)<=100)&&(id!=='textWidth'||v===''||Number(v)>=1&&Number(v)<=100))safe[id]=v;
+        }
+        if(Object.keys(safe).length)values[key].push({id:entry.id,name:entry.name,options:safe});
+      }
+      if(values[key].length<value.length||value.some(entry=>Object.keys(entry?.options||{}).some(id=>!Object.hasOwn(options,id))))skipped.push(settingsCategories[key]);
+      continue;
+    }
+    skipped.push(Object.hasOwn(settingsCategories,key)?settingsCategories[key]:'Unrecognized category');
+  }
+  return {values,skipped:[...new Set(skipped)]};
+}
+function readStandaloneSettings(storage){
+  const data={};
+  for(const [key,stored] of Object.entries(standaloneKeys)){
+    const raw=storage.getItem(stored);
+    if(raw===null)continue;
+    try{data[key]=key==='chart'?raw:JSON.parse(raw);}catch{}
+  }
+  return normalizeSettingsCategories({chart:'dual',safeEdits:true,phoneControls:false,...data}).values;
+}
+async function settingsDigest(value){
+  if(!globalThis.crypto?.subtle?.digest)throw Error('SHA-256 is unavailable in this environment. Open Studio in the installed app or a secure browser page.');
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(value)));
+  return Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function decodeSettingsFile(raw){
+  if(!raw||raw.application!==standaloneSettingsId||raw.format!==1||typeof raw.studioVersion!=='string'||
+     raw.studioVersion.length>30||typeof raw.exportedAt!=='string'||!Number.isFinite(Date.parse(raw.exportedAt)))throw Error('Choose a supported Dee’s Crochet Studio settings file.');
+  if(raw.sha256==null)throw Error('The settings file is missing its SHA-256 checksum.');
+  if(typeof raw.sha256!=='string'||!/^[0-9a-f]{64}$/i.test(raw.sha256))throw Error('The settings file has an invalid SHA-256 checksum.');
+  if(raw.sha256.toLowerCase()!==await settingsDigest(raw.categories))throw Error('The settings file failed its integrity check. Export a fresh copy and try again.');
+  const result=normalizeSettingsCategories(raw.categories);
+  if(!Object.keys(result.values).length)throw Error('The file has no supported settings to import.');
+  return result;
+}
+function writeStandaloneSettings(storage,values,selected){
+  const changes=Object.entries(values).filter(([key])=>selected.includes(key)&&Object.hasOwn(standaloneKeys,key))
+    .map(([key,value])=>[standaloneKeys[key],key==='chart'?value:JSON.stringify(value)]);
+  const before=changes.map(([key])=>[key,storage.getItem(key)]),written=[];
+  try{
+    for(let i=0;i<changes.length;i++){storage.setItem(...changes[i]);written.push(before[i]);}
+  }catch(error){
+    // Restore only keys changed by this import. Free space from newly created keys first.
+    for(const [key,value] of written)if(value===null)storage.removeItem(key);
+    for(const [key,value] of written.reverse())if(value!==null)storage.setItem(key,value);
+    throw error;
+  }
+}
+
+function setupStandaloneSettings(){
+  const dialog=$('settingsImportDialog'),input=$('settingsImportFile'),list=$('settingsImportCategories');
+  const status=$('settingsImportStatus'),apply=$('applySettingsImport');
+  let pending=null;
+  $('exportStandaloneSettings').onclick=async()=>{
+    try{
+      const categories=readStandaloneSettings(localStorage);
+      categories.sections??={order:[...settingsSections.keys()],collapsed:[],favorites:[]};
+      categories.tools??={favorites:[],recent:[]};
+      categories.panels??={projects:$('toggleProjects').dataset.hidden==='1',settings:$('toggleSettings').dataset.hidden==='1'};
+      categories.display??=sanitizeWorkspacePreferences({version:1,display:v16Prefs})?.display||{mode:'advanced',highContrast:false,cues:false,symbols:false,ruler:false,numberScale:1};
+      categories.lettering??=[];categories.references??=[];
+      const file={application:standaloneSettingsId,format:1,studioVersion:window.StudioRelease.version,
+        exportedAt:new Date().toISOString(),categories,sha256:await settingsDigest(categories)};
+      await download(new Blob([JSON.stringify(file,null,2)+'\n'],{type:'application/json'}),
+        'Dees-Crochet-Studio-Settings-'+file.exportedAt.slice(0,10)+'.json');
+    }catch(error){toast('Could not export settings: '+error.message);}
+  };
+  $('importStandaloneSettings').onclick=()=>input.click();
+  input.onchange=async()=>{
+    const file=input.files?.[0];input.value='';
+    if(!file)return;
+    try{
+      if(file.size>settingsBackupLimit)throw Error('Settings files must be 256 KB or smaller.');
+      pending=await decodeSettingsFile(JSON.parse(await file.text()));
+      list.replaceChildren();
+      for(const key of Object.keys(pending.values)){
+        const row=document.createElement('label'),box=document.createElement('input');
+        row.className='toggle';box.type='checkbox';box.value=key;box.checked=true;
+        row.append(box,settingsCategories[key]);list.append(row);
+      }
+      status.textContent=pending.skipped.length?'Skipped: '+pending.skipped.join(', ')+'.':'';
+      dialog.showModal();
+    }catch(error){toast('Could not open settings: '+error.message);}
+  };
+  apply.onclick=async()=>{
+    if(!pending||apply.disabled)return;
+    const selected=[...list.querySelectorAll('input:checked')].map(box=>box.value);
+    if(!selected.length){status.textContent='Choose at least one category.';return;}
+    const {values}=pending;apply.disabled=true;
+    try{
+      await flushSave();await writeChain;
+      if(needsSave())throw Error('Finish saving the open project before importing settings.');
+      if(!dialog.open)return;
+      writeStandaloneSettings(localStorage,values,selected);
+      alert('Imported '+selected.length+' settings categories. Studio will reopen with your new preferences.');
+      location.reload();
+    }catch(error){status.textContent='Settings import did not complete. '+error.message;}
+    finally{apply.disabled=false;}
+  };
 }
 
 async function exportBackup(all=false, share=false, project=active){
@@ -4461,6 +4591,7 @@ async function initialize(){
   setupPolishTools();
   setupAppNavigation();
   setupPhoneCrochetControls();
+  setupStandaloneSettings();
   $('toggleBulkProjects').onclick=()=>{bulkMode=!bulkMode;bulkProjects.clear();refreshProjectList();};
   $('selectVisibleProjects').onclick=()=>{for(const project of visibleBulkProjects())bulkProjects.add(project.id);refreshProjectList();};
   $('clearBulkProjects').onclick=()=>{bulkProjects.clear();refreshProjectList();};

@@ -369,3 +369,5 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
   #phoneCrochetControls[aria-expanded=true] .phone-crochet-chevron{transform:rotate(225deg)}
   .crochet-view:not(.phone-crochet-expanded) .workspace>#crochetProgressControls,.crochet-view:not(.phone-crochet-expanded) .workspace>#chartNavigationControls{display:none}
 }
+#settingsLayoutBackup summary{min-height:44px;padding:10px;background:#ede3f7;border-radius:8px;cursor:pointer;font-weight:750}
+#settingsImportCategories .toggle{min-height:44px}
