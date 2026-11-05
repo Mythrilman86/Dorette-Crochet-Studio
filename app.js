@@ -897,21 +897,58 @@ async function mirrorChart(){
   scheduleSave();refreshInspector();
   toast('Chart mirrored left to right. Use Undo to restore it.');
 }
-async function editDimensions(){
-  if(!active||editBlocked("resize the chart"))return;
+let dimensionRequest=null;
+function drawDimensionDiagram(old, cols, rows, columnEdge, rowEdge){
+  const x=columnEdge==='left'?old.cols-cols:0,y=rowEdge==='top'?old.rows-rows:0;
+  const left=Math.max(0,x),top=Math.max(0,y),right=Math.min(old.cols,x+cols),bottom=Math.min(old.rows,y+rows);
+  const rect=(x,y,w,h)=>'M'+x+' '+y+'h'+w+'v'+h+'h'+(-w)+'Z';
+  const oldRect=rect(0,0,old.cols,old.rows),newRect=rect(x,y,cols,rows),keep=rect(left,top,right-left,bottom-top);
+  const diagram=$('dimensionDiagram'),minX=Math.min(0,x),minY=Math.min(0,y);
+  const width=Math.max(old.cols,x+cols)-minX,height=Math.max(old.rows,y+rows)-minY;
+  diagram.setAttribute('viewBox',[minX-1,minY-1,width+2,height+2].join(' '));
+  for(const [part,path] of [['keep',keep],['remove',oldRect+keep],['add',newRect+keep],['outline',newRect]]){
+    diagram.querySelector('.dimension-'+part).setAttribute('d',path);
+  }
+}
+function editDimensions(){
+  if(!active||pendingConversion||editBlocked('resize the chart'))return;
   const cols=Number($('colsInput').value),rows=Number($('rowsInput').value);
-  if(!validDimensions(cols,rows)){toast('Columns must be 1–200 and rows 1–300.');return;}
-  if(cols===active.cols&&rows===active.rows){toast('The dimensions have not changed.');return;}
-  const old=active;
-  if(!confirm(`Resize from ${old.cols} × ${old.rows} to ${cols} × ${rows}? Stitches outside the new dimensions will be removed. Row 1 stays at the bottom.`))return;
-  if(!await safeMajorCopy('resized chart'))return;
-  snapshot();
-  Object.assign(active,NF.remap(active,cols,rows,'canvas','left'));
-  active.diagonalIndex=clamp(active.diagonalIndex||0,0,cols*rows-1);
-  areaSelection=null;
-  if(selected&&(selected.col>cols||selected.row>rows))selected=null;
-  window.DorettePattern.ensure(active);active.guide.row=clamp(active.guide.row,1,rows);active.guide.position=clamp(active.guide.position,0,cols-1);
-  discardPreview(false);scheduleSave();refreshInspector();fitChart();toast('Dimensions updated; Row 1 remains at the bottom.');
+  if(!validDimensions(cols,rows))return toast('Columns must be 1–200 and rows 1–300.');
+  if(cols===active.cols&&rows===active.rows)return toast('The dimensions have not changed.');
+  const columnEdge=$('dimensionColumnEdge').value,rowEdge=$('dimensionRowEdge').value;
+  const result=NF.resizeChartEdges(active,cols,rows,columnEdge,rowEdge);
+  const describe=(delta,unit,edge)=>{
+    if(!delta)return '';
+    const count=Math.abs(delta),direction=delta>0?'Add':'Remove';
+    return direction+' '+count+' '+unit+(count===1?'':'s')+(delta>0?' at the ':' from the ')+edge+'.';
+  };
+  $('dimensionChangeSummary').textContent=[active.cols+' × '+active.rows+' → '+cols+' × '+rows+'.',
+    describe(rows-active.rows,'row',rowEdge),describe(cols-active.cols,'column',columnEdge)].filter(Boolean).join(' ');
+  const {losses}=result;
+  const lost=[losses.artwork&&'base artwork',losses.layers&&'layer stitches (such as lettering)',losses.progress&&'crochet progress'].filter(Boolean);
+  $('dimensionChangeWarning').textContent=[
+    lost.length?'This removes '+lost.join(', ')+'.':'',
+    losses.notes?'Notes on removed lines will move to the nearest surviving stitch or row.':'',
+    active.referenceImage?'The reference photo is kept and its overlay is hidden for alignment review.':'',
+    rows!==active.rows&&rowEdge==='bottom'&&active.workDirection?.alternate!==false?'Renumbered rows may reverse working direction.':'',
+    safeEditsEnabled?'The original is kept and Studio resizes a saved copy.':''
+  ].filter(Boolean).join(' ');
+  drawDimensionDiagram(active,cols,rows,columnEdge,rowEdge);
+  dimensionRequest={project:active,revision:renderRevision,result};
+  $('dimensionPreviewDialog').showModal();
+}
+async function confirmDimensions(){
+  const request=dimensionRequest,point=selected&&{...selected};
+  $('dimensionPreviewDialog').close();
+  if(!request||request.project!==active||request.revision!==renderRevision||pendingConversion||editBlocked('resize the chart'))return;
+  if(!await safeMajorCopy('resized chart')||editBlocked('resize the chart'))return;
+  const {patch,position}=request.result;
+  selected=point;
+  snapshot({label:'Resize chart edges'});
+  Object.assign(active,patch);
+  selected=point&&position(point,true);
+  areaSelection=null;clearMotifPreview();clearTextPreview();
+  invalidateChartCache();scheduleSave();refreshInspector();fitChart();
 }
 function syncImage(){
   const src=active?.referenceImage||'';
@@ -3699,6 +3736,8 @@ function hookEvents(){
     if(name===active.name)return;snapshot({label:'Rename project'});active.name=name.slice(0,70);scheduleSave();refreshInspector();refreshProjectList();
   });
   $('applyDimensions').addEventListener('click',editDimensions);
+  $('confirmDimensions').onclick=()=>void confirmDimensions().catch(error=>toast(error.message));
+  $('dimensionPreviewDialog').addEventListener('close',()=>{dimensionRequest=null;});
   $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
   $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);$('mirrorChart').addEventListener('click',mirrorChart);
   for(const [id,mode] of [['markStitch','mark'],['markRow','row']]){
