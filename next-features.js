@@ -140,5 +140,57 @@ function svg(p,{cell=12,numbers=true,legend=true,sections:sectionSize=0}={}){
  if(legend){p.palette.forEach((c,i)=>{const y=gutter+p.rows*cell+18+i*16;lines.push(`<rect x="${gutter}" y="${y}" width="12" height="12" fill="${esc(c.hex)}"/><text x="${gutter+20}" y="${y+10}" font-size="11">${esc(c.symbol)} — ${esc(c.name)}</text>`);});}
  lines.push('</svg>');return lines.join('');
 }
-window.DoretteNext=Object.freeze({locateNote,detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
+function editChartLine(project, axis, at, insert) {
+ const {cols,rows}=project, dimension=axis==='row'?rows:cols;
+ if(!['row','column'].includes(axis)||!Number.isInteger(at)||at<1||at>dimension+(insert?1:0))throw Error('Select a chart row or column.');
+ const delta=insert?1:-1, nextCols=cols+(axis==='column'?delta:0), nextRows=rows+(axis==='row'?delta:0);
+ if(nextCols<1||nextCols>200||nextRows<1||nextRows>300)throw Error('Chart limits are 1–200 columns and 1–300 rows.');
+ const cells=Array(nextCols*nextRows).fill(0),done=Array(cells.length).fill(0),rowDone=Array(nextRows).fill(0);
+ const key=axis==='row'?'row':'col';
+ const position=(point,nearest=false)=>{
+   const n=point[key];
+   if(!insert&&n===at)return nearest?{...point,[key]:Math.min(at,dimension-1)}:null;
+   return {...point,[key]:n+(n>=at?delta:0)};
+ };
+ const indices=Array(cols*rows).fill(-1);
+ for(let row=1;row<=rows;row++){
+   if(axis==='row'&&!insert&&row===at)continue;
+   const newRow=position({row,col:1},true).row;
+   if(!(insert&&axis==='column'))rowDone[newRow-1]=project.rowDone[row-1]?1:0;
+   for(let col=1;col<=cols;col++){
+     const point=position({col,row});
+     if(!point)continue;
+     const old=(rows-row)*cols+col-1,index=(nextRows-point.row)*nextCols+point.col-1;
+     indices[old]=index;cells[index]=project.cells[old];done[index]=project.done[old]||project.rowDone[row-1]?1:0;
+   }
+ }
+ const dimensions={cols:nextCols,rows:nextRows};
+ const layers=(project.layers||[]).map(layer=>{
+   const entries=layer.entries.filter(([i])=>indices[i]>=0).map(([i,color])=>[indices[i],color]);
+   const source=layer.source?structuredClone(layer.source):null;
+   if(source&&Number.isInteger(source.col)&&Number.isInteger(source.row)){
+     const changed=position({col:source.col,row:source.row},true);
+     Object.assign(source,changed);
+     if(layer.type==='text')source.handEdited=true;
+   }
+   return {...layer,source,entries};
+ });
+ const annotations=(project.annotations||[]).map(note=>{
+   const point=axis==='column'&&note.scope==='row'?{...note,col:1}:position(note,true);
+   return locateNote(point,{...dimensions,sectionSize:project.sectionSize});
+ });
+ const pattern=window.DorettePattern, oldGuide=project.guide||{row:1,position:0};
+ const guideCell=position({row:oldGuide.row,col:pattern.colAt(project,oldGuide.row,oldGuide.position)},true);
+ const guideRow=guideCell.row, rtl=pattern.direction(project,guideRow)==='rtl';
+ const guide={row:guideRow,position:rtl?nextCols-guideCell.col:guideCell.col-1,finished:!!oldGuide.finished&&!insert};
+ const diagonalCell=diagonal(project)[project.diagonalIndex||0];
+ const mappedDiagonal=diagonalCell&&position(diagonalCell,true);
+ const diagonalIndex=mappedDiagonal?Math.max(0,diagonal(dimensions).findIndex(cell=>cell.col===mappedDiagonal.col&&cell.row===mappedDiagonal.row)):0;
+ const removed=indices.filter(index=>index<0).length;
+ const nonempty=removed>0&&(indices.some((index,i)=>index<0&&(project.cells[i]||project.done[i]||project.rowDone[rows-1-Math.floor(i/cols)]))||
+   (project.layers||[]).some(layer=>layer.entries.some(([i])=>indices[i]<0)));
+ return {patch:{...dimensions,cells,done,rowDone,layers,annotations,guide,diagonalIndex,converted:true,
+   ...(project.referenceImage?{opacity:0}:{})},position,nonempty};
+}
+window.DoretteNext=Object.freeze({editChartLine,locateNote,detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
 })();

@@ -291,7 +291,7 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .crochet-view:not(.unpinned-dock)>.topbar,.crochet-view:not(.unpinned-dock)>.update-notice{visibility:hidden}
 .crochet-view:not(.unpinned-dock) #saveAlert:not([hidden]),.crochet-view:not(.unpinned-dock) #tabLockBanner:not([hidden]){position:fixed;inset:0 0 auto;z-index:26}
 .crochet-view:not(.unpinned-dock) .toast{z-index:27}
-.crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog){display:none}
+.crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog,#focusRowColors){display:none}
 .crochet-view:not(.unpinned-dock) #chartViews{display:flex;flex:1 0 140px;min-height:140px}
 .crochet-view:not(.unpinned-dock) #overviewPane,.crochet-view:not(.unpinned-dock) .chart-pane h2,.crochet-view:not(.unpinned-dock) .working-chart-heading,.crochet-view:not(.unpinned-dock) .canvas-note,
 .crochet-view:not(.unpinned-dock) #openCommandSearch,.crochet-view:not(.unpinned-dock) .toolbar-hint{display:none}
@@ -317,3 +317,5 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .project-group .gallery-thumb{grid-column:1;grid-row:1}.project-group .gallery-choose{grid-column:2;grid-row:1;min-width:0}
 .project-group .gallery-favorite{grid-column:3;grid-row:1}.project-group .project-menu{grid-column:4;grid-row:1}
 .project-group .project-menu[open]{grid-column:1/-1;grid-row:2}
+
+.focus-row-colors{display:none}.crochet-view .focus-row-colors{display:block;flex:none;border:1px solid #d9cce6;border-radius:10px;background:#fff;padding:4px 10px}.focus-row-colors summary{min-height:44px;line-height:1.3;padding:10px 0;cursor:pointer;font-weight:700}.focus-row-colors summary span{font-weight:500;font-size:.8rem}.focus-row-body{max-height:24dvh;overflow:auto;overscroll-behavior:contain}.focus-row-runs,.focus-row-nav{display:flex;flex-wrap:wrap;gap:5px}.focus-row-runs .current{outline:2px solid currentColor;outline-offset:-2px}.focus-row-runs .upcoming{border:1px dashed currentColor}.focus-row-nav button{min-height:44px}.crochet-view #openChartStructure,.crochet-view #quickTextLayer,.crochet-view #chartPaintTarget{display:none}.layer-line .layer-lock-state{font-size:.75rem;min-height:36px;width:auto}
