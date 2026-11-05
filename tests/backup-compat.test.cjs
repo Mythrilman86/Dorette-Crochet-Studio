@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 function engine(file) {
   const source = readFileSync(file, 'utf8').replace(/^initialize\(\)\.catch.*$/m,
-    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, readProjectBackup, DB_NAME, DB_VERSION };');
+    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, readProjectBackup: typeof readProjectBackup === "function" ? readProjectBackup : undefined, DB_NAME, DB_VERSION };');
   const window = { addEventListener() {} };
   const element = { getContext: () => ({}), addEventListener() {} };
   vm.runInNewContext(source, {
