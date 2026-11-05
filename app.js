@@ -300,14 +300,20 @@ async function recycleProject(project){
   if(saved)toast('Moved to the Recycle Bin.');
 }
 async function restoreRecycled(project){
-  if(recycledProjects.get(project.id)!==project)return;
-  const {trashedAt,...record}=project;
-  if(projects.has(record.id))record.id=uid();
-  const saved=await organizeProjects([record],[],null,()=>{
-    recycledProjects.delete(project.id);
-    projects.set(record.id,record);
+  return restoreRecycledProjects([project]);
+}
+async function restoreRecycledProjects(items){
+  if(!items.length||items.some(project=>recycledProjects.get(project.id)!==project))return;
+  const records=items.map(project=>{
+    const {trashedAt,...record}=project;
+    if(projects.has(record.id))record.id=uid();
+    return record;
   });
-  if(saved)toast('Project restored from the Recycle Bin.');
+  const saved=await organizeProjects(records,[],null,()=>{
+    for(const project of items)recycledProjects.delete(project.id);
+    for(const record of records)projects.set(record.id,record);
+  });
+  if(saved)toast('Restored '+records.length+' project(s) from the Recycle Bin.');
 }
 async function purgeRecycled(items){
   if(!items.length||items.some(project=>recycledProjects.get(project.id)!==project||!deletionAllowed(project)))return;
@@ -353,14 +359,33 @@ function projectMenu(project){
   menu.addEventListener('keydown',event=>{if(event.key==='Escape'){menu.open=false;toggle.focus();}});
   return menu;
 }
+const recycleSelection=new Set();
+let selectingRecycled=false;
+function updateRecycleSelection(){
+  for(const id of recycleSelection)if(!recycledProjects.has(id))recycleSelection.delete(id);
+  $('toggleRecycleSelection').textContent=selectingRecycled?'Done selecting':'Select Projects';
+  $('toggleRecycleSelection').setAttribute('aria-pressed',String(selectingRecycled));
+  $('recycleSelectionControls').hidden=!selectingRecycled;
+  $('recycleSelectionCount').textContent=recycleSelection.size+' selected';
+  for(const id of ['restoreSelectedRecycled','purgeSelectedRecycled'])$(id).disabled=!recycleSelection.size||studioReadOnly;
+}
+function selectedRecycledProjects(){
+  return [...recycledProjects.values()].filter(project=>recycleSelection.has(project.id));
+}
 function renderRecycleBin(){
+  updateRecycleSelection();
   const list=$('projectBinList');list.replaceChildren();
   $('projectBinCount').textContent=recycledProjects.size;
   $('emptyProjectBin').disabled=!recycledProjects.size;
   for(const project of recycledProjects.values()){
     const row=document.createElement('div');row.className='project-bin-row';
     const name=document.createElement('strong');name.textContent=project.name;
-    row.append(name,projectButton('Restore Project',()=>restoreRecycled(project)),
+    if(selectingRecycled){
+      const label=document.createElement('label'),box=document.createElement('input');
+      label.className='recycle-select-row';box.type='checkbox';box.checked=recycleSelection.has(project.id);
+      box.onchange=()=>{if(box.checked)recycleSelection.add(project.id);else recycleSelection.delete(project.id);updateRecycleSelection();};
+      label.append(box,name);row.append(label);
+    }else row.append(name,projectButton('Restore Project',()=>restoreRecycled(project)),
       projectButton('Delete Permanently',()=>purgeRecycled([project])));
     list.append(row);
   }
@@ -417,6 +442,11 @@ function renderCategoryManager(){
   }
 }
 function setupProjectOrganization(){
+  $('toggleRecycleSelection').onclick=()=>{selectingRecycled=!selectingRecycled;recycleSelection.clear();renderRecycleBin();};
+  $('selectVisibleRecycled').onclick=()=>{for(const id of recycledProjects.keys())recycleSelection.add(id);renderRecycleBin();};
+  $('clearRecycledSelection').onclick=()=>{recycleSelection.clear();renderRecycleBin();};
+  $('restoreSelectedRecycled').onclick=()=>void restoreRecycledProjects(selectedRecycledProjects());
+  $('purgeSelectedRecycled').onclick=()=>void purgeRecycled(selectedRecycledProjects());
   $('emptyProjectBin').addEventListener('click',()=>purgeRecycled([...recycledProjects.values()]));
   for(const id of ['projectCategory','newProjectCategory']){
     const selector=$(id);
@@ -3883,12 +3913,67 @@ function setupSettingsLayout(){
       button.onclick=()=>move(key,order.indexOf(key)+delta,button);controls.append(button);
     }
     const grip=make('button','settings-grip','↕');grip.setAttribute('aria-label','Drag '+label+' to reorder');
-    grip.onpointerdown=e=>{if(e.button===0)grip.setPointerCapture(e.pointerId);};
-    grip.onpointerup=e=>{
-      if(!grip.hasPointerCapture(e.pointerId))return;
-      const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('.settings-section');
-      if(target)move(key,order.indexOf(target.dataset.settingsKey),grip);
+    let drag=null;
+    function track(){
+      if(!drag)return;
+      const bounds=inspector.getBoundingClientRect(),heading=inspector.querySelector('.settings-navigation').getBoundingClientRect();
+      const top=Math.max(bounds.top,heading.bottom,0),bottom=Math.min(bounds.bottom,innerHeight);
+      const zone=Math.min(48,(bottom-top)/4);
+      if(zone>0){
+        const speed=drag.y<top+zone?-Math.min(16,(top+zone-drag.y)/3):drag.y>bottom-zone?Math.min(16,(drag.y-bottom+zone)/3):0;
+        if(speed)inspector.scrollTop+=speed;
+      }
+      const x=Math.max(bounds.left+2,Math.min(bounds.right-2,drag.x));
+      const y=Math.max(top+1,Math.min(bottom-1,drag.y));
+      let target=null;
+      if(drag.x>=bounds.left&&drag.x<=bounds.right&&bottom>top){
+        target=document.elementFromPoint(x,y)?.closest('.settings-section');
+        if(!target){
+          let distance=Infinity;
+          for(const candidate of settingsSections.values()){
+            const rect=candidate.getBoundingClientRect();
+            if(rect.bottom<=top||rect.top>=bottom)continue;
+            const gap=Math.max(rect.top-y,y-rect.bottom,0);
+            if(gap<distance){target=candidate;distance=gap;}
+          }
+        }
+      }
+      if(target!==drag.target){
+        drag.target?.classList.remove('settings-drop-before','settings-drop-after');
+        drag.target=target;
+        const from=order.indexOf(key),to=order.indexOf(target?.dataset.settingsKey);
+        if(to>=0&&to!==from)target.classList.add(to<from?'settings-drop-before':'settings-drop-after');
+        $('settingsLayoutStatus').textContent=label+' · position '+(from+1)+' of '+order.length+(to>=0&&to!==from?' → '+(to+1):'');
+      }
+      drag.frame=requestAnimationFrame(track);
+    }
+    function finish(commit){
+      if(!drag)return;
+      cancelAnimationFrame(drag.frame);
+      const target=drag.target;drag=null;
+      section.classList.remove('settings-dragging');
+      target?.classList.remove('settings-drop-before','settings-drop-after');
+      $('settingsLayoutStatus').textContent=order.length+' sections · Drag or use Up and Down.';
+      const to=order.indexOf(target?.dataset.settingsKey);
+      if(commit&&to>=0&&to!==order.indexOf(key)){
+        move(key,to,grip);
+        section.scrollIntoView({block:'nearest'});
+        if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+          section.animate([{transform:'translateY(-6px)',opacity:.75},{transform:'translateY(0)',opacity:1}],{duration:160});
+        }
+      }
+    }
+    grip.onpointerdown=e=>{
+      if(e.button!==0||drag)return;
+      grip.setPointerCapture(e.pointerId);
+      drag={id:e.pointerId,x:e.clientX,y:e.clientY,target:null};
+      section.classList.add('settings-dragging');
+      $('settingsLayoutStatus').textContent=label+' · position '+(order.indexOf(key)+1)+' of '+order.length;
+      track();
     };
+    grip.onpointermove=e=>{if(drag?.id===e.pointerId){drag.x=e.clientX;drag.y=e.clientY;}};
+    grip.onpointerup=e=>{if(drag?.id===e.pointerId){cancelAnimationFrame(drag.frame);drag.x=e.clientX;drag.y=e.clientY;track();finish(true);}};
+    grip.onpointercancel=grip.onlostpointercapture=()=>finish(false);
     controls.append(grip);head.append(toggle,star,controls);section.prepend(head);
   }
   order=[...new Set([...strings(saved.order).filter(key=>settingsSections.has(key)),...defaults])];
@@ -3903,7 +3988,7 @@ function setupSettingsLayout(){
     const editing=inspector.classList.toggle('settings-customizing');
     customize.textContent=editing?'Done':'Customize Layout';customize.setAttribute('aria-pressed',String(editing));
     reset.hidden=status.hidden=!editing;
-    status.textContent=editing?'Drag sections or use their Up and Down buttons.':'';
+    status.textContent=editing?order.length+' sections · Drag or use Up and Down.':'';
   };
   reset.onclick=()=>{order=defaults.slice();renderOrder();persist();status.textContent='Default section order restored.';};
 }
@@ -4335,6 +4420,7 @@ async function retryEditing(){
  finally{reloadingProjects=false;setTabReadOnly(Ops.canWrite());}
 }
 async function initialize(){
+  document.body.classList.toggle('native-android',window.Capacitor?.getPlatform()==='android');
   await Ops.init(setTabReadOnly);
   hookEvents();v16Hook();
   $('singleChart').addEventListener('click',()=>setChartLayout('single'));
