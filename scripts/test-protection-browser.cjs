@@ -93,6 +93,25 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const zip=readZip(new Uint8Array(await preparedProtectionBackup.blob.arrayBuffer()));
       ok(JSON.parse(textDecoder.decode(zip['backup.json'])).projects[0].notes==='Pending export fixture','backup waits for pending save');
       ok(!protectionPreference(protectionKey),'preparing does not confirm external backup');
+      const restored=active;
+      const synthetic=(id,at)=>({at,bytes:100,project:{id}});
+      const pruned=pruneRecovery([synthetic('a',5),synthetic('a',4),synthetic('b',3),synthetic('a',2)],200);
+      ok(pruned.map(r=>r.at).join(',')==='5,3','budget preserves newest snapshot of two projects');
+      const fakeDownload=download;download=async()=>{};
+      Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>false});
+      try{
+        await $('savePreparedBackup').onclick();
+        ok(!protectionPreference(protectionKey),'initiating save does not confirm external backup');
+        $('confirmProtectionBackup').click();
+        selectProject(original.id);
+        await exportBackup(false,'prepare');await $('savePreparedBackup').onclick();$('confirmProtectionBackup').click();
+        ok(Object.keys(backupConfirmations().projects).length===2,'two separate confirmations retained');
+        await exportBackup(true,'prepare');await $('savePreparedBackup').onclick();$('confirmProtectionBackup').click();
+        ok(Object.keys(backupConfirmations().library.revisions).length===2&&Object.keys(backupConfirmations().projects).length===2,'library confirmation is separate');
+      }finally{download=fakeDownload;delete navigator.canShare;}
+      const switching=exportBackup(false,'prepare');
+      selectProject(restored.id);await switching;
+      ok(!preparedProtectionBackup&&$('savePreparedBackup').disabled,'switching invalidates pending and stale ZIPs');
       const realRequest=dbRequest;
       dbRequest=(mode,fn)=>mode==='readwrite'?Promise.reject(Error('simulated quota')):realRequest(mode,fn);
       try{
@@ -100,11 +119,27 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         let warning=false;
         window.confirm=message=>{warning=message.includes('in-memory');return false;};
         await exportBackup(false,'prepare');
-        ok(warning&&failedWrites.has(active.id),'failed write requires explicit emergency export consent');
+        ok(warning&&failedWrites.has(active.id)&&!preparedProtectionBackup,'failed write requires explicit emergency export consent');
       }finally{dbRequest=realRequest;}
       return 'PASS offline snapshot restore-as-copy, pending-save ZIP and failed-save warning';
     })()`;
     console.log(await evaluate("window.editorProbe("+JSON.stringify(probe)+")"));
+    for(const [width,height] of [[320,640],[430,932],[820,1180],[1180,820],[1366,900]]){
+      await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<1000});
+      assert.equal(await evaluate(`window.editorProbe(\`
+        document.documentElement.style.fontSize='150%';
+        const lettering=document.querySelector('#newLettering').closest('.inspector-section');
+        revealSettingsSection(lettering);
+        const fits=(node,container)=>{
+          const r=node.getBoundingClientRect(),p=container.getBoundingClientRect();
+          return r.width>0&&r.left>=p.left-1&&r.right<=p.right+1&&node.scrollWidth<=node.clientWidth+2;
+        };
+        const protection=document.querySelector('#protectionDrawer');protection.open=true;
+        ['newLettering','placeText','editLastText'].every(id=>fits(document.getElementById(id),lettering))&&
+          [...protection.querySelectorAll('button')].filter(node=>node.getClientRects().length).every(node=>fits(node,protection));
+      \`)`),true,'controls fit at '+width+' px with 150% text');
+    }
+    console.log('PASS lettering and Project Protection fit five viewport sizes with enlarged text');
     ws.close();
   } finally { edge.kill(); server.close(); }
 })().catch(error=>{ console.error(error); process.exit(1)});

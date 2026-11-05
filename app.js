@@ -575,6 +575,7 @@ function refreshProjectList(){
 
 function selectProject(id) {
   if(!projects.has(id))return;
+  if(id!==active?.id)invalidatePreparedBackup();
   if(runningImageJob)cancelImageJob();
   invalidateChartCache();
   v16ShapeProposal=null;
@@ -587,6 +588,7 @@ function selectProject(id) {
   $('undoButton').disabled=true;$('redoButton').disabled=true;renderDesignHistory();updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
   $('paintTextLayer').checked=false;selectedLayerId=null;editingLayerId=null;pendingCleanup=null;nextColorProposal=null;syncImage();refreshProjectList();refreshInspector();fitChart();refreshNextPanels();
+  if($('protectionDrawer').open)void renderProtection();
 }
 function updateReferenceActions(){
   if(!active)return;
@@ -2316,8 +2318,10 @@ function setupStandaloneSettings(){
 }
 
 async function exportBackup(all=false, share=false, project=active){
+  const preparation=share==='prepare'?invalidatePreparedBackup():null;
   let unconfirmed=false;
   try{await flushSave();await writeChain;}catch{unconfirmed=true;}
+  if(preparation!==null&&(preparation!==backupPreparation||project!==active))return;
   const items=all?[...projects.values()]:[project];
   if(!items.length||!items[0])return;
   unconfirmed||=memoryOnly||!!saveTimer||writePending>0||items.some(p=>failedWrites.has(p.id))||
@@ -2337,7 +2341,8 @@ async function exportBackup(all=false, share=false, project=active){
   const filename=`Dorette-${all?'All-Projects':slug(project.name)}-${date}.zip`;
   const blob=new Blob([bytes],{type:'application/zip'});
   if(share==='prepare'){
-    preparedProtectionBackup={blob,filename,id:project.id,revision:project.updatedAt};
+    preparedProtectionBackup={blob,filename,all,id:project.id,revision:project.updatedAt,
+      revisions:all?Object.fromEntries(items.map(p=>[p.id,p.updatedAt])):null};
     $('savePreparedBackup').disabled=false;
     $('confirmProtectionBackup').disabled=true;
     $('protectionExportStatus').textContent='ZIP ready. Choose Save or Share ZIP, then verify the file in your chosen destination.';
@@ -4358,9 +4363,37 @@ function setupPolishTools(){
  updateStorageIndicator();
  storageRefreshTimer=setInterval(()=>{if(!document.hidden)updateStorageIndicator();},90000);
 }
-const recoveryLimit=3,recoveryInterval=120000,recoverySizeLimit=8*1024*1024;
-let recoveryDb,preparedProtectionBackup=null;
+const recoveryInterval=120000,recoverySizeLimit=8*1024*1024,recoveryBudget=24*1024*1024;
+let recoveryDb,preparedProtectionBackup=null,backupPreparation=0;
 const protectionKey='studio-independent-backup-v1';
+function invalidatePreparedBackup(){
+ preparedProtectionBackup=null;
+ $('savePreparedBackup').disabled=$('confirmProtectionBackup').disabled=true;
+ $('protectionExportStatus').textContent='';
+ return ++backupPreparation;
+}
+function pruneRecovery(records,budget){
+ const newest=[],older=[],counts=new Map();
+ for(const record of records){
+   const id=record.project?.id;
+   if(!id)continue;
+   const count=counts.get(id)||0;
+   counts.set(id,count+1);
+   if(count<3)(count===0?newest:older).push(record);
+ }
+ let used=0;
+ return newest.concat(older).filter(record=>{
+   const bytes=record.bytes??JSON.stringify(record.project).length*2;
+   if(bytes>recoverySizeLimit||used+bytes>budget)return false;
+   used+=bytes;return true;
+ }).slice(0,24).sort((a,b)=>b.at-a.at);
+}
+function backupConfirmations(){
+ try{
+   const value=JSON.parse(protectionPreference(protectionKey));
+   return value?.projects?value:{projects:value?.id?{[value.id]:value}:{},library:null};
+ }catch{return {projects:{},library:null};}
+}
 function protectionPreference(key){
  try{return localStorage.getItem(key);}catch{return null;}
 }
@@ -4377,6 +4410,12 @@ function openRecovery(){
 }
 async function recoveryRecords(project){
  const database=await openRecovery();
+ let budget=recoveryBudget;
+ if(project){
+   try{const quota=(await navigator.storage?.estimate?.())?.quota;
+     if(Number.isFinite(quota)&&quota>0)budget=Math.min(budget,Math.floor(quota*.02));
+   }catch{}
+ }
  return new Promise((resolve,reject)=>{
    const tx=database.transaction('history',project?'readwrite':'readonly'),store=tx.objectStore('history');
    const request=store.get('recent');let records=[];
@@ -4385,8 +4424,9 @@ async function recoveryRecords(project){
      if(!project||!Ops.canWrite())return;
      const now=Date.now(),latest=records.find(record=>record.project?.id===project.id);
      if(latest&&(latest.project.updatedAt===project.updatedAt||now-latest.at<recoveryInterval))return;
-     if(JSON.stringify(project).length*2>recoverySizeLimit)return;
-     records=[{at:now,project},...records].slice(0,recoveryLimit);
+     const bytes=JSON.stringify(project).length*2;
+     if(bytes>recoverySizeLimit||bytes>budget)return;
+     records=pruneRecovery([{at:now,project,bytes},...records],budget);
      store.put(records,'recent');
    };
    tx.oncomplete=()=>resolve(records);
@@ -4399,20 +4439,27 @@ async function captureRecovery(project){
  catch{/* Recovery storage is best effort. The primary project save already committed. */}
 }
 async function renderProtection(){
+ const projectId=active?.id;
  const status=$('protectionStatus'),list=$('localRecoveryList');
- let confirmed=null;
- try{confirmed=JSON.parse(protectionPreference(protectionKey));}catch{}
+ const confirmations=backupConfirmations();
+ const individual=confirmations.projects[active?.id];
+ const library=confirmations.library;
+ const included=active&&library&&Object.hasOwn(library.revisions,active.id);
+ const confirmed=included&&(!individual||library.at>=individual.at)
+   ?{id:active.id,revision:library.revisions[active.id],at:library.at,library:true}:individual;
  const matches=confirmed?.id===active?.id&&!!confirmed;
  const changed=!matches||confirmed.revision!==active?.updatedAt;
- status.textContent=matches?`Last external ZIP you confirmed: ${new Date(confirmed.at).toLocaleString()}. ${changed?'Project changed since that ZIP.':'Project revision matches that ZIP.'}`:'No external ZIP confirmation for this project.';
+ status.textContent=matches?`Latest confirmed ${confirmed.library?'full-library':'individual-project'} ZIP for this project: ${new Date(confirmed.at).toLocaleString()}. ${changed?'Project changed since that ZIP.':'Project revision matches that ZIP.'}`:'No external ZIP confirmation for this project.';
+ $('libraryProtectionStatus').textContent=library?'Last confirmed full-library ZIP: '+new Date(library.at).toLocaleString():'No full-library ZIP confirmed.';
  const days=Number($('backupReminderDays').value),now=Date.now();
  $('backupReminder').hidden=!active||!days||!changed||
    now<Number(protectionPreference('studio-backup-snooze'))||
    (matches&&now-confirmed.at<days*86400000);
  try{
-   const records=(await recoveryRecords()).filter(r=>r.project?.id===active?.id);
+   const records=(await recoveryRecords()).filter(r=>r.project?.id===projectId);
+   if(active?.id!==projectId)return;
    list.replaceChildren();
-   $('localRecoveryStatus').textContent=records.length?'Latest local snapshot: '+new Date(records[0].at).toLocaleString():'No local snapshot for this project yet.';
+   $('localRecoveryStatus').textContent=records.length?`${records.length} local snapshot(s). Latest: ${new Date(records[0].at).toLocaleString()}`:'No local snapshot for this project yet.';
    for(const record of records){
      list.append(projectButton('Restore local snapshot from '+new Date(record.at).toLocaleString(),async()=>{
        if(record.project.id!==active?.id||!reliability.auditProject(record.project).ok)return toast('This local snapshot failed validation or belongs to another project.');
@@ -4448,14 +4495,12 @@ function setupProjectProtection(){
  days.value=protectionPreference('studio-backup-reminder-days')??'7';
  days.onchange=()=>{setProtectionPreference('studio-backup-reminder-days',days.value);void renderProtection();};
  $('snoozeBackupReminder').onclick=()=>{setProtectionPreference('studio-backup-snooze',String(Date.now()+86400000));$('backupReminder').hidden=true;};
- $('prepareProtectionBackup').onclick=()=>{
-   preparedProtectionBackup=null;
-   $('savePreparedBackup').disabled=$('confirmProtectionBackup').disabled=true;
-   $('protectionExportStatus').textContent='';
-   void exportBackup(false,'prepare');
- };
+ $('prepareProtectionBackup').onclick=()=>void exportBackup(false,'prepare');
+ $('prepareLibraryBackup').onclick=()=>void exportBackup(true,'prepare');
  $('savePreparedBackup').onclick=async()=>{
    const backup=preparedProtectionBackup;if(!backup)return;
+   $('savePreparedBackup').disabled=true;
+   $('confirmProtectionBackup').disabled=true;
    const {blob,filename}=backup;
    try{
      const file=new File([blob],filename,{type:blob.type});
@@ -4466,15 +4511,19 @@ function setupProjectProtection(){
      if(preparedProtectionBackup!==backup)return;
      $('protectionExportStatus').textContent='Open your destination and check that the ZIP is there. Studio cannot verify the file on your behalf.';
      $('confirmProtectionBackup').disabled=false;
-   }catch(error){if(error.name!=='AbortError')$('protectionExportStatus').textContent='Could not save or share: '+error.message;}
+   }catch(error){if(error.name!=='AbortError'&&preparedProtectionBackup===backup)$('protectionExportStatus').textContent='Could not save or share: '+error.message;}
+   finally{if(preparedProtectionBackup===backup)$('savePreparedBackup').disabled=false;}
  };
  $('confirmProtectionBackup').onclick=()=>{
    const backup=preparedProtectionBackup;if(!backup)return;
-   if(!setProtectionPreference(protectionKey,JSON.stringify({id:backup.id,revision:backup.revision,at:Date.now()}))){
+   const confirmations=backupConfirmations(),at=Date.now();
+   if(backup.all)confirmations.library={revisions:backup.revisions,at};
+   else confirmations.projects[backup.id]={id:backup.id,revision:backup.revision,at};
+   if(!setProtectionPreference(protectionKey,JSON.stringify(confirmations))){
      $('protectionExportStatus').textContent='Studio could not record your confirmation.';return;
    }
    $('confirmProtectionBackup').disabled=true;
-   $('protectionExportStatus').textContent='Recorded your confirmation that the ZIP was saved outside Studio.';
+   $('protectionExportStatus').textContent=backup.all?'Recorded your full-library ZIP confirmation.':'Recorded your individual-project ZIP confirmation.';
    void renderProtection();
  };
 }
@@ -4756,7 +4805,7 @@ function hookEvents(){
   $('textDown').addEventListener('click',()=>nudgeText(0,-1));
   hookPatternEvents();hookAdvanced();
   $('shareProject').addEventListener('click',()=>{
-    if(window.StudioMobile?.nativeFiles){void exportBackup(false,true);return;}
+    if(window.StudioMobile?.nativeFiles){invalidatePreparedBackup();void exportBackup(false,true);return;}
     const drawer=$('protectionDrawer');drawer.open=true;drawer.scrollIntoView({block:'nearest'});
     void exportBackup(false,'prepare');
   });
