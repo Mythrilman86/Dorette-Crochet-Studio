@@ -667,13 +667,14 @@ function redo(){
 }
 function updateSelection(){
   updateProgressUndo();
-  if(inCrochetView()){renderCrochetProgress();renderFocusRowColors();}
+  const counts=completionCounts();
+  if(inCrochetView()){renderCrochetProgress(counts.done,counts.total);renderFocusRowColors();}
   $("markRow").setAttribute("aria-pressed",String(progressBrush==="row"));
   $("markRow").textContent=progressBrush==="row"?"✓ Mark row mode on":"✓ Mark row";
   $("markStitch").setAttribute("aria-pressed",String(progressBrush==="mark"));
   $("markStitch").textContent=progressBrush==="mark"?"✓ Mark stitch mode on":"✓ Mark stitch";
-  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
-  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
+  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard(counts);return;}
+  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard(counts);return;}
   const i=indexFor(selected.col,selected.row),d=!!active.done[i]||!!active.rowDone[selected.row-1];
   $('jumpRow').value=selected.row;$('jumpCol').value=selected.col;
   $('selectedCell').textContent=`Row ${selected.row} · Column ${selected.col} ${d?'· Complete':''}`;
@@ -681,29 +682,31 @@ function updateSelection(){
   $('markStitch').disabled=false;$('markRow').disabled=false;$('paintStitch').disabled=false;
 
 
-  updateDashboard();
+  updateDashboard(counts);
 }
 function completionCounts(project=active){
   if(!project)return {done:0,total:0,rowsDone:0};
-  let done=0;
-  for(let i=0;i<project.done.length;i++){
-    const fromTop=Math.floor(i/project.cols),row=project.rows-fromTop;
-    if(project.done[i]||project.rowDone[row-1])done++;
+  let done=0,rowsDone=0;
+  const {cols,rows}=project;
+  for(let row=0;row<rows;row++){
+    if(project.rowDone[rows-row-1]){done+=cols;rowsDone++;continue;}
+    const end=(row+1)*cols;
+    for(let i=row*cols;i<end;i++)done+=project.done[i]?1:0;
   }
-  return {done,total:project.cols*project.rows,rowsDone:project.rowDone.filter(Boolean).length};
+  return {done,total:cols*rows,rowsDone};
 }
 function updateProgress(){
   refreshSections();
   if(!active)return;
-  const {done,total}=completionCounts(active),pct=Math.round(done/total*100);
+  const counts=completionCounts(active),{done,total}=counts,pct=Math.round(done/total*100);
   $('progressText').textContent=`${format(done)} / ${format(total)} stitches`;
   $('progressPercent').textContent=pct+'%';$('progressBar').style.width=pct+'%';
-  updateDashboard();
+  updateDashboard(counts);
   if(inCrochetView()){renderCrochetProgress(done,total);renderFocusRowColors();}
 }
-function updateDashboard(){
+function updateDashboard(counts=completionCounts()){
   if(!active)return;
-  const {done,total,rowsDone}=completionCounts(active);
+  const {done,total,rowsDone}=counts;
   $('dashCompleted').textContent=format(done);
   $('dashRemaining').textContent=format(Math.max(0,total-done));
   $('dashRows').textContent=`${rowsDone} / ${active.rows}`;
