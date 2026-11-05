@@ -1,0 +1,17 @@
+# Offline data protection
+
+Studio saves project edits to IndexedDB. The autosave debounce targets the project that scheduled it, flushes when the document is hidden, and waits for the storage transaction to complete before reporting success. Uncommitted changes can be lost if the browser or operating system terminates the process. Failed writes leave the previously committed record in place. The storage quota display is an estimate.
+
+ZIP export waits for the queued project writes. After a failed write, Studio offers an explicitly identified emergency ZIP of in-memory data. The ZIP and standalone Settings & Layout formats are unchanged. Verify ZIP files in Files or Downloads before relying on them. The browser cannot confirm where a Share or Download action saved its file.
+
+Project Protection can request browser storage persistence after user interaction. Browsers decide whether to grant it. Persistence may reduce automatic eviction. Clearing website data still removes the project database, local recovery database, preferences, and offline app cache.
+
+Local recovery records use a separate browser-managed database without changing the existing project database version. Studio keeps at most three records across the library, with a two-minute minimum interval per project and an 8 MiB estimated payload limit per snapshot. Records are captured after confirmed project writes. Snapshot failures do not change the outcome of the primary save. Recovery validates the record and restores a separate copy after confirmation, leaving the current record intact. Snapshots are device-local and excluded from project ZIPs. A snapshot may still be retained until it ages out of the three-record history after the source project is removed.
+
+The two-step backup action prepares the ZIP before opening the Share sheet. The second tap preserves the user gesture required by browser sharing. On supported Apple devices, choose Save to Files and an available local folder or iCloud Drive. On Android the same action uses the native save picker. The Project Protection reminder supports off, seven days, 30 days, and a one-day snooze. The latest external confirmation records the user's verification of one project ZIP and its saved revision. It is not a file-system receipt.
+
+## External backup feasibility
+
+Chromium's File System Access API can write to a user-chosen folder when the browser supports it and permissions remain granted. Folder picking requires a user gesture. Access may need to be granted again after a restart. A browser tab or installed PWA cannot guarantee periodic writes while closed. Use manual ZIP export as the cross-platform path. A Windows folder workflow would need permission-revocation, partial-write, and read-back tests before enabling it.
+
+An optional encrypted sync design would encrypt versioned ZIP payloads client-side before upload, use authenticated encryption with a unique nonce per archive, and give the owner a separately stored recovery key. Provider authentication and revocable access would still be needed. Retain uploaded versions, retry interrupted uploads, and treat concurrent device edits as separate recoverable versions. Only confirm a remote backup once the uploaded version and its digest can be read back. A local upload queue can be lost if website data is cleared before synchronization. Losing the recovery key can make encrypted backups unrecoverable. Storage, account, and API limits depend on the provider and usage. No service or plan has been selected.

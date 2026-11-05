@@ -118,6 +118,8 @@ function setSavePhase(phase,error=''){
  const labels={opening:'Opening local storage…',unsaved:'● Unsaved changes',saving:'◌ Saving…',saved:lastSaveTime?`✓ Saved at ${lastSaveTime.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'✓ Saved on this device',failed:'⚠ Save failed',blocked:'⚠ Storage unavailable'};
  status(labels[phase]||phase,phase==='failed'||phase==='blocked');
  const detail=$('saveStateDetails');if(detail)detail.textContent=`${labels[phase]||phase}${writePending?` · ${writePending} pending write(s)`:''}`;
+ const protectionSave=$('protectionSaveStatus');
+ if(protectionSave)protectionSave.textContent=lastSaveTime?'Latest confirmed local save this session: '+lastSaveTime.toLocaleString():'No new local write confirmed this session.';
 }
 function needsSave(){return !!saveTimer||writePending>0||failedWrites.size>0||savePhase==='unsaved'||savePhase==='saving';}
 
@@ -250,7 +252,7 @@ function queueWrite(project){
  const complete=error=>{
    writePending--;
    if(error)failedWrites.set(id,error.message);
-   else {failedWrites.delete(id);lastSaveTime=new Date();}
+   else {failedWrites.delete(id);lastSaveTime=new Date();void captureRecovery(copy);}
    refreshSaveState();
  };
  result.then(()=>complete(),complete);
@@ -2314,8 +2316,13 @@ function setupStandaloneSettings(){
 }
 
 async function exportBackup(all=false, share=false, project=active){
-  flushSave();const items=all?[...projects.values()]:[project];
+  let unconfirmed=false;
+  try{await flushSave();await writeChain;}catch{unconfirmed=true;}
+  const items=all?[...projects.values()]:[project];
   if(!items.length||!items[0])return;
+  unconfirmed||=memoryOnly||!!saveTimer||writePending>0||items.some(p=>failedWrites.has(p.id))||
+    (all&&[...recycledProjects.keys()].some(id=>failedWrites.has(id)));
+  if(unconfirmed&&!confirm('Local saving has not confirmed all changes. Export a ZIP of the current in-memory project data for recovery?'))return;
   const bad=(all?items.concat([...recycledProjects.values()]):items).map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
   if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
   const data=backupPayload(items,all?{categories:customCategories,recycleBin:[...recycledProjects.values()]}:undefined);
@@ -2329,6 +2336,13 @@ async function exportBackup(all=false, share=false, project=active){
   const date=new Date().toISOString().slice(0,10);
   const filename=`Dorette-${all?'All-Projects':slug(project.name)}-${date}.zip`;
   const blob=new Blob([bytes],{type:'application/zip'});
+  if(share==='prepare'){
+    preparedProtectionBackup={blob,filename,id:project.id,revision:project.updatedAt};
+    $('savePreparedBackup').disabled=false;
+    $('confirmProtectionBackup').disabled=true;
+    $('protectionExportStatus').textContent='ZIP ready. Choose Save or Share ZIP, then verify the file in your chosen destination.';
+    return;
+  }
   if(share){
     const file=new File([blob],filename,{type:blob.type});
     try{
@@ -2340,7 +2354,7 @@ async function exportBackup(all=false, share=false, project=active){
     }
   }
   download(blob,filename);
-  if(!window.StudioMobile?.nativeFiles)toast(`Backup downloaded (${items.length} project${items.length===1?'':'s'}). Upload the ZIP to Google Drive.`);
+  if(!window.StudioMobile?.nativeFiles)toast('ZIP download requested. Verify the file in Downloads or Files.');
 }
 function validateBackup(p){
   if(!p||typeof p!=='object'||!validDimensions(p.cols,p.rows))throw new Error('Invalid grid dimensions in backup');
@@ -4344,6 +4358,126 @@ function setupPolishTools(){
  updateStorageIndicator();
  storageRefreshTimer=setInterval(()=>{if(!document.hidden)updateStorageIndicator();},90000);
 }
+const recoveryLimit=3,recoveryInterval=120000,recoverySizeLimit=8*1024*1024;
+let recoveryDb,preparedProtectionBackup=null;
+const protectionKey='studio-independent-backup-v1';
+function protectionPreference(key){
+ try{return localStorage.getItem(key);}catch{return null;}
+}
+function setProtectionPreference(key,value){
+ try{localStorage.setItem(key,value);return true;}catch{return false;}
+}
+function openRecovery(){
+ return recoveryDb??=new Promise((resolve,reject)=>{
+   const request=indexedDB.open('dorette-studio-local-recovery',1);
+   request.onupgradeneeded=()=>request.result.createObjectStore('history');
+   request.onsuccess=()=>resolve(request.result);
+   request.onerror=()=>reject(request.error);
+ });
+}
+async function recoveryRecords(project){
+ const database=await openRecovery();
+ return new Promise((resolve,reject)=>{
+   const tx=database.transaction('history',project?'readwrite':'readonly'),store=tx.objectStore('history');
+   const request=store.get('recent');let records=[];
+   request.onsuccess=()=>{
+     records=Array.isArray(request.result)?request.result:[];
+     if(!project||!Ops.canWrite())return;
+     const now=Date.now(),latest=records.find(record=>record.project?.id===project.id);
+     if(latest&&(latest.project.updatedAt===project.updatedAt||now-latest.at<recoveryInterval))return;
+     if(JSON.stringify(project).length*2>recoverySizeLimit)return;
+     records=[{at:now,project},...records].slice(0,recoveryLimit);
+     store.put(records,'recent');
+   };
+   tx.oncomplete=()=>resolve(records);
+   tx.onerror=()=>reject(tx.error);
+   tx.onabort=()=>reject(tx.error||Error('Local recovery write aborted'));
+ });
+}
+async function captureRecovery(project){
+ try{await recoveryRecords(project);if($('protectionDrawer')?.open)await renderProtection();}
+ catch{/* Recovery storage is best effort. The primary project save already committed. */}
+}
+async function renderProtection(){
+ const status=$('protectionStatus'),list=$('localRecoveryList');
+ let confirmed=null;
+ try{confirmed=JSON.parse(protectionPreference(protectionKey));}catch{}
+ const matches=confirmed?.id===active?.id&&!!confirmed;
+ const changed=!matches||confirmed.revision!==active?.updatedAt;
+ status.textContent=matches?`Last external ZIP you confirmed: ${new Date(confirmed.at).toLocaleString()}. ${changed?'Project changed since that ZIP.':'Project revision matches that ZIP.'}`:'No external ZIP confirmation for this project.';
+ const days=Number($('backupReminderDays').value),now=Date.now();
+ $('backupReminder').hidden=!active||!days||!changed||
+   now<Number(protectionPreference('studio-backup-snooze'))||
+   (matches&&now-confirmed.at<days*86400000);
+ try{
+   const records=(await recoveryRecords()).filter(r=>r.project?.id===active?.id);
+   list.replaceChildren();
+   $('localRecoveryStatus').textContent=records.length?'Latest local snapshot: '+new Date(records[0].at).toLocaleString():'No local snapshot for this project yet.';
+   for(const record of records){
+     list.append(projectButton('Restore local snapshot from '+new Date(record.at).toLocaleString(),async()=>{
+       if(record.project.id!==active?.id||!reliability.auditProject(record.project).ok)return toast('This local snapshot failed validation or belongs to another project.');
+       if(!confirm('Restore this local snapshot as a separate project? The current project will be kept.'))return;
+       const copy=structuredClone(record.project);
+       copy.id=uid();copy.name=copy.name.slice(0,100)+' (recovered)';copy.pinned=false;
+       copy.createdAt=copy.updatedAt=new Date().toISOString();
+       await organizeProjects([copy],[],null,()=>{projects.set(copy.id,copy);selectProject(copy.id);},{copies:true});
+     }));
+   }
+ }catch{$('localRecoveryStatus').textContent='Local recovery storage is unavailable.';}
+}
+async function refreshPersistence(request=false){
+ const storage=navigator.storage,status=$('persistenceStatus'),button=$('requestPersistence');
+ button.disabled=true;
+ if(typeof storage?.persisted!=='function'||typeof storage?.persist!=='function'){
+   status.textContent='Persistent storage is unavailable in this browser. Keep independent ZIP backups.';return;
+ }
+ try{
+   const granted=await storage.persisted()||(request&&await storage.persist());
+   if(request||granted)setProtectionPreference('studio-persistence-result',granted?'granted':'denied');
+   const denied=protectionPreference('studio-persistence-result')==='denied';
+   status.textContent=granted?'Persistent storage granted. Clearing website data still removes local projects and snapshots.':
+     denied?'Persistent storage was declined. Keep independent ZIP backups.':'Persistent storage is not granted. You can request it here.';
+   button.disabled=granted;
+ }catch{status.textContent='Could not check persistent storage. Keep independent ZIP backups.';button.disabled=false;}
+}
+function setupProjectProtection(){
+ $('protectionRestore').onclick=()=>$('backupFile').click();
+ $('protectionDrawer').addEventListener('toggle',()=>{if($('protectionDrawer').open){void renderProtection();void refreshPersistence();}});
+ $('requestPersistence').onclick=()=>void refreshPersistence(true);
+ const days=$('backupReminderDays');
+ days.value=protectionPreference('studio-backup-reminder-days')??'7';
+ days.onchange=()=>{setProtectionPreference('studio-backup-reminder-days',days.value);void renderProtection();};
+ $('snoozeBackupReminder').onclick=()=>{setProtectionPreference('studio-backup-snooze',String(Date.now()+86400000));$('backupReminder').hidden=true;};
+ $('prepareProtectionBackup').onclick=()=>{
+   preparedProtectionBackup=null;
+   $('savePreparedBackup').disabled=$('confirmProtectionBackup').disabled=true;
+   $('protectionExportStatus').textContent='';
+   void exportBackup(false,'prepare');
+ };
+ $('savePreparedBackup').onclick=async()=>{
+   const backup=preparedProtectionBackup;if(!backup)return;
+   const {blob,filename}=backup;
+   try{
+     const file=new File([blob],filename,{type:blob.type});
+     if(window.StudioMobile?.nativeFiles){
+       if(!await window.StudioMobile.save(blob,filename))return;
+     }else if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file]});
+     else await download(blob,filename);
+     if(preparedProtectionBackup!==backup)return;
+     $('protectionExportStatus').textContent='Open your destination and check that the ZIP is there. Studio cannot verify the file on your behalf.';
+     $('confirmProtectionBackup').disabled=false;
+   }catch(error){if(error.name!=='AbortError')$('protectionExportStatus').textContent='Could not save or share: '+error.message;}
+ };
+ $('confirmProtectionBackup').onclick=()=>{
+   const backup=preparedProtectionBackup;if(!backup)return;
+   if(!setProtectionPreference(protectionKey,JSON.stringify({id:backup.id,revision:backup.revision,at:Date.now()}))){
+     $('protectionExportStatus').textContent='Studio could not record your confirmation.';return;
+   }
+   $('confirmProtectionBackup').disabled=true;
+   $('protectionExportStatus').textContent='Recorded your confirmation that the ZIP was saved outside Studio.';
+   void renderProtection();
+ };
+}
 function setupReliabilityTools(){
  const run=$('runIntegrityCheck');if(!run)return;
  run.addEventListener('click',()=>{showDiagnostics();const r=active?reliability.auditProject(active):null;
@@ -4621,7 +4755,11 @@ function hookEvents(){
   $('textUp').addEventListener('click',()=>nudgeText(0,1));
   $('textDown').addEventListener('click',()=>nudgeText(0,-1));
   hookPatternEvents();hookAdvanced();
-  $('shareProject').addEventListener('click',()=>exportBackup(false,true));
+  $('shareProject').addEventListener('click',()=>{
+    if(window.StudioMobile?.nativeFiles){void exportBackup(false,true);return;}
+    const drawer=$('protectionDrawer');drawer.open=true;drawer.scrollIntoView({block:'nearest'});
+    void exportBackup(false,'prepare');
+  });
   for(const id of ['exportProject'])$(id).addEventListener('click',()=>exportBackup(false));
   for(const id of ['exportAll','headerExport'])$(id).addEventListener('click',()=>exportBackup(true));
   for(const id of ['headerRestore','restoreProject'])$(id).addEventListener('click',()=>$('backupFile').click());
@@ -4673,6 +4811,7 @@ async function initialize(){
   if(!memoryOnly&&!needsSave())setSavePhase('saved');
   if(invalidProjects.size)saveAlert(`${invalidProjects.size} stored project(s) failed validation. Originals remain untouched. Open Studio Diagnostics to export the raw record.`);
   setupReliabilityTools();
+  setupProjectProtection();
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
