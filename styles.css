@@ -356,7 +356,10 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 .settings-customizing .settings-navigation{position:sticky;top:0;z-index:2}.settings-customizing #settingsJump,.settings-customizing .settings-favorites{display:none}
 .settings-customizing .settings-dragging{border-color:#6c319d;outline:2px solid #6c319d;box-shadow:0 3px 10px #54287d55;background:#f8efff}
 .settings-customizing .settings-drop-before{box-shadow:0 -5px #5a2489}.settings-customizing .settings-drop-after{box-shadow:0 5px #5a2489}
-@media(min-width:600px) and (min-height:600px){.native-android.crochet-view .crochet-view-actions{padding-top:max(16px,env(safe-area-inset-top))}}
+@media(min-width:600px) and (min-height:600px){
+  .native-android.crochet-view .crochet-view-actions{padding-top:calc(48px + env(safe-area-inset-top, 0px))}
+  .native-android:not(.crochet-view)>.topbar{height:calc(106px + env(safe-area-inset-top, 0px));padding-top:calc(32px + env(safe-area-inset-top, 0px))}
+}
 #recycleSelectionControls[hidden]{display:none}#recycleSelectionControls .button,#toggleRecycleSelection{min-height:44px;white-space:normal}.recycle-select-row{display:flex;align-items:center;gap:8px;min-height:44px}.recycle-select-row input{width:20px;height:20px}
 #phoneCrochetControls{display:none}
 @media (pointer:coarse) and (max-width:599px), (pointer:coarse) and (orientation:landscape) and (max-height:599px){
