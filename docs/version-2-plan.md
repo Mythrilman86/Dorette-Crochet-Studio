@@ -72,4 +72,4 @@ The local OCR prototype read parts of the published multilingual terminology she
 
 ## Physical-device verification · Version 2.0.0
 
-After publication, the project owner reported that both the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra updated successfully through Studio's in-app Android updater. The owner confirmed that 2.0.0 runs on both devices, project pinning works, and Samsung S Pen selection works. These are owner-reported physical-device checks, separate from the emulator upgrade, offline, and signing checks in the 2.0 release report.
+After publication, the project owner reported that both the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra updated successfully through Studio's in-app Android updater. The owner confirmed that 2.0.0 runs on both devices, project pinning works, and Samsung S Pen selection works. The owner also confirmed that creating a temporary project, adding a custom category, moving the project to the Recycle Bin, and restoring it worked on their Samsung devices. These are owner-reported physical-device checks, separate from the emulator upgrade, offline, and signing checks in the 2.0 release report.

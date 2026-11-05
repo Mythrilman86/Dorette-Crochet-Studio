@@ -131,7 +131,7 @@
 @media(max-width:640px){.dual-charts{grid-template-columns:1fr}.overview-wrap{height:230px;min-height:230px}.dual-charts .canvas-wrap{height:50svh}.guide-head{flex-wrap:wrap}}
 @media(min-width:921px) and (max-width:1450px){.inspector{display:block;columns:3;column-gap:20px}.inspector>.inspector-section,.inspector>.settings-card{break-inside:avoid;margin-bottom:20px}.inspector>.context-help{break-inside:avoid}}
 @media(min-width:641px) and (max-width:920px){.settings-card{grid-column:1/-1}}
-.chart-layout-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:.8rem}.chart-layout-controls>span:first-child{font-weight:750}.chart-layout-switch{display:inline-flex;border:1px solid #b9a7d0;border-radius:10px;padding:3px;background:#eee7f7;gap:3px}.chart-layout-switch button{border:1px solid transparent;border-radius:7px;padding:10px 15px;min-height:44px;background:transparent;color:#554269;font-weight:700}.chart-layout-switch button[aria-pressed=true]{background:#6955a5;color:white;box-shadow:0 1px 3px #42315330}.chart-layout-switch button:focus-visible{outline:3px solid #b8a4e8;outline-offset:2px}.dual-charts.single-chart{grid-template-columns:minmax(0,1fr)}.chart-pane[hidden]{display:none}
+.working-chart-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 10px;margin-bottom:8px}.working-chart-heading h2{margin:0}.chart-layout-switch{display:inline-flex;border:1px solid #b9a7d0;border-radius:10px;padding:3px;background:#eee7f7;gap:3px}.chart-layout-switch button{border:1px solid transparent;border-radius:7px;padding:6px 11px;min-height:44px;background:transparent;color:#554269;font-weight:700}.chart-layout-switch button[aria-pressed=true]{background:#6955a5;color:white;box-shadow:0 1px 3px #42315330}.chart-layout-switch button:focus-visible{outline:3px solid #b8a4e8;outline-offset:2px}.dual-charts.single-chart{grid-template-columns:minmax(0,1fr)}.chart-pane[hidden]{display:none}
 
 
 /* v1.2.0 — dashboard, safer editing, tablet controls and text-to-chart */
@@ -293,7 +293,7 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 .crochet-view:not(.unpinned-dock) .toast{z-index:27}
 .crochet-view:not(.unpinned-dock) .workspace>:not(.crochet-view-actions,#chartViews,.toolbar,.crochet-dock,#guideDialog){display:none}
 .crochet-view:not(.unpinned-dock) #chartViews{display:flex;flex:1 0 140px;min-height:140px}
-.crochet-view:not(.unpinned-dock) #overviewPane,.crochet-view:not(.unpinned-dock) .chart-pane h2,.crochet-view:not(.unpinned-dock) .canvas-note,
+.crochet-view:not(.unpinned-dock) #overviewPane,.crochet-view:not(.unpinned-dock) .chart-pane h2,.crochet-view:not(.unpinned-dock) .working-chart-heading,.crochet-view:not(.unpinned-dock) .canvas-note,
 .crochet-view:not(.unpinned-dock) #openCommandSearch,.crochet-view:not(.unpinned-dock) .toolbar-hint{display:none}
 .crochet-view:not(.unpinned-dock) #chartViews>.chart-pane:last-child{display:flex;width:100%;min-height:0}
 .crochet-view:not(.unpinned-dock) #canvasWrap{flex:1 1 auto;min-height:0;height:auto}

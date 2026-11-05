@@ -503,7 +503,7 @@ function selectProject(id) {
   flushSave();discardPreview(false); clearTextPreview(); lastText=null; $("editLastText").disabled=true; activeId=id;active=projects.get(id);window.DorettePattern.ensure(active);selected=null;undoStack=[];redoStack=[];designHistoryLabels=[];redoHistoryLabels=[];areaSelection=null;
   $('undoButton').disabled=true;$('redoButton').disabled=true;renderDesignHistory();updateAreaStatus();
   try {localStorage.setItem('dorette-active-project',id);}catch{}
-  selectedLayerId=null;editingLayerId=null;pendingCleanup=null;nextColorProposal=null;syncImage();refreshProjectList();refreshInspector();fitChart();refreshNextPanels();
+  $('paintTextLayer').checked=false;selectedLayerId=null;editingLayerId=null;pendingCleanup=null;nextColorProposal=null;syncImage();refreshProjectList();refreshInspector();fitChart();refreshNextPanels();
 }
 function updateReferenceActions(){
   if(!active)return;
@@ -800,6 +800,7 @@ function applyBrushCell(cell,stroke){
     return true;
   }
   if(isPatternLocked())return false;
+  if($('paintTextLayer').checked)return paintTextLayerCell(cell,stroke);
   const color=stroke.tool==='erase'?0:stroke.color;
   if(!Number.isInteger(color)||color<0||color>=active.palette.length)return false;
   const indexes=symmetricIndexes(cell.col,cell.row);
@@ -825,6 +826,22 @@ function applyBrushCell(cell,stroke){
   }
   if(!changed)return false;
   active.converted=true;stroke.changed=true;return true;
+}
+function paintTextLayerCell(cell,stroke){
+  const layer=chosenLayer();
+  if(layer?.type!=='text'||layer.locked||layer.visible===false)return false;
+  const color=stroke.color,erase=stroke.tool==='erase';
+  if(!erase&&(!Number.isInteger(color)||color<0||color>=active.palette.length))return false;
+  const index=indexFor(cell.col,cell.row);
+  const entry=layer.entries.findIndex(([i])=>i===index);
+  if(erase?entry<0:layer.entries[entry]?.[1]===color)return false;
+  if(!stroke.snapshotted){snapshot({label:'Edit text stitches'});stroke.snapshotted=true;}
+  if(erase)layer.entries.splice(entry,1);
+  else if(entry<0)layer.entries.push([index,color]);
+  else layer.entries[entry][1]=color;
+  layer.source={...layer.source,handEdited:true};
+  active.converted=true;stroke.changed=true;
+  return true;
 }
 function brushSegment(from,to,stroke){
   if(!from||!to||!stroke)return;
@@ -1003,16 +1020,24 @@ function screenToStitch(sx,sy){
   if(x<0||y<0||x>=active.cols*CELL||y>=active.rows*CELL)return null;
   return {col:Math.floor(x/CELL)+1,row:active.rows-Math.floor(y/CELL)};
 }
+function syncTextDirection(){
+  const vertical=$('textDirection').value==='vertical';
+  $('textLayout').disabled=vertical;
+  $('textWrap').disabled=vertical;
+}
 function previewTextConfig(){
   return {
     text:($('textInput').value||'').slice(0,40),
     angle:Number($('textAngle').value)||0,
     flip:$('flipText').checked,
     height:$('textScale').valueAsNumber,
+    glyphWidth:$('textWidth').value === '' ? null : $('textWidth').valueAsNumber,
+    proportional:$('textProportions').checked,
+    direction:$('textDirection').value,
     col:clamp(Number($('textCol').value)||1,1,active?.cols||1),
     row:clamp(Number($('textRow').value)||1,1,active?.rows||1),
     color:clamp(Number($('textColor').value)||0,0,Math.max(0,(active?.palette.length||1)-1)),
-    style:$('textStyle').value,letterSpacing:Number($('letterSpacing').value)||1,layout:$('textLayout').value,wrap:Number($('textWrap').value)||0
+    style:$('textStyle').value,letterSpacing:Number($('letterSpacing').value),layout:$('textLayout').value,wrap:Number($('textWrap').value)||0
   };
 }
 const stitchGlyphs={
@@ -1061,7 +1086,8 @@ const stitchGlyphs={
 function rasterizeTextPattern(config){
   const text=String(config.text||'').trim();
   if(!text)return null;
-  if(config.wrap>0&&text.length>config.wrap){
+  const vertical=config.direction==='vertical';
+  if(!vertical&&config.wrap>0&&text.length>config.wrap){
     const chunks=[],words=text.split(/\s+/);let line='';
     for(const word of words){
       if(!line){line=word;continue;}
@@ -1110,38 +1136,42 @@ function rasterizeTextPattern(config){
     }
     return {width,height:5,occupied};
   });
-  const gap=Math.max(0,Math.round(config.height/5)*(Number(config.letterSpacing)||1));
+  const gap=Math.max(0,Math.round(config.height/5)*(config.letterSpacing??1));
   let sourceWidth=0;
   const spans=glyphs.map(glyph=>{
-    const width=Math.max(1,Math.round(glyph.width*config.height/glyph.height));
+    const width=config.glyphWidth??Math.max(1,Math.round(glyph.width*config.height/glyph.height));
     const span={glyph,width,start:sourceWidth,pixels:new Set(glyph.occupied.map(({x,y})=>y*glyph.width+x))};
-    sourceWidth+=width+gap;
+    sourceWidth+=(vertical?config.height:width)+gap;
     return span;
   });
   sourceWidth-=gap;
+  const sourceHeight=vertical?sourceWidth:config.height;
+  if(vertical)sourceWidth=Math.max(...spans.map(span=>span.width));
   const sideways=config.angle===90||config.angle===270;
-  const width=sideways?config.height:sourceWidth;
-  const height=sideways?sourceWidth:config.height;
+  const width=sideways?sourceHeight:sourceWidth;
+  const height=sideways?sourceWidth:sourceHeight;
   const availableWidth=active.cols-config.col+1,availableHeight=config.row;
   const occupied=[];
   for(let y=0;y<Math.min(height,availableHeight);y++)for(let x=0;x<Math.min(width,availableWidth);x++){
     const rx=config.flip?width-1-x:x;
     let sx=rx,sy=y;
-    if(config.angle===90){sx=y;sy=config.height-1-rx;}
-    if(config.angle===180){sx=sourceWidth-1-rx;sy=config.height-1-y;}
+    if(config.angle===90){sx=y;sy=sourceHeight-1-rx;}
+    if(config.angle===180){sx=sourceWidth-1-rx;sy=sourceHeight-1-y;}
     if(config.angle===270){sx=sourceWidth-1-y;sy=rx;}
-    if(sy<0||sy>=config.height)continue;
-    const span=spans.find(span=>sx>=span.start&&sx<span.start+span.width);
+    const axis=vertical?sy:sx;
+    const span=spans.find(span=>axis>=span.start&&axis<span.start+(vertical?config.height:span.width));
     if(!span)continue;
     const {glyph}=span;
     // Keep the same stitch boundaries as unrotated lettering.
-    const localX=sx-span.start;
+    const localX=vertical?sx-Math.floor((sourceWidth-span.width)/2):sx-span.start;
+    const localY=vertical?sy-span.start:sy;
+    if(localX<0||localX>=span.width||localY<0||localY>=config.height)continue;
     const gx=glyph.width<=span.width
       ?Math.ceil((localX+.5)*glyph.width/span.width)-1
       :Math.floor((localX+.5)*glyph.width/span.width);
     const gy=glyph.height<=config.height
-      ?Math.ceil((sy+.5)*glyph.height/config.height)-1
-      :Math.floor((sy+.5)*glyph.height/config.height);
+      ?Math.ceil((localY+.5)*glyph.height/config.height)-1
+      :Math.floor((localY+.5)*glyph.height/config.height);
     if(span.pixels.has(gy*glyph.width+gx))occupied.push({x,y});
   }
   return advancedLetterPreviewTransform({width,height,occupied,tooLarge:width>availableWidth||height>availableHeight},config);
@@ -1185,10 +1215,14 @@ function buildTextPreview(){
     requestDraw();
     return textPreview;
   }
+  if(config.glyphWidth!==null&&(!Number.isInteger(config.glyphWidth)||config.glyphWidth<1||config.glyphWidth>100)){
+    feedback.textContent='Enter a whole letter width from 1 to 100 stitches, or leave it blank for automatic width.';
+    textPreview={...config,cells:[]};requestDraw();return textPreview;
+  }
   const mask=rasterizeTextPattern(config);
   if(!mask){textPreview=null;requestDraw();return null;}
   if(mask.tooLarge||mask.width>active.cols-config.col+1||mask.height>config.row||mask.occupied.some(pt=>config.col+pt.x>active.cols||config.row-pt.y<1)){
-    feedback.textContent=`Text needs ${mask.width} × ${mask.height} stitches. Only ${active.cols-config.col+1} × ${config.row} are available here. Reduce the height, move the text, or use a larger chart.`;
+    feedback.textContent=`Text needs ${mask.width} × ${mask.height} stitches. Only ${active.cols-config.col+1} × ${config.row} are available here. Reduce the letter size, move the text, or use a larger chart.`;
   }else feedback.textContent=`Text size: ${mask.width} × ${mask.height} stitches.`;
   const cells=[];
   for(const pt of mask.occupied){
@@ -1200,6 +1234,7 @@ function buildTextPreview(){
   return textPreview;
 }
 function clearTextPreview(){
+  editingLayerId=null;
   textPreview=null;editingText=null;placingText=false;
   $('placeText').setAttribute('aria-pressed','false');
   $('applyText').textContent='Apply text to chart';
@@ -2482,17 +2517,22 @@ function renderLayers(){
  if(!list.length){const p=document.createElement('p');p.className='muted';p.textContent='No editable layers yet. Apply text or a reusable motif to create one.';box.append(p);}
  for(let i=list.length-1;i>=0;i--){
   const l=list[i],line=document.createElement('div');line.className='layer-line'+(l.id===selectedLayerId?' selected':'');
-  const choose=document.createElement('button');choose.type='button';choose.textContent=l.id===selectedLayerId?'●':'○';choose.title='Select layer';choose.setAttribute('aria-label','Select '+l.name);
+  const choose=document.createElement('button');choose.type='button';choose.textContent=l.id===selectedLayerId?'●':'○';choose.title='Select layer';choose.setAttribute('aria-label','Select '+l.name);choose.setAttribute('aria-pressed',String(l.id===selectedLayerId));
   choose.onclick=()=>{selectedLayerId=l.id;renderLayers();};
   const label=document.createElement('div');label.innerHTML='';const strong=document.createElement('strong');strong.textContent=l.name;
-  const small=document.createElement('small');small.textContent=`${l.type} · ${l.entries.length} stitches`;label.append(strong,small);
+  const small=document.createElement('small');small.textContent=`${l.type} · ${l.entries.length} stitches`;label.append(strong,small);label.onclick=choose.onclick;
   const visible=document.createElement('button');visible.type='button';visible.textContent=l.visible===false?'◯':'◉';visible.title=l.visible===false?'Show layer':'Hide layer';visible.setAttribute('aria-label',visible.title);
   visible.onclick=()=>{if(editBlocked('change layer visibility'))return;snapshot();l.visible=l.visible===false?true:false;scheduleSave();renderLayers();updateLegend();requestDraw();};
   const locked=document.createElement('button');locked.type='button';locked.textContent=l.locked?'🔒':'🔓';locked.title=l.locked?'Unlock layer':'Lock layer';locked.setAttribute('aria-label',locked.title);
   locked.onclick=()=>{if(editBlocked('lock a layer'))return;snapshot();l.locked=!l.locked;scheduleSave();renderLayers();};
   line.append(choose,label,visible,locked);box.append(line);
  }
- const l=chosenLayer();$('layerInfo').textContent=l?`${l.name} (${l.type}): ${l.visible===false?'hidden':'visible'}, ${l.locked?'locked':'editable'}.`:'Select a layer to modify it.';
+ const l=chosenLayer();
+ const layerBrush=$('paintTextLayer');
+ const brushAvailable=l?.type==='text'&&!l.locked&&l.visible!==false&&!isPatternLocked();
+ layerBrush.disabled=!brushAvailable&&!layerBrush.checked;
+ $('layerInfo').textContent=l?`${l.name} (${l.type}): ${l.visible===false?'hidden':'visible'}, ${l.locked?'locked':'editable'}.`:'Select a layer to modify it.';
+ if(layerBrush.checked)$('layerInfo').textContent+=!brushAvailable?' Layer painting paused. Turn it off to paint the chart.':' Paint and Erase affect only this text layer.';
  for(const id of ['layerUp','layerDown','layerEdit','layerDuplicate','layerFlatten','layerDelete','layerMoveUp','layerMoveLeft','layerMoveRight','layerMoveDown'])$(id).disabled=!l||isPatternLocked();
 }
 function shiftLayer(l,dx,dy){
@@ -2509,8 +2549,28 @@ function putTextOnLayer(){
  if(!active||pendingConversion||editBlocked('apply text'))return;
  const preview=buildTextPreview();if(!preview||preview.tooLarge||!preview.cells.length)return toast($('textFitStatus').textContent||'Preview text before applying.');
  const replace=editingLayerId?(active.layers||[]).findIndex(l=>l.id===editingLayerId):-1;
- const entries=preview.cells.map(cell=>[indexFor(cell.col,cell.row),preview.color]);
- const layer={id:replace>=0?active.layers[replace].id:uid(),name:'Text: '+preview.text.slice(0,40),type:'text',visible:true,locked:false,entries,source:{...previewTextConfig()}};
+ const previous=active.layers?.[replace];
+ if(editingLayerId&&(!previous||previous.locked))return toast('Select an unlocked text layer before updating it.');
+ const config=previewTextConfig();
+ let entries=preview.cells.map(cell=>[indexFor(cell.col,cell.row),preview.color]);
+ if(previous?.source?.handEdited){
+   const old=previous.source;
+   const changesShape=['text','angle','flip','height','glyphWidth','direction','style','letterSpacing','layout','wrap']
+     .some(key=>(old[key]??null)!==(config[key]??null));
+   if(changesShape){
+     if(!confirm('Changing the lettering shape replaces hand-painted and erased stitches. Continue?'))return;
+   }else{
+     const dx=config.col-old.col,dy=config.row-old.row;
+     entries=[];
+     for(const [index,color] of previous.entries){
+       const col=index%active.cols+1+dx,row=active.rows-Math.floor(index/active.cols)+dy;
+       if(col<1||col>active.cols||row<1||row>active.rows)return toast('Move the edited stitches inside the chart.');
+       entries.push([indexFor(col,row),color===old.color?config.color:color]);
+     }
+     config.handEdited=true;
+   }
+ }
+ const layer={id:previous?.id??uid(),name:'Text: '+preview.text.slice(0,40),type:'text',visible:previous?.visible??true,locked:false,entries,source:config};
  setLayerAndRefresh(layer,replace>=0?replace:null);
  editingLayerId=null;lastText={config:{...previewTextConfig()},original:new Map()};$('editLastText').disabled=false;
  clearTextPreview();toast('Text saved as a separate editable layer.');
@@ -2530,7 +2590,7 @@ function applyMotifLayer(){
  active.layers.push(l);selectedLayerId=l.id;active.converted=true;clearMotifPreview();scheduleSave();refreshInspector();toast('Motif saved as editable layer.');
 }
 function advancedLetterPreviewTransform(mask,config){
- if(!mask||!['diagonal','curve'].includes(config.layout))return mask;
+ if(!mask||config.direction==='vertical'||!['diagonal','curve'].includes(config.layout))return mask;
  const height=mask.height,amp=Math.max(1,Math.round(config.height*.3)),width=mask.width;
  const mapped=mask.occupied.map(p=>({x:p.x,y:p.y+Math.round(config.layout==='diagonal'?((p.x/Math.max(1,width-1))*amp):amp*(1-Math.pow(2*p.x/Math.max(1,width-1)-1,2)))}));
  return {...mask,height:height+amp,occupied:mapped};
@@ -2643,10 +2703,37 @@ function hookAdvanced(){
  $('layerEdit').addEventListener('click',()=>{const l=chosenLayer();if(!l||l.locked||editBlocked('edit a layer'))return;
   if(l.type==='shape')return toast('Use Paint or Erase on the shape, or move it with the layer arrows.');
   if(l.type!=='text')return toast('Move motif layers with the arrows; duplicate or flatten them as needed.');
-  editingLayerId=l.id;for(const [key,id] of [['text','textInput'],['angle','textAngle'],['height','textScale'],['col','textCol'],['row','textRow'],['color','textColor'],['style','textStyle'],['letterSpacing','letterSpacing'],['layout','textLayout'],['wrap','textWrap']])if(l.source?.[key]!==undefined)$(id).value=l.source[key];
+  editingLayerId=l.id;
+  $('textDirection').value=l.source?.direction||'horizontal';syncTextDirection();
+  $('textWidth').value=l.source?.glyphWidth??'';
+  $('textProportions').checked=l.source?.proportional!==false;
+  $('paintTextLayer').checked=false;
+  for(const [key,id] of [['text','textInput'],['angle','textAngle'],['height','textScale'],['col','textCol'],['row','textRow'],['color','textColor'],['style','textStyle'],['letterSpacing','letterSpacing'],['layout','textLayout'],['wrap','textWrap']])if(l.source?.[key]!==undefined)$(id).value=l.source[key];
   $('flipText').checked=!!l.source?.flip;$('applyText').textContent='Update selected text layer';buildTextPreview();
  });
- for(const id of ['textStyle','letterSpacing','textLayout','textWrap'])$(id).addEventListener('change',()=>{if(textPreview)buildTextPreview();});
+ $('paintTextLayer').addEventListener('change',renderLayers);
+ const textHeight=$('textScale'),textWidth=$('textWidth');
+ for(const field of [textHeight,textWidth]){
+   field.addEventListener('focus',()=>{field.dataset.before=field.value;});
+   field.addEventListener('input',()=>{
+     if($('textProportions').checked){
+       const previous=Number(field.dataset.before);
+       const value=field.valueAsNumber;
+       if(Number.isInteger(value)&&value>=Number(field.min)&&value<=100){
+         if(field===textHeight&&previous>=5&&textWidth.value){
+           textWidth.value=clamp(Math.round(textWidth.valueAsNumber*value/previous),1,100);
+         }else if(field===textWidth){
+           const reference=previous>0?previous:Math.max(1,Math.round(textHeight.valueAsNumber*3/5));
+           textHeight.value=clamp(Math.round(textHeight.valueAsNumber*value/reference),5,100);
+         }
+         field.dataset.before=field.value;
+       }
+     }
+     if($('textInput').value.trim())buildTextPreview();
+   });
+ }
+ $('textDirection').addEventListener('change',syncTextDirection);
+ for(const id of ['textStyle','letterSpacing','textLayout','textWrap','textDirection','textProportions'])$(id).addEventListener('change',()=>{if($('textInput').value.trim())buildTextPreview();});
  $('centerText').addEventListener('click',()=>{const cfg=previewTextConfig(),mask=rasterizeTextPattern(cfg);if(!mask)return;$('textCol').value=clamp(Math.floor((active.cols-mask.width)/2)+1,1,active.cols);$('textRow').value=clamp(Math.floor((active.rows+mask.height)/2),1,active.rows);buildTextPreview();});
  $('autoFitText').addEventListener('click',()=>{if(!areaSelection)return toast('Select an area to fit text inside first.');const area=areaSelection,left=Math.min(area.start.col,area.end.col),top=Math.max(area.start.row,area.end.row),width=Math.abs(area.start.col-area.end.col)+1,height=Math.abs(area.start.row-area.end.row)+1;
   $('textCol').value=left;$('textRow').value=top;
@@ -2929,7 +3016,7 @@ function refreshTextFavorites(){const sel=$('textStyleFavorite'),old=sel.value;s
 function saveTextFavorite(){
  const name=prompt('Name this lettering style (example: Bold 20-stitch initials):','My lettering style');if(name===null)return;
  if(textFavorites.length>=35)return toast('You have 35 saved styles. Remove one first.');
- const fields=['textStyle','letterSpacing','textWrap','textLayout','textAngle','textScale'],options={};
+ const fields=['textStyle','letterSpacing','textWrap','textLayout','textAngle','textScale','textDirection','textWidth'],options={};
  for(const id of fields)options[id]=$(id).value;
  const item={id:uid(),name:name.slice(0,60),options};textFavorites.push(item);
  try{localStorage.setItem(textFavoritesKey,JSON.stringify(textFavorites));}catch{toast('Unable to save lettering styles in this browser.');}
