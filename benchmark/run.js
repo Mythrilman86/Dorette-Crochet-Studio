@@ -43,7 +43,7 @@ function rasterize(image, angle, contrast, boost = 0, correction = 0) {
   return pixels;
 }
 
-function annotatedRegions(image, regions, templates) {
+function annotatedRegions(image, regions, templates, preserveThin) {
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
@@ -53,13 +53,13 @@ function annotatedRegions(image, regions, templates) {
     const rgba = context.getImageData(x,y,w,h).data;
     const mask = inkMask(rgba,w,h);
     const boxes = components(mask,w,h).filter(box => box.area >= 9);
-    const scores = boxes.length === 1 ? rankSymbols(mask,w,boxes[0],templates) : [];
+    const scores = boxes.length === 1 ? rankSymbols(mask,w,boxes[0],templates,preserveThin) : [];
     return {label, regions:boxes.length, matches:scores.map(match=>match.id),
       confidence:scores.length ? matchConfidence(scores) : 'Rejected'};
   });
 }
 
-function scanSample(image, item, templates) {
+function scanSample(image, item, templates, preserveThin = false) {
   if (item.kind === 'legend' || item.kind === 'fabric') {
     return [{condition:'original', outcome:'not classified by the template matcher'}];
   }
@@ -68,10 +68,10 @@ function scanSample(image, item, templates) {
     const mask = inkMask(pixels.data, pixels.width, pixels.height);
     const boxes = components(mask, pixels.width, pixels.height).filter(box => box.area >= 9);
     const scores = item.kind === 'symbol' && boxes.length === 1
-      ? rankSymbols(mask, pixels.width, boxes[0], templates) : [];
+      ? rankSymbols(mask, pixels.width, boxes[0], templates, preserveThin) : [];
     return {
       condition:condition.name, regions:boxes.length, matches:scores.map(match => match.id),
-      ...(item.regions ? {manualCrops:annotatedRegions(image,item.regions,templates)} : {}),
+      ...(item.regions ? {manualCrops:annotatedRegions(image,item.regions,templates,preserveThin)} : {}),
       scores:scores.map(match => Number(match.score.toFixed(3))),
       confidence:scores.length ? matchConfidence(scores) : 'Rejected'
     };
@@ -97,23 +97,26 @@ function summarize(results) {
 
 async function benchmark(files) {
   const catalogFile = files.get('catalog.json');
-  if (!catalogFile) throw new Error('The selected folder must contain catalog.json.');
+  if (!catalogFile) throw new Error('Select catalog.json with the images.');
   const catalog = JSON.parse(await catalogFile.text());
   const templates = buildStitchTemplates(stitchEntries);
-  const results = [], missing = [];
+  const experimentalTemplates = buildStitchTemplates(stitchEntries, true);
+  const results = [], experimental = [], missing = [];
   for (const item of catalog) {
-    const file = files.get(item.file);
+    const rendition = item.testedFile && files.get(item.testedFile);
+    const file = rendition || files.get(item.file);
     if (!file) { missing.push(item.file); continue; }
-    const typed = new Blob([file], {type:item.mime});
+    const typed = new Blob([file], {type:rendition ? item.testedMime : item.mime});
     const url = URL.createObjectURL(typed);
     try {
       const image = new Image();
       image.src = url;
       await image.decode();
       results.push({...item,runs:scanSample(image,item,templates)});
+      experimental.push({...item,runs:scanSample(image,item,experimentalTemplates,true)});
     } finally { URL.revokeObjectURL(url); }
   }
-  return {totals:summarize(results),missing,results};
+  return {defaultTotals:summarize(results),experimentalTotals:summarize(experimental),missing,results,experimental};
 }
 
 document.getElementById('run').addEventListener('click', async event => {

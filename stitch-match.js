@@ -57,14 +57,14 @@ function components(mask, width, height) {
   return boxes;
 }
 
-function normalizedMask(mask, width, box) {
+function normalizedMask(mask, width, box, preserveThin = false) {
   const output = new Uint8Array(MASK_SIDE ** 2);
   const scale = 26 / Math.max(box.w, box.h);
   const offsetX = (MASK_SIDE - box.w * scale) / 2;
   const offsetY = (MASK_SIDE - box.h * scale) / 2;
   for (let y = 0; y < MASK_SIDE; y++) {
     for (let x = 0; x < MASK_SIDE; x++) {
-      if (scale >= 1) {
+      if (!preserveThin || scale >= 1) {
         const sx = Math.floor((x + .5 - offsetX) / scale);
         const sy = Math.floor((y + .5 - offsetY) / scale);
         if (sx >= 0 && sx < box.w && sy >= 0 && sy < box.h) {
@@ -89,8 +89,8 @@ function normalizedMask(mask, width, box) {
   return output;
 }
 
-function rankSymbols(mask, width, box, templates) {
-  const sample = normalizedMask(mask, width, box);
+function rankSymbols(mask, width, box, templates, preserveThin = false) {
+  const sample = normalizedMask(mask, width, box, preserveThin);
   const scores = new Map();
   for (const {id, pixels} of templates) {
     let intersection = 0, union = 0;
@@ -126,7 +126,7 @@ function sameScanRegion(a, b) {
   return width * height >= .75 * Math.min(a.w * a.h, b.w * b.h);
 }
 
-function buildStitchTemplates(entries) {
+function buildStitchTemplates(entries, preserveThin = false) {
   const supported = new Set(["ch", "sc", "hdc", "dc", "tr", "dtr"]);
   const sample = document.createElement('canvas');
   sample.width = sample.height = 48;
@@ -141,7 +141,7 @@ function buildStitchTemplates(entries) {
     ctx.stroke(new Path2D(path));
     const mask = inkMask(ctx.getImageData(0, 0, 48, 48).data, 48, 48);
     const box = components(mask, 48, 48).sort((a,b) => b.area - a.area)[0];
-    return {id, pixels:normalizedMask(mask, 48, box)};
+    return {id, pixels:normalizedMask(mask, 48, box, preserveThin)};
   }));
 }
 

@@ -66,6 +66,6 @@ Project category selectors include Manage Categories and place Add New Category 
 
 ## Development checkpoint · Real-image benchmark and integrated 2.0 candidate
 
-The benchmark catalog, attribution records, and local runner live in [benchmark](../benchmark/README.md). The published symbol and photo sources are evaluation material and are outside the app bundle. The scanner preserves thin ink strokes when downsampling and retains manual confirmation. In help, users can explain the selected chart row locally or explicitly send a typed search to Wikimedia Commons. Only the search terms are sent. Saved result links remain available offline.
+The benchmark catalog, attribution records, and local runner live in [benchmark](../benchmark/README.md). The published symbol and photo sources are evaluation material and are outside the app bundle. The scanner retains manual confirmation. Thin-stroke resampling stays in the benchmark because the pilot found mixed results. In help, users can explain the selected chart row locally or explicitly send a typed search to Wikimedia Commons. Only the search terms are sent. Saved result links remain available offline.
 
 The local OCR prototype read parts of the published multilingual terminology sheet but misread DC in the cropped US abbreviation column. Neither OCR nor a fabric classifier is bundled. Free cloud inference remains deferred. The same-image cloud comparison would require an enabled provider and permission to send the test images. No cloud account, service charge, or image upload was introduced.
