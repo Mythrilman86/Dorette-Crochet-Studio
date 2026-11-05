@@ -2023,6 +2023,7 @@ function makeZip(files){
 }
 function readZip(bytes){
   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files=Object.create(null);let i=0,count=0;
+  const entries=new Map();
   while(i+30<=bytes.length&&view.getUint32(i,true)===0x04034b50){
     if(++count>12)throw new Error('Too many files in backup');
     const flags=view.getUint16(i+6,true),method=view.getUint16(i+8,true);
@@ -2033,8 +2034,25 @@ function readZip(bytes){
     const name=textDecoder.decode(bytes.subarray(i+30,i+30+nameLen)),content=bytes.subarray(start,start+len);
     if(crc32(content)!==checksum)throw new Error('Backup integrity check failed (CRC-32)');
     if(Object.hasOwn(files,name))throw new Error('Backup ZIP contains duplicate entries');
+    entries.set(i,{name,checksum,len});
     files[name]=content;i=start+len;
   }
+  const directoryStart=i;
+  const invalidDirectory=()=>new Error('Backup ZIP directory is missing, incomplete, or inconsistent');
+  while(i+46<=bytes.length&&view.getUint32(i,true)===0x02014b50){
+    const nameLen=view.getUint16(i+28,true),extraLen=view.getUint16(i+30,true),commentLen=view.getUint16(i+32,true);
+    const next=i+46+nameLen+extraLen+commentLen;
+    const offset=view.getUint32(i+42,true),entry=entries.get(offset);
+    if(next>bytes.length||!entry||view.getUint16(i+8,true)!==0||view.getUint16(i+10,true)!==0||
+      view.getUint16(i+34,true)!==0||view.getUint32(i+16,true)!==entry.checksum||
+      view.getUint32(i+20,true)!==entry.len||view.getUint32(i+24,true)!==entry.len||
+      textDecoder.decode(bytes.subarray(i+46,i+46+nameLen))!==entry.name)throw invalidDirectory();
+    entries.delete(offset);i=next;
+  }
+  if(entries.size||i+22>bytes.length||view.getUint32(i,true)!==0x06054b50||
+    view.getUint32(i+4,true)!==0||view.getUint16(i+8,true)!==count||view.getUint16(i+10,true)!==count||
+    view.getUint32(i+12,true)!==i-directoryStart||view.getUint32(i+16,true)!==directoryStart||
+    i+22+view.getUint16(i+20,true)!==bytes.length)throw invalidDirectory();
   return files;
 }
 function backupPayload(items,organization){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items,...(organization?{organization}: {})};}

@@ -34,6 +34,16 @@ test('project restore verifies ZIP bytes, previews, and only writes on confirmat
   await run(corrupt);
   assert.match(messages.pop(),/CRC-32/);
   assert.equal(preview.length,0);
+  const badDirectory=bytes.slice();
+  new DataView(badDirectory.buffer).setUint32(badDirectory.length-6,0,true);
+  const trailing=new Uint8Array(bytes.length+1);
+  trailing.set(bytes);
+  for(const malformed of [bytes.slice(0,-1),bytes.slice(0,-22),badDirectory,trailing]){
+    await run(malformed);
+    assert.match(messages.pop(),/ZIP directory/);
+  }
+  assert.equal(preview.length,0);
+  assert.equal(writes.length,0);
   await run(bytes);
   assert.match(preview[0],/1 active project.*0 Recycle Bin.*Existing projects will be kept/);
   assert.equal(writes.length,0);
