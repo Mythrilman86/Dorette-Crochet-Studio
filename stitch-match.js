@@ -126,7 +126,7 @@ function sameScanRegion(a, b) {
   return width * height >= .75 * Math.min(a.w * a.h, b.w * b.h);
 }
 
-function buildStitchTemplates(entries, preserveThin = false) {
+function buildStitchTemplates(entries, preserveThin = false, variations = false) {
   const supported = new Set(["ch", "sc", "hdc", "dc", "tr", "dtr"]);
   const sample = document.createElement('canvas');
   sample.width = sample.height = 48;
@@ -134,15 +134,99 @@ function buildStitchTemplates(entries, preserveThin = false) {
   const shapes = entries.filter(entry => supported.has(entry.id))
     .map(entry => ({id:entry.id, path:entry.path}));
   shapes.push({id:'sc', path:'M24 10v28M10 24h28'});
-  return shapes.flatMap(({id,path}) => [2, 3, 5].map(lineWidth => {
+  const widths = variations ? [1, 2, 3, 5] : [2, 3, 5];
+  const angles = variations ? [0, -12, 12] : [0];
+  return shapes.flatMap(({id,path}) => angles.flatMap(angle => widths.map(lineWidth => {
     ctx.clearRect(0, 0, 48, 48);
     ctx.lineCap = 'round';
     ctx.lineWidth = lineWidth;
+    ctx.save();
+    ctx.translate(24,24);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.translate(-24,-24);
     ctx.stroke(new Path2D(path));
+    ctx.restore();
     const mask = inkMask(ctx.getImageData(0, 0, 48, 48).data, 48, 48);
     const box = components(mask, 48, 48).sort((a,b) => b.area - a.area)[0];
     return {id, pixels:normalizedMask(mask, 48, box, preserveThin)};
-  }));
+  })));
 }
 
-if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence, adjustScanPixels, sameScanRegion};
+function suggestInkCrop(mask, width, height) {
+  const boxes = components(mask, width, height);
+  const largest = boxes.reduce((size, box) => Math.max(size, box.area), 0);
+  if (largest < 9) return null;
+  const keep = boxes.filter(box => box.area >= Math.max(9, largest * .04));
+  const left = keep.reduce((value, box) => Math.min(value, box.x), width);
+  const top = keep.reduce((value, box) => Math.min(value, box.y), height);
+  const right = keep.reduce((value, box) => Math.max(value, box.x + box.w), 0);
+  const bottom = keep.reduce((value, box) => Math.max(value, box.y + box.h), 0);
+  const pad = Math.max(3, Math.ceil(Math.max(right-left,bottom-top) * .05));
+  const x = Math.max(0,left-pad), y = Math.max(0,top-pad);
+  return {x,y,w:Math.min(width,right+pad)-x,h:Math.min(height,bottom+pad)-y};
+}
+
+function suggestScanRotation(mask, width, height) {
+  if (width < 48 || height < 30) return 0;
+  const points = [];
+  const stride = Math.max(1,Math.floor(Math.sqrt(width * height / 30000)));
+  for (let y = 0; y < height; y += stride) {
+    for (let x = 0; x < width; x += stride) {
+      if (mask[y * width + x]) points.push([x - width / 2,y]);
+    }
+  }
+  if (points.length < 90) return 0;
+  function projection(angle) {
+    const slope = Math.tan(angle * Math.PI / 180);
+    const rows = new Map();
+    for (const [x,y] of points) {
+      const row = Math.round((y + x * slope) / stride);
+      rows.set(row,(rows.get(row) || 0) + 1);
+    }
+    let energy = 0, peaks = 0;
+    for (const [row,count] of rows) {
+      energy += count * count;
+      if (count >= width / stride * .12 &&
+          count > (rows.get(row-1) || 0) && count >= (rows.get(row+1) || 0)) peaks++;
+    }
+    return {angle,energy,peaks};
+  }
+  const base = projection(0);
+  const candidates = [];
+  for (let angle = -15; angle <= 15; angle++) candidates.push(projection(angle));
+  candidates.sort((a,b) => b.energy-a.energy);
+  const best = candidates[0];
+  const other = candidates.find(value => Math.abs(value.angle-best.angle) >= 3);
+  return best.peaks >= 3 && best.energy > base.energy * 1.15 &&
+    best.energy > other.energy * 1.08 ? best.angle : 0;
+}
+
+function suggestScanTones(rgba, exposure, contrast) {
+  const histogram = new Uint32Array(256);
+  let count = 0;
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    if (rgba[offset+3] < 192) continue;
+    const gray = Math.round(rgba[offset] * .299 + rgba[offset+1] * .587 + rgba[offset+2] * .114);
+    histogram[gray]++;
+    count++;
+  }
+  if (count < 25) return null;
+  function percentile(fraction) {
+    let seen = 0;
+    for (let gray = 0; gray < histogram.length; gray++) {
+      seen += histogram[gray];
+      if (seen >= count*fraction) return gray;
+    }
+    return 255;
+  }
+  const low = percentile(.005), high = percentile(.98);
+  if (high-low < 16) return null;
+  const factor = 1 + contrast/100;
+  const originalHigh = (high-128-exposure)/factor + 128;
+  const spread = (high-low)/factor;
+  const adjusted = Math.min(2, Math.max(factor, 160/spread));
+  const nextExposure = Math.max(-100,Math.min(100,Math.round(235-128-(originalHigh-128)*adjusted)));
+  return {exposure:nextExposure,contrast:Math.round((adjusted-1)*100)};
+}
+
+if (typeof module !== 'undefined') module.exports = {inkMask, components, normalizedMask, rankSymbols, matchConfidence, adjustScanPixels, sameScanRegion, suggestInkCrop, suggestScanRotation, suggestScanTones};

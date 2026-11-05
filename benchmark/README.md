@@ -29,3 +29,19 @@ The default remains the established matcher. The thin-stroke experiment improved
 Tesseract.js processed the terminology table locally in about 164 ms on the development computer after initialization. The English worker recognized several stitch names, but omitted or misread short codes. The manually cropped US abbreviation column read CH and SC and misread DC. The source also uses DB for a UK abbreviation where the Craft Yarn Council uses dc. Transcription and terminology correctness must be scored separately. These are single-table measurements, not mobile performance or general OCR accuracy.
 
 Fabric samples were kept separate from symbols. No fabric classifier was scored. The app shows visual comparison guidance and reports uncertainty. Perspective correction, calibrated region-level evaluation, broader stitch coverage, mobile OCR, and cloud comparison are deferred. No images were uploaded to AI providers and no services or billing were enabled.
+
+## Version 2.1 scanner milestone
+
+The Edge benchmark loaded 23 of 26 cataloged sources. The three additions are a filet chart, a chain photograph, and a single-crochet instructional illustration. They add coverage outside standalone symbols. The same seven held-out standalone symbols remain the basis for the paired matcher comparison.
+
+| Held-out standalone symbols | Released top 1 / top 3 | Stroke and angle variants top 1 / top 3 | Released / candidate uncertain |
+| --- | --- | --- | --- |
+| Original | 3/7 / 5/7 | 3/7 / 5/7 | 6 / 6 |
+| Tilted 12 degrees | 3/7 / 4/7 | 3/7 / 5/7 | 7 / 5 |
+| Straightened raster | 3/7 / 5/7 | 3/7 / 5/7 | 6 / 6 |
+| Reduced contrast | 3/7 / 5/7 | 3/7 / 5/7 | 6 / 6 |
+| Contrast raised again | 3/7 / 5/7 | 3/7 / 5/7 | 6 / 6 |
+
+Both matchers had zero incorrect clear matches and zero rejected crops in these paired runs. The candidate remains benchmark-only. More independently drawn symbols are needed to evaluate a default change. Rotation and contrast perturbations in the table are scripted and measure matcher behavior, while the new optional photo controls have separate regression tests. The new filet chart has no region-level annotations. Fabric and instructional illustrations are cataloged separately and are outside these scores.
+
+The existing offline Tesseract.js result remains exploratory. Short-code errors on the published legend require a larger, independently transcribed legend set. No OCR or fabric model is bundled. Cloudflare Workers AI documents a daily free quota, which limits a shared public service. Cloud recognition remains disabled pending cost, privacy and comparative accuracy validation. See [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).

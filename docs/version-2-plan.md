@@ -69,3 +69,7 @@ Project category selectors include Manage Categories and place Add New Category 
 The benchmark catalog, attribution records, and local runner live in [benchmark](../benchmark/README.md). The published symbol and photo sources are evaluation material and are outside the app bundle. The scanner retains manual confirmation. Thin-stroke resampling stays in the benchmark because the pilot found mixed results. In help, users can explain the selected chart row locally or explicitly send a typed search to Wikimedia Commons. Only the search terms are sent. Saved result links remain available offline.
 
 The local OCR prototype read parts of the published multilingual terminology sheet but misread DC in the cropped US abbreviation column. Neither OCR nor a fabric classifier is bundled. Free cloud inference remains deferred. The same-image cloud comparison would require an enabled provider and permission to send the test images. No cloud account, service charge, or image upload was introduced.
+
+## Physical-device verification · Version 2.0.0
+
+After publication, the project owner reported that both the Samsung Galaxy S24 Ultra and Galaxy Tab S12 Ultra updated successfully through Studio's in-app Android updater. The owner confirmed that 2.0.0 runs on both devices, project pinning works, and Samsung S Pen selection works. These are owner-reported physical-device checks, separate from the emulator upgrade, offline, and signing checks in the 2.0 release report.

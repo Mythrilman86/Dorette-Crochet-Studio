@@ -397,10 +397,12 @@
       <details><summary>Adjust photo</summary>
         <div class="stitch-controls">
           <label>Straighten (degrees) <input id="stitchAngle" type="number" min="-180" max="180" step="1" value="0"></label>
+          <button id="stitchDeskew" type="button">Straighten printed rows</button>
           <button id="stitchRotateLeft" type="button">Rotate left 90°</button>
           <button id="stitchRotateRight" type="button">Rotate right 90°</button>
           <label>Exposure <input id="stitchExposure" type="range" min="-100" max="100" value="0"></label>
           <label>Contrast <input id="stitchContrast" type="range" min="-50" max="100" value="0"></label>
+          <button id="stitchAutoTones" type="button">Adjust lighting</button>
           <button id="stitchResetPhoto" type="button">Reset photo adjustments</button>
         </div>
         <p>Rotation resets the crop. If marks exist, Studio asks before clearing them.</p>
@@ -412,6 +414,7 @@
         <label>Top <input type="number" min="0" step="1"></label>
         <label>Width <input type="number" min="1" step="1"></label>
         <label>Height <input type="number" min="1" step="1"></label>
+        <button id="stitchAutoCrop" type="button">Fit crop to ink</button>
         <button id="stitchReset">Whole image</button>
       </div>
       <details open><summary>Magnified crop</summary><canvas id="stitchZoom" aria-label="Magnified crop"></canvas></details>
