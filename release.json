@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.3.0",
-    "notes": "Adds customizable Settings, Find a Tool shortcuts, application menus, a Projects drawer, transferable workspace preferences and edge resize previews."
+    "version": "2.3.1",
+    "notes": "Shows every section in Customize Layout, enlarges reorder controls, keeps menus in Crochet View, and adds safe bulk project actions."
   },
   "ios": null,
-  "version": "2.3.0",
-  "notes": "Adds customizable Settings, Find a Tool shortcuts, application menus, a Projects drawer, transferable workspace preferences and edge resize previews."
+  "version": "2.3.1",
+  "notes": "Shows every section in Customize Layout, enlarges reorder controls, keeps menus in Crochet View, and adds safe bulk project actions."
 }
