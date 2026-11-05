@@ -257,18 +257,24 @@ function queueWrite(project){
  refreshSaveState();
  return result;
 }
+let pendingSaveProjectId=null;
 function scheduleSave(){
  if(!active)return;
- if(studioReadOnly||!Ops.canWrite()){failedWrites.set(active.id,'Editing ownership was lost before saving');return;}
+ if(studioReadOnly||!Ops.canWrite()){failedWrites.set(active.id,'Editing ownership was lost before saving');refreshSaveState();return;}
  invalidateChartCache();queuePatternRender();
  active.updatedAt=new Date().toISOString();
  if(memoryOnly){failedWrites.set(active.id,'Local database unavailable');setSavePhase('blocked');return;}
  setSavePhase('unsaved');
- const id=active.id;clearTimeout(saveTimer);
- saveTimer=setTimeout(()=>{saveTimer=null;const p=projects.get(id);if(p)queueWrite(p).catch(()=>{});},420);
+ pendingSaveProjectId=active.id;clearTimeout(saveTimer);
+ saveTimer=setTimeout(()=>{void flushSave().catch(()=>{});},420);
 }
 function flushSave(){
- if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(active)queueWrite(active).catch(()=>{});}
+ if(saveTimer){
+   clearTimeout(saveTimer);saveTimer=null;
+   const project=projects.get(pendingSaveProjectId);pendingSaveProjectId=null;
+   if(project)queueWrite(project).catch(()=>{});
+   else refreshSaveState();
+ }
  return writeChain;
 }
 const pinnedDeleteMessage='Cannot Delete Pinned Project. This project is pinned and protected from deletion. To delete it, you must unpin it first.';
@@ -3823,7 +3829,7 @@ async function updateStorageIndicator(){
  const estimate=Ops.formatSize(summary.totalEstimate);
  const ratio=summary.ratio===null?'unknown':Math.round(summary.ratio*100)+'%';
  host.textContent=`Browser storage: ${used} of ${quota} (${ratio}). Approx. project payload: ${estimate}. ${summary.large.map(p=>p.name+': '+Ops.formatSize(p.bytes)).join(' · ')}`;
- if(summary.warning){$('storageInfo').classList.add('storage-danger');host.textContent+=' · Storage nearly full. Keep a private project ZIP backup.';}
+ if(summary.warning){$('storageInfo').classList.add('storage-danger');host.textContent+=' · Storage may be nearly full. Check the save status. If a save fails, export a private project ZIP, free space outside Studio, then use Retry saving.';}
  else host.classList.remove('storage-danger');
 }
 async function safeMajorCopy(reason){
@@ -4545,6 +4551,9 @@ function hookEvents(){
   $('deleteProject').addEventListener('click',removeActiveProject);
   new ResizeObserver(resizeCanvas).observe($('canvasWrap'));
   new ResizeObserver(requestDraw).observe(overviewCanvas);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden&&saveTimer)void flushSave().catch(()=>{});
+  });
   window.addEventListener('pagehide',()=>{pageClosing=Promise.resolve(flushSave()).then(()=>Ops.release(),()=>Ops.release());});
   window.addEventListener('pageshow',ev=>{if(ev.persisted)void retryEditing();});
   window.addEventListener('beforeunload',ev=>{if(needsSave()){flushSave();ev.preventDefault();ev.returnValue='';}});
