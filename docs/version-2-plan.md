@@ -105,3 +105,15 @@ The standalone JSON allowlist covers Settings sections, tool shortcuts, panel vi
 Studio already debounces project writes, serializes them, tracks failed writes for retry, uses a single editing owner across tabs, and audits project records before backup. Restore saves copies through an IndexedDB transaction. Storage estimates and save warnings are advisory. The settings import waits for pending saves before reopening and restores previously written preference keys on a write error. Legacy ZIP workspace import shares this rollback path.
 
 Rendering caches composed colors and visible chart tiles by revision. The existing worker handles expensive image conversion. Offline browser tests cover cache reuse and save/reopen, and the Android fixture checks offline startup. Long-running memory growth, sustained frame timing on very large charts, and Android background/resume under nearly full storage still need device profiling. Prioritize a repeatable large-chart trace and a near-quota interrupted-save recovery drill before changing the render or save engines.
+
+## Version 2.4.0 initial verification
+
+- Stable baseline is 2.3.4 at fad0ecf with 42 tests. Website and native builds share the same assets. Capacitor 8.6.0 remains the native shell. IndexedDB schema and both backup formats are unchanged.
+- Save requests already serialize and report success after transaction completion. Pending debounce now flushes when the document backgrounds and retains its original project ID. An aborted write still leaves the last committed IndexedDB record intact. No recovery copy can recover changes that never reached storage.
+- Progress totals now skip fully marked rows and are shared within selection and progress refreshes. Run node scripts/benchmark-progress.mjs to repeat the isolated calculation check. Median milliseconds at 79 × 117, 120 × 165, and 200 × 300 with half the rows marked were 0.014 → 0.002, 0.029 → 0.005, and 0.089 → 0.015 on the development host. This measures the calculation only, not frame rate or touch latency.
+- Command and backup dialogs now honor dynamic viewport height and safe areas, retain scrolling, and show keyboard focus. The phone toolbar and tablet menu rules are unchanged.
+- Remaining quality gates include extended Android background and near-quota recovery, full chart interaction and memory traces at each size, backup preview evaluation, and physical Samsung checks.
+
+### Release checklist
+
+Before requesting approval, verify web, Android, and iOS CI on the exact head. Check package ID, higher version code and signer against the public 2.3.4 APK. Install the candidate over that exact APK on a disposable emulator without uninstalling between versions. Compare populated saved records offline and verify both backup formats. After explicit owner approval, publish only the verified signed bytes. Check the public download digest, Pages, and Studio Updates.
