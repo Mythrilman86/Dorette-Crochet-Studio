@@ -457,6 +457,44 @@ function setupProjectOrganization(){
   });
 }
 
+const bulkProjects=new Set();
+let bulkMode=false;
+function visibleBulkProjects(){
+  const query=String($('projectSearch')?.value||'').toLowerCase(),filter=$('categoryFilter')?.value||'',only=$('onlyFavorites')?.checked;
+  return [...projects.values()].filter(p=>p.name.toLowerCase().includes(query)||String(p.category||'Other').toLowerCase().includes(query)).filter(p=>(!filter||filter===(p.category||'Other'))&&(!only||p.favorite)).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+function updateBulkProjectControls(){
+  $('bulkProjectControls').hidden=!bulkMode;
+  $('toggleBulkProjects').textContent=bulkMode?'Done selecting':'Select Projects';
+  $('toggleBulkProjects').setAttribute('aria-pressed',String(bulkMode));
+  $('bulkProjectCount').textContent=bulkProjects.size+' selected';
+  $('applyBulkProjects').disabled=!bulkProjects.size||studioReadOnly;
+}
+async function applyBulkProjectAction(){
+  if(!bulkMode||organizationBusy)return;
+  const selectedProjects=visibleBulkProjects().filter(p=>bulkProjects.has(p.id));
+  if(!selectedProjects.length)return;
+  const action=$('bulkProjectAction').value;
+  if(action==='recycle'){
+    if(selectedProjects.some(p=>p.pinned))return toast('Unpin the selected pinned projects before moving them to the Recycle Bin.');
+    if(!confirm('Move '+selectedProjects.length+' selected project(s) to the Recycle Bin? You can restore them later.'))return;
+    const records=selectedProjects.map(p=>({...p,trashedAt:new Date().toISOString()}));
+    const replacement=records.length===projects.size?blankProject('My First Chart',79,117):null;
+    await organizeProjects(replacement?[...records,replacement]:records,[],null,()=>{
+      for(const record of records){projects.delete(record.id);recycledProjects.set(record.id,record);}
+      if(replacement)projects.set(replacement.id,replacement);
+      if(!projects.has(activeId))selectProject(projects.keys().next().value);
+      bulkProjects.clear();
+    });
+    return;
+  }
+  const flags={pin:{pinned:true},unpin:{pinned:false},favorite:{favorite:true},unfavorite:{favorite:false}}[action];
+  if(!flags)return;
+  await organizeProjects(selectedProjects.map(p=>({...p,...flags})),[],null,()=>{
+    for(const project of selectedProjects)Object.assign(project,flags);
+    bulkProjects.clear();
+  });
+}
 function refreshProjectList(){
   const list=$('projectList');list.replaceChildren();
   $('projectCount').textContent=projects.size;
@@ -467,8 +505,10 @@ function refreshProjectList(){
     const group=document.createElement('section');group.className='project-group';group.hidden=true;
     const heading=document.createElement('h3');heading.textContent=label;group.append(heading);list.append(group);groups.set(pin,group);
   }
-  const query=String($('projectSearch')?.value||'').toLowerCase(),filter=$('categoryFilter')?.value||'',only=$('onlyFavorites')?.checked;
-  [...projects.values()].filter(p=>p.name.toLowerCase().includes(query)||String(p.category||'Other').toLowerCase().includes(query)).filter(p=>(!filter||filter===(p.category||'Other'))&&(!only||p.favorite)).sort((a,b)=>String(b.updatedAt).localeCompare(String(a.updatedAt))).forEach(p=>{
+  const visible=visibleBulkProjects(),ids=new Set(visible.map(p=>p.id));
+  for(const id of bulkProjects)if(!ids.has(id))bulkProjects.delete(id);
+  updateBulkProjectControls();
+  visible.forEach(p=>{
     const item=document.createElement('div');item.className='gallery-item'+(p.id===activeId?' active':'');
     const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';
     const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
@@ -485,7 +525,12 @@ function refreshProjectList(){
     choose.append(title,meta);choose.addEventListener('click',()=>selectProject(p.id));
     const fav=document.createElement('button');fav.type='button';fav.className='gallery-favorite';fav.textContent=p.favorite?'★':'☆';fav.title='Toggle favorite';fav.setAttribute('aria-label','Favorite '+p.name);
     fav.addEventListener('click',()=>changeProjectFlags(p,{favorite:!p.favorite}));
-    item.append(thumb,choose,fav,projectMenu(p));
+    if(bulkMode){
+      const label=document.createElement('label');label.className='bulk-project-row';
+      const box=document.createElement('input');box.type='checkbox';box.checked=bulkProjects.has(p.id);
+      box.onchange=()=>{if(box.checked)bulkProjects.add(p.id);else bulkProjects.delete(p.id);updateBulkProjectControls();};
+      label.append(box,thumb,title,meta);item.append(label);
+    }else item.append(thumb,choose,fav,projectMenu(p));
     const group=groups.get(p.pinned===true);group.hidden=false;group.append(item);
   });
 }
@@ -2408,6 +2453,9 @@ function setCrochetView(enabled){
   if(enabled&&(!active||pendingConversion))return toast('Finish the chart preview before opening Crochet View.');
   if(enabled===inCrochetView())return;
   document.body.classList.toggle('crochet-view',enabled);
+  const nav=$('appNavigation');
+  if(enabled)document.querySelector('.crochet-view-actions').append(nav);
+  else document.querySelector('.topbar').insertBefore(nav,document.querySelector('.header-right'));
   $('focusGuideDetails').hidden=!enabled;
   $('focusGuideSettings').hidden=!enabled;
   void updateWakeLock();
@@ -3689,6 +3737,14 @@ function setupAppNavigation(){
   $('headerFindTool').onclick=()=>{close();$('openCommandSearch').click();};
   function go(id,action){
     const node=id==='guidePdf'?document.querySelector('.guide-link'):$(id);if(!node)return;
+    if(inCrochetView()&&['toggleProjects','toggleSettings'].includes(id)){
+      setStudioMode('edit');
+      if(node.dataset.hidden==='1')node.click();
+      const target=id==='toggleSettings'?$('customizeSettings'):$('projectSearch');
+      target.scrollIntoView({block:'center'});target.focus({preventScroll:true});
+      return;
+    }
+    if(inCrochetView()&&(node.closest('.inspector,.sidebar,.stitch-editor')||['undoButton','redoButton','editLastText','quickTextLayer','openChartStructure'].includes(id)))return toast('Exit Crochet View to use this command. Your crochet progress stays saved.');
     if(action){
       if(node.disabled){
         const reasons={undoButton:'There is no chart change to undo.',redoButton:'There is no chart change to redo.',
@@ -3729,6 +3785,7 @@ function setupAppNavigation(){
       if(modal.dispatchEvent(new Event('cancel',{cancelable:true})))modal.close();
       return true;
     }
+    if($('settingsJump').open){$('settingsJump').open=false;$('settingsJump').querySelector('summary').focus();return true;}
     if(nav.classList.contains('menu-open')||nav.querySelector('details[open]')){close(true);return true;}
     if(matchMedia('(max-width:920px)').matches&&!inCrochetView()&&projects.dataset.hidden!=='1'){
       projects.click();projects.focus();return true;
@@ -3766,11 +3823,12 @@ function setupSettingsLayout(){
     setTimeout(()=>heading.classList.remove('settings-highlight'),1400);
   }
   function renderShortcuts(){
-    jump.replaceChildren(new Option('Choose a section',''));
+    jump.replaceChildren();
     const host=$('favoriteSettings');host.replaceChildren();
     for(const key of order){
       const section=settingsSections.get(key),label=section.dataset.settingsLabel;
-      jump.add(new Option(label,key));
+      const entry=make('button','button ghost',label);
+      entry.onclick=()=>{jump.closest('details').open=false;navigate(section);};jump.append(entry);
       if(favorites.has(key)){
         const shortcut=make('button','button ghost',label);
         shortcut.onclick=()=>navigate(section);host.append(shortcut);
@@ -3797,7 +3855,7 @@ function setupSettingsLayout(){
     if(!original)continue;
     const raw=(original.querySelector('h2,.eyebrow')||original).textContent.trim();
     const label=raw===raw.toUpperCase()?raw.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()).replace(/\bPdf\b/g,'PDF'):raw;
-    const key=section.id||raw.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    const key=section.dataset.settingsKey||section.id||raw.toLowerCase().replace(/[^a-z0-9]+/g,'-');
     section.dataset.settingsLabel=label;section.dataset.settingsKey=key;
     section.classList.add('settings-section');original.classList.add('settings-original-heading');
     if(section.tagName==='DETAILS')section.open=true;
@@ -3835,7 +3893,11 @@ function setupSettingsLayout(){
   }
   order=[...new Set([...strings(saved.order).filter(key=>settingsSections.has(key)),...defaults])];
   renderOrder();
-  jump.onchange=()=>{const section=settingsSections.get(jump.value);jump.value='';navigate(section);};
+  const chooser=$('settingsJump');
+  document.addEventListener('pointerdown',event=>{if(!chooser.contains(event.target))chooser.open=false;});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&chooser.open){event.preventDefault();chooser.open=false;chooser.querySelector('summary').focus();}
+  });
   const customize=$('customizeSettings'),reset=$('resetSettingsOrder'),status=$('settingsLayoutStatus');
   customize.onclick=()=>{
     const editing=inspector.classList.toggle('settings-customizing');
@@ -4293,6 +4355,10 @@ async function initialize(){
   setupSettingsLayout();
   setupPolishTools();
   setupAppNavigation();
+  $('toggleBulkProjects').onclick=()=>{bulkMode=!bulkMode;bulkProjects.clear();refreshProjectList();};
+  $('selectVisibleProjects').onclick=()=>{for(const project of visibleBulkProjects())bulkProjects.add(project.id);refreshProjectList();};
+  $('clearBulkProjects').onclick=()=>{bulkProjects.clear();refreshProjectList();};
+  $('applyBulkProjects').onclick=()=>void applyBulkProjectAction();
   if(studioReadOnly)setTabReadOnly(false);
 }
 initialize().catch(e=>{status('Unable to open workspace',true);toast(e.message);});

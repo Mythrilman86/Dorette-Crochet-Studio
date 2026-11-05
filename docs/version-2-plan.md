@@ -93,3 +93,7 @@ The owner confirmed eight checks on the Samsung Galaxy S24 Ultra and Galaxy Tab 
 ## Version 2.3 workspace development
 
 The edge controls state where rows and columns are added or removed. The Settings milestone adds collapsible headings, section navigation, local favorites, and whole-section ordering. Find a Tool uses local keywords and aliases, with separate favorite and recent tool lists. The app menu routes to existing controls. Projects opens as a drawer on smaller screens and remembers visibility separately from Settings. Full ZIP backups can optionally include workspace preferences. Restore asks before applying them. The bundled guide begins with the current quick-start pages and keeps the earlier illustrated reference. Physical Android back-button and S Pen checks, native upgrade verification, and release verification remain pending.
+
+## Version 2.3.0 physical-device verification
+
+The owner confirmed in-place updating and project preservation, Find a Tool, top menus, the Projects drawer, workspace transfer, safe resizing and the offline guide on both Samsung devices. Tablet S Pen testing passed. Customize Layout showed only three sections on both devices and did not pass. The 2.3.1 draft separates its complete section list from ordinary Beginner and workspace filters.

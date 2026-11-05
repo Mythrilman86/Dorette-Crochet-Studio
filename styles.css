@@ -217,9 +217,9 @@ body.unpinned-dock .crochet-dock{position:static}
 .v16-note button:first-child{flex:1;text-align:left;min-width:125px;white-space:normal}
 .v16-note .v16-remove{color:#a04958}
 body.beginner-mode .advanced-edit-toolbar,body.beginner-mode .motif-tools,body.beginner-mode #motifPreviewTools,
-body.beginner-mode #layerPanel,body.beginner-mode #patternHealth,body.beginner-mode #yarnLibraryPanel,
-body.beginner-mode #texturePanel,body.beginner-mode #shapesPanel,body.beginner-mode #versionHistoryPanel,
-body.beginner-mode #measurementPanel,body.beginner-mode #textStyleFavorite,
+body.beginner-mode .inspector:not(.settings-customizing) #layerPanel:not(.settings-revealed),body.beginner-mode .inspector:not(.settings-customizing) #patternHealth:not(.settings-revealed),body.beginner-mode .inspector:not(.settings-customizing) #yarnLibraryPanel:not(.settings-revealed),
+body.beginner-mode .inspector:not(.settings-customizing) #texturePanel:not(.settings-revealed),body.beginner-mode .inspector:not(.settings-customizing) #shapesPanel:not(.settings-revealed),body.beginner-mode .inspector:not(.settings-customizing) #versionHistoryPanel:not(.settings-revealed),
+body.beginner-mode .inspector:not(.settings-customizing) #measurementPanel:not(.settings-revealed),body.beginner-mode #textStyleFavorite,
 body.beginner-mode .next-text-favorites{display:none!important}
 body.beginner-mode .editor-tools .edit-tool:not(#toolSelect):not(#toolPaint):not(#toolErase):not(#toolPan){display:none}
 body.accessible-contrast .stitch-editor,body.accessible-contrast .chart-pane,body.accessible-contrast .guide-dock{outline:2px solid #35264b;outline-offset:1px}
@@ -341,3 +341,14 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 @media(min-width:1451px){body.hide-projects:not(.hide-settings):not(.crochet-view) .layout{grid-template-columns:minmax(0,1fr) 290px}body.hide-settings:not(.hide-projects):not(.crochet-view) .layout{grid-template-columns:238px minmax(0,1fr)}}
 @media(min-width:921px) and (max-width:1450px){body.hide-settings:not(.hide-projects):not(.crochet-view) .layout{grid-template-columns:180px minmax(0,1fr)}}
 @media(max-width:920px){body:not(.crochet-view) .layout{grid-template-columns:minmax(0,1fr)}body:not(.crochet-view) .sidebar{position:fixed;inset:0 auto 0 0;width:min(360px,90vw);overflow:auto;z-index:24;box-shadow:0 0 24px #2e194942;padding-top:max(16px,env(safe-area-inset-top))}}
+body .inspector.settings-customizing>[data-settings-key]{display:flex!important}
+body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.beginner-mode .inspector>.settings-section.settings-revealed{display:flex!important}
+.inspector.settings-customizing>.settings-section>:not(.settings-section-header){display:none!important}
+.settings-customizing .settings-section-header{flex-wrap:wrap}
+.settings-customizing .settings-reorder{gap:5px}.settings-customizing .settings-reorder button{min-width:46px;min-height:46px;border:1px solid #9d82b9;font-size:1.05rem;font-weight:800;background:#fff}
+.settings-grip:active{background:#d8c1f2!important;cursor:grabbing}
+#settingsJump summary{cursor:pointer;padding:10px;min-height:44px;font-weight:750;background:#ede3f7;border-radius:8px}
+#jumpSettings{display:grid;gap:4px;max-height:32dvh;overflow:auto;padding:5px}
+#jumpSettings button{text-align:left}
+.crochet-view .crochet-view-actions .app-navigation{position:relative}
+#bulkProjectControls[hidden]{display:none}.bulk-project-row{grid-column:1/-1;display:flex;align-items:center;gap:7px;min-height:48px;flex-wrap:wrap}.bulk-project-row input[type=checkbox]{width:20px;height:20px;flex:none}
