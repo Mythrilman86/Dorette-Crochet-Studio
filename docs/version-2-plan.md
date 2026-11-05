@@ -57,3 +57,9 @@ Cloudflare remains a bounded trial candidate on its Free plan. No provider accou
 [Local Tesseract.js assets](https://github.com/naptha/tesseract.js/blob/master/docs/local-installation.md) · [Tesseract training data](https://github.com/tesseract-ocr/tessdata_fast) · [Android ML Kit OCR](https://developers.google.com/ml-kit/vision/text-recognition/v2/android) · [Apple Vision OCR](https://developer.apple.com/documentation/vision/recognizing-text-in-images)
 
 A real [CC0 single-crochet swatch photographed by Kawan856](https://commons.wikimedia.org/wiki/File:Single_crochet_swatch.jpg) was imported into the offline browser test. Fabric mode enlarged the sample and returned Uncertain as designed. The photograph was used as a local test asset. This confirms safe handling of one real swatch. It does not measure classifier accuracy or replace a labeled chart and fabric benchmark.
+
+## Development checkpoint · Project organization
+
+The project panel groups matching pinned projects ahead of other matching projects and keeps Favorites independent. Both deletion entry points use the same pinned-project check. The Recycle Bin stores full project records locally and requires confirmation for permanent deletion. Organization mutations commit before the project list changes, and ZIP restores insert new IDs.
+
+Project category selectors include Manage Categories and place Add New Category last. The filter contains names only. Custom category renames and reassignments update active and recycled projects in one transaction. Default categories are protected. Full-library ZIPs preserve catalog names and recycled records using an optional organization field while keeping the original backup version. Restore an older ZIP normally. Use a full backup before moving between application versions, since v1.8.4 has no Recycle Bin interface.

@@ -34,10 +34,10 @@
   <main class="layout">
     <aside class="sidebar" aria-label="Projects">
       <div class="panel-heading"><div><span class="eyebrow">YOUR WORKSPACE</span><h2>Projects</h2></div><span id="projectCount" class="count">0</span></div>
-      <label class="field">Filter projects <input id="projectSearch" placeholder="Search name or category"></label><label class="field">Category filter <select id="categoryFilter"><option value="">All categories</option><option>Blankets</option><option>Garments</option><option>Gifts</option><option>Practice</option><option>Other</option></select></label><label class="toggle"><input id="onlyFavorites" type="checkbox"> Favorites only</label><div id="projectList" class="project-list"></div>
+      <label class="field">Filter projects <input id="projectSearch" placeholder="Search name or category"></label><label class="field">Category filter <select id="categoryFilter"><option value="">All categories</option><option>Blankets</option><option>Garments</option><option>Gifts</option><option>Practice</option><option>Other</option></select></label><label class="toggle"><input id="onlyFavorites" type="checkbox"> Favorites only</label><div id="projectList" class="project-list"></div><details class="project-bin" id="projectBin"><summary>Recycle Bin (<span id="projectBinCount">0</span>)</summary><div id="projectBinList"></div><button id="emptyProjectBin" class="button ghost" type="button">Empty Recycle Bin</button></details>
       <details id="newProjectDetails" class="new-project"><summary>＋ New crochet project</summary>
         <form id="newProjectForm" class="stack form-fields">
-          <label>Project name<input id="newName" maxlength="70" value="New Crochet Chart" required></label>
+          <label>Category<select id="newProjectCategory"><option>Other</option></select></label><label>Project name<input id="newName" maxlength="70" value="New Crochet Chart" required></label>
           <div class="pair"><label>Columns<input id="newCols" type="number" min="1" max="200" value="79" required></label><label>Rows<input id="newRows" type="number" min="1" max="300" value="117" required></label></div>
           <label>Starter template<select id="projectTemplate"><option value="custom">Custom dimensions</option><option value="square">Square design 50 × 50</option><option value="blanket">Blanket chart 120 × 165</option><option value="border">Border strip 120 × 24</option><option value="initials">Initials 40 × 30</option></select></label><button type="submit" class="button primary block">Create project</button>
         </form>
@@ -331,7 +331,7 @@
       <div class="section-divider"></div>
       <div class="inspector-section"><span class="eyebrow">SAVE & BACK UP</span><div class="stack"><button id="exportProject" class="button secondary block">⇩ Back up this project (ZIP)</button><button id="shareProject" class="button ghost block" type="button">Share this project (ZIP)</button><button id="exportAll" class="button secondary block">⇩ Back up all projects (ZIP)</button><button id="restoreProject" class="button ghost block">↥ Restore a ZIP backup</button></div><p class="muted">Upload exported ZIP files to Google Drive manually. Restores create new copies, so existing work is never overwritten.</p></div>
       <div class="section-divider"></div>
-      <button id="deleteProject" class="text-button danger">Delete current project</button>
+      <button id="deleteProject" class="text-button danger">Move current project to Recycle Bin</button>
     </aside>
   </main>
   <dialog id="tutorialDialog" class="compare-dialog"><div class="compare-head"><h2>Studio guided tour</h2><button id="closeTutorial" class="button ghost" type="button">Close ✕</button></div><div id="tutorialContent" class="tutorial-content"></div><div class="pair"><button id="tutorialPrev" class="button ghost" type="button">← Previous</button><button id="tutorialNext" class="button primary" type="button">Next →</button></div></dialog>
@@ -354,6 +354,20 @@
     <p class="muted compare-footnote">The larger chart requires 10,557 more stitches. Zoom in on PUERTO RICAN and Boyfriend before making a decision.</p>
   </dialog>
 
+  <dialog id="categoryNameDialog" aria-labelledby="categoryNameTitle">
+    <form id="categoryNameForm" class="stack">
+      <h2 id="categoryNameTitle">Add category</h2>
+      <label class="field">Category Name<input id="categoryName" required maxlength="48"></label>
+      <p id="categoryNameError" role="alert"></p>
+      <div class="pair"><button id="categoryNameSave" class="button primary" type="submit">Add Category</button><button id="categoryNameCancel" class="button ghost" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+  <dialog id="categoryManager" aria-labelledby="categoryManagerTitle">
+    <h2 id="categoryManagerTitle">Manage Categories</h2>
+    <p class="muted">Counts include projects in the Recycle Bin.</p>
+    <div id="categoryManagerList"></div>
+    <div class="pair"><button id="categoryManagerAdd" class="button secondary" type="button">Add Category</button><form method="dialog"><button class="button ghost">Close</button></form></div>
+  </dialog>
   <input id="backupFile" type="file" class="visually-hidden" accept=".zip,.json,application/zip,application/json">
   <div class="toast" id="toast" aria-live="polite"></div>
   <script src="./pattern-tools.js?v=1.8.1" defer></script>

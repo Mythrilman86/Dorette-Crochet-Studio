@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 function engine(file) {
   const source = readFileSync(file, 'utf8').replace(/^initialize\(\)\.catch.*$/m,
-    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, DB_NAME, DB_VERSION };');
+    'window.backupApi = { makeZip, readZip, backupPayload, validateBackup, readProjectBackup, DB_NAME, DB_VERSION };');
   const window = { addEventListener() {} };
   const element = { getContext: () => ({}), addEventListener() {} };
   vm.runInNewContext(source, {
@@ -40,4 +40,29 @@ test('legacy ZIP projects round-trip between website and mobile', () => {
   assert.equal(mobile.DB_VERSION, web.DB_VERSION);
   data[41] ^= 1;
   assert.throws(() => mobile.readZip(data), /integrity check failed/);
+});
+
+test('organization backups preserve pins, favorites, custom categories and recycle data', () => {
+  const {backupPayload, readProjectBackup} = engine('dist/app.js');
+  const chart = {
+    id:'existing', name:'Sample', cols:1, rows:1, cells:[0], done:[1], rowDone:[1],
+    palette:[{hex:'#ffffff',name:'White',symbol:'A'}], notes:'Keep this note',
+    category:'  Winter   gifts ', favorite:true, pinned:true
+  };
+  const payload = backupPayload([chart], {
+    categories:['Winter gifts','WINTER GIFTS','blankets','Unused'],
+    recycleBin:[{...chart,pinned:false,favorite:false,trashedAt:'2026-11-04T00:00:00Z'}]
+  });
+  const restored = readProjectBackup(payload);
+  assert.deepEqual(Array.from(restored.categories), ['Winter gifts','Unused']);
+  assert.equal(restored.projects[0].category, 'Winter gifts');
+  assert.equal(restored.projects[0].pinned, true);
+  assert.equal(restored.projects[0].favorite, true);
+  assert.equal(restored.recycled[0].pinned, false);
+  assert.equal(restored.recycled[0].favorite, false);
+  assert.equal(restored.recycled[0].done[0], 1);
+  assert.equal(restored.recycled[0].notes, chart.notes);
+  assert.notEqual(restored.recycled[0].id, restored.projects[0].id);
+  assert.notEqual(restored.projects[0].id, chart.id);
+  assert.throws(() => readProjectBackup(backupPayload([chart], {recycleBin:[chart]})), /pinned project/);
 });

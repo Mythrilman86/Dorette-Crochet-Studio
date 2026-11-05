@@ -303,3 +303,17 @@ body.crochet-view:not(.unpinned-dock){overflow:hidden;padding-bottom:0}
 @media(max-width:640px){.crochet-view:not(.unpinned-dock) .crochet-dock-summary{flex-basis:100%}.crochet-view:not(.unpinned-dock) .crochet-dock .button{flex:1 1 27%}}
 
 #focusGuideSettings[hidden]{display:none}
+
+.project-group{display:grid;gap:7px;min-width:0}.project-group h3{margin:0;color:#655775;font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+.project-menu{position:relative}.project-menu summary{list-style:none;cursor:pointer;min-width:40px;min-height:40px;display:grid;place-items:center;font-size:1.35rem}.project-menu summary::-webkit-details-marker{display:none}
+.project-menu-actions{display:grid;gap:4px;margin-top:4px}.project-menu[open]{grid-column:1/-1}.project-menu-actions button{text-align:left;min-height:40px}
+.project-bin{padding:8px;border:1px solid #e7dfee;border-radius:8px;font-size:.83rem}.project-bin summary{cursor:pointer}.project-bin-row,.category-manager-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:7px 0}.project-bin-row strong,.category-manager-row strong{flex:1;overflow-wrap:anywhere}
+#categoryNameDialog,#categoryManager{max-width:min(95vw,500px);max-height:85dvh;border:1px solid #cfc1df;border-radius:12px;padding:16px}#categoryNameDialog::backdrop,#categoryManager::backdrop{background:#221b3480}
+#categoryNameError{color:#a02a40;font-size:.8rem}.project-menu summary:focus-visible,.project-bin summary:focus-visible{outline:2px solid #6955a5;outline-offset:2px}
+
+#projectList{display:flex;flex-direction:column;overflow:visible}
+.project-group[hidden]{display:none}
+.project-group .gallery-item{display:grid;grid-template-columns:54px minmax(0,1fr) auto auto;gap:4px}
+.project-group .gallery-thumb{grid-column:1;grid-row:1}.project-group .gallery-choose{grid-column:2;grid-row:1;min-width:0}
+.project-group .gallery-favorite{grid-column:3;grid-row:1}.project-group .project-menu{grid-column:4;grid-row:1}
+.project-group .project-menu[open]{grid-column:1/-1;grid-row:2}
