@@ -257,18 +257,24 @@ function queueWrite(project){
  refreshSaveState();
  return result;
 }
+let pendingSaveProjectId=null;
 function scheduleSave(){
  if(!active)return;
- if(studioReadOnly||!Ops.canWrite()){failedWrites.set(active.id,'Editing ownership was lost before saving');return;}
+ if(studioReadOnly||!Ops.canWrite()){failedWrites.set(active.id,'Editing ownership was lost before saving');refreshSaveState();return;}
  invalidateChartCache();queuePatternRender();
  active.updatedAt=new Date().toISOString();
  if(memoryOnly){failedWrites.set(active.id,'Local database unavailable');setSavePhase('blocked');return;}
  setSavePhase('unsaved');
- const id=active.id;clearTimeout(saveTimer);
- saveTimer=setTimeout(()=>{saveTimer=null;const p=projects.get(id);if(p)queueWrite(p).catch(()=>{});},420);
+ pendingSaveProjectId=active.id;clearTimeout(saveTimer);
+ saveTimer=setTimeout(()=>{void flushSave().catch(()=>{});},420);
 }
 function flushSave(){
- if(saveTimer){clearTimeout(saveTimer);saveTimer=null;if(active)queueWrite(active).catch(()=>{});}
+ if(saveTimer){
+   clearTimeout(saveTimer);saveTimer=null;
+   const project=projects.get(pendingSaveProjectId);pendingSaveProjectId=null;
+   if(project)queueWrite(project).catch(()=>{});
+   else refreshSaveState();
+ }
  return writeChain;
 }
 const pinnedDeleteMessage='Cannot Delete Pinned Project. This project is pinned and protected from deletion. To delete it, you must unpin it first.';
@@ -661,13 +667,14 @@ function redo(){
 }
 function updateSelection(){
   updateProgressUndo();
-  if(inCrochetView()){renderCrochetProgress();renderFocusRowColors();}
+  const counts=completionCounts();
+  if(inCrochetView()){renderCrochetProgress(counts.done,counts.total);renderFocusRowColors();}
   $("markRow").setAttribute("aria-pressed",String(progressBrush==="row"));
   $("markRow").textContent=progressBrush==="row"?"✓ Mark row mode on":"✓ Mark row";
   $("markStitch").setAttribute("aria-pressed",String(progressBrush==="mark"));
   $("markStitch").textContent=progressBrush==="mark"?"✓ Mark stitch mode on":"✓ Mark stitch";
-  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
-  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard();return;}
+  if(pendingConversion){$('selectedCell').textContent='Preview only — apply or discard to edit';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard(counts);return;}
+  if(!selected){$('selectedCell').textContent='Tap any square to begin';$('markStitch').disabled=!!pendingConversion;$('markRow').disabled=!!pendingConversion;$('paintStitch').disabled=true;updateDashboard(counts);return;}
   const i=indexFor(selected.col,selected.row),d=!!active.done[i]||!!active.rowDone[selected.row-1];
   $('jumpRow').value=selected.row;$('jumpCol').value=selected.col;
   $('selectedCell').textContent=`Row ${selected.row} · Column ${selected.col} ${d?'· Complete':''}`;
@@ -675,29 +682,31 @@ function updateSelection(){
   $('markStitch').disabled=false;$('markRow').disabled=false;$('paintStitch').disabled=false;
 
 
-  updateDashboard();
+  updateDashboard(counts);
 }
 function completionCounts(project=active){
   if(!project)return {done:0,total:0,rowsDone:0};
-  let done=0;
-  for(let i=0;i<project.done.length;i++){
-    const fromTop=Math.floor(i/project.cols),row=project.rows-fromTop;
-    if(project.done[i]||project.rowDone[row-1])done++;
+  let done=0,rowsDone=0;
+  const {cols,rows}=project;
+  for(let row=0;row<rows;row++){
+    if(project.rowDone[rows-row-1]){done+=cols;rowsDone++;continue;}
+    const end=(row+1)*cols;
+    for(let i=row*cols;i<end;i++)done+=project.done[i]?1:0;
   }
-  return {done,total:project.cols*project.rows,rowsDone:project.rowDone.filter(Boolean).length};
+  return {done,total:cols*rows,rowsDone};
 }
 function updateProgress(){
   refreshSections();
   if(!active)return;
-  const {done,total}=completionCounts(active),pct=Math.round(done/total*100);
+  const counts=completionCounts(active),{done,total}=counts,pct=Math.round(done/total*100);
   $('progressText').textContent=`${format(done)} / ${format(total)} stitches`;
   $('progressPercent').textContent=pct+'%';$('progressBar').style.width=pct+'%';
-  updateDashboard();
+  updateDashboard(counts);
   if(inCrochetView()){renderCrochetProgress(done,total);renderFocusRowColors();}
 }
-function updateDashboard(){
+function updateDashboard(counts=completionCounts()){
   if(!active)return;
-  const {done,total,rowsDone}=completionCounts(active);
+  const {done,total,rowsDone}=counts;
   $('dashCompleted').textContent=format(done);
   $('dashRemaining').textContent=format(Math.max(0,total-done));
   $('dashRows').textContent=`${rowsDone} / ${active.rows}`;
@@ -2013,7 +2022,8 @@ function makeZip(files){
   return concatBytes([...locals,directory,end]);
 }
 function readZip(bytes){
-  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files={};let i=0,count=0;
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files=Object.create(null);let i=0,count=0;
+  const entries=new Map();
   while(i+30<=bytes.length&&view.getUint32(i,true)===0x04034b50){
     if(++count>12)throw new Error('Too many files in backup');
     const flags=view.getUint16(i+6,true),method=view.getUint16(i+8,true);
@@ -2023,8 +2033,26 @@ function readZip(bytes){
     if(len!==size||len>45*1024*1024||start+len>bytes.length)throw new Error('Corrupt or oversized ZIP entry');
     const name=textDecoder.decode(bytes.subarray(i+30,i+30+nameLen)),content=bytes.subarray(start,start+len);
     if(crc32(content)!==checksum)throw new Error('Backup integrity check failed (CRC-32)');
+    if(Object.hasOwn(files,name))throw new Error('Backup ZIP contains duplicate entries');
+    entries.set(i,{name,checksum,len});
     files[name]=content;i=start+len;
   }
+  const directoryStart=i;
+  const invalidDirectory=()=>new Error('Backup ZIP directory is missing, incomplete, or inconsistent');
+  while(i+46<=bytes.length&&view.getUint32(i,true)===0x02014b50){
+    const nameLen=view.getUint16(i+28,true),extraLen=view.getUint16(i+30,true),commentLen=view.getUint16(i+32,true);
+    const next=i+46+nameLen+extraLen+commentLen;
+    const offset=view.getUint32(i+42,true),entry=entries.get(offset);
+    if(next>bytes.length||!entry||view.getUint16(i+8,true)!==0||view.getUint16(i+10,true)!==0||
+      view.getUint16(i+34,true)!==0||view.getUint32(i+16,true)!==entry.checksum||
+      view.getUint32(i+20,true)!==entry.len||view.getUint32(i+24,true)!==entry.len||
+      textDecoder.decode(bytes.subarray(i+46,i+46+nameLen))!==entry.name)throw invalidDirectory();
+    entries.delete(offset);i=next;
+  }
+  if(entries.size||i+22>bytes.length||view.getUint32(i,true)!==0x06054b50||
+    view.getUint32(i+4,true)!==0||view.getUint16(i+8,true)!==count||view.getUint16(i+10,true)!==count||
+    view.getUint32(i+12,true)!==i-directoryStart||view.getUint32(i+16,true)!==directoryStart||
+    i+22+view.getUint16(i+20,true)!==bytes.length)throw invalidDirectory();
   return files;
 }
 function backupPayload(items,organization){return {app:'dorette-crochet-studio',version:1,exportedAt:new Date().toISOString(),projects:items,...(organization?{organization}: {})};}
@@ -2316,6 +2344,10 @@ async function restoreBackup(file){
       payload=JSON.parse(textDecoder.decode(zip['backup.json']));
     }
     const restored=readProjectBackup(payload);
+    const preferenceNote=sanitizeWorkspacePreferences(payload.workspace)
+      ? ' You can choose whether to import workspace preferences after restoring the projects.' : '';
+    const preview=`Backup verified. Restore ${restored.projects.length} active project(s) and ${restored.recycled.length} Recycle Bin project(s) as new copies? Existing projects will be kept.${preferenceNote}`;
+    if(!confirm(preview))return;
     const saved=await organizeProjects(restored.projects.concat(restored.recycled),[],restored.categories,()=>{
       for(const project of restored.projects)projects.set(project.id,project);
       for(const project of restored.recycled)recycledProjects.set(project.id,project);
@@ -3823,7 +3855,7 @@ async function updateStorageIndicator(){
  const estimate=Ops.formatSize(summary.totalEstimate);
  const ratio=summary.ratio===null?'unknown':Math.round(summary.ratio*100)+'%';
  host.textContent=`Browser storage: ${used} of ${quota} (${ratio}). Approx. project payload: ${estimate}. ${summary.large.map(p=>p.name+': '+Ops.formatSize(p.bytes)).join(' · ')}`;
- if(summary.warning){$('storageInfo').classList.add('storage-danger');host.textContent+=' · Storage nearly full. Keep a private project ZIP backup.';}
+ if(summary.warning){$('storageInfo').classList.add('storage-danger');host.textContent+=' · Storage may be nearly full. Check the save status. If a save fails, export a private project ZIP, free space outside Studio, then use Retry saving.';}
  else host.classList.remove('storage-danger');
 }
 async function safeMajorCopy(reason){
@@ -4545,6 +4577,9 @@ function hookEvents(){
   $('deleteProject').addEventListener('click',removeActiveProject);
   new ResizeObserver(resizeCanvas).observe($('canvasWrap'));
   new ResizeObserver(requestDraw).observe(overviewCanvas);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden&&saveTimer)void flushSave().catch(()=>{});
+  });
   window.addEventListener('pagehide',()=>{pageClosing=Promise.resolve(flushSave()).then(()=>Ops.release(),()=>Ops.release());});
   window.addEventListener('pageshow',ev=>{if(ev.persisted)void retryEditing();});
   window.addEventListener('beforeunload',ev=>{if(needsSave()){flushSave();ev.preventDefault();ev.returnValue='';}});
