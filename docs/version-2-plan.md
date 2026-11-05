@@ -97,3 +97,11 @@ The edge controls state where rows and columns are added or removed. The Setting
 ## Version 2.3.0 physical-device verification
 
 The owner confirmed in-place updating and project preservation, Find a Tool, top menus, the Projects drawer, workspace transfer, safe resizing and the offline guide on both Samsung devices. Tablet S Pen testing passed. Customize Layout showed only three sections on both devices and did not pass. The 2.3.1 draft separates its complete section list from ordinary Beginner and workspace filters.
+
+## Version 2.3.4 settings transfer and reliability review
+
+The standalone JSON allowlist covers Settings sections, tool shortcuts, panel visibility, display preferences, chart layout, safe copies, phone toolbar, lettering styles and built-in reference favorites. Project-level display, gauge and editing settings remain in the project ZIP. Current project selection, motifs, yarn library content, Commons results, updater preferences and reminders, locks, diagnostics, caches and temporary files stay local. Chart split and wake lock are session controls. Responsive safe areas are calculated on the destination.
+
+Studio already debounces project writes, serializes them, tracks failed writes for retry, uses a single editing owner across tabs, and audits project records before backup. Restore saves copies through an IndexedDB transaction. Storage estimates and save warnings are advisory. The settings import waits for pending saves before reopening and restores previously written preference keys on a write error. Legacy ZIP workspace import shares this rollback path.
+
+Rendering caches composed colors and visible chart tiles by revision. The existing worker handles expensive image conversion. Offline browser tests cover cache reuse and save/reopen, and the Android fixture checks offline startup. Long-running memory growth, sustained frame timing on very large charts, and Android background/resume under nearly full storage still need device profiling. Prioritize a repeatable large-chart trace and a near-quota interrupted-save recovery drill before changing the render or save engines.

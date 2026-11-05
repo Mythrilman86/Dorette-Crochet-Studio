@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.3.3",
-    "notes": "Adds a collapsible Crochet View toolbar on phones while preserving chart position and crochet progress."
+    "version": "2.3.4",
+    "notes": "Adds standalone Settings and Layout JSON transfer with selective import and project backup independence."
   },
   "ios": null,
-  "version": "2.3.3",
-  "notes": "Adds a collapsible Crochet View toolbar on phones while preserving chart position and crochet progress."
+  "version": "2.3.4",
+  "notes": "Adds standalone Settings and Layout JSON transfer with selective import and project backup independence."
 }
