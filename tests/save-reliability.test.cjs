@@ -29,7 +29,7 @@ test('failed queued save retains the confirmed record and retry writes the lates
   let disk={id:'chart',cells:[0],done:[0]},abort=true;
   const context=vm.createContext({project,structuredClone,writeChain:Promise.resolve(),writePending:0,
     memoryOnly:false,studioReadOnly:false,Ops:{canWrite:()=>true},reliability:{auditProject:()=>({ok:true})},
-    failedWrites:failures,lastSaveTime:null,refreshSaveState(){},
+    failedWrites:failures,lastSaveTime:null,refreshSaveState(){},captureRecovery(){},
     dbRequest:async(type,callback)=>{assert.equal(type,'readwrite');callback({put(copy){
       if(abort)throw Error('simulated quota failure');disk=copy;
     }});}});
