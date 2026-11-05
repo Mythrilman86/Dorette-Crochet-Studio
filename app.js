@@ -2022,7 +2022,7 @@ function makeZip(files){
   return concatBytes([...locals,directory,end]);
 }
 function readZip(bytes){
-  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files={};let i=0,count=0;
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),files=Object.create(null);let i=0,count=0;
   while(i+30<=bytes.length&&view.getUint32(i,true)===0x04034b50){
     if(++count>12)throw new Error('Too many files in backup');
     const flags=view.getUint16(i+6,true),method=view.getUint16(i+8,true);
@@ -2032,6 +2032,7 @@ function readZip(bytes){
     if(len!==size||len>45*1024*1024||start+len>bytes.length)throw new Error('Corrupt or oversized ZIP entry');
     const name=textDecoder.decode(bytes.subarray(i+30,i+30+nameLen)),content=bytes.subarray(start,start+len);
     if(crc32(content)!==checksum)throw new Error('Backup integrity check failed (CRC-32)');
+    if(Object.hasOwn(files,name))throw new Error('Backup ZIP contains duplicate entries');
     files[name]=content;i=start+len;
   }
   return files;
@@ -2325,6 +2326,10 @@ async function restoreBackup(file){
       payload=JSON.parse(textDecoder.decode(zip['backup.json']));
     }
     const restored=readProjectBackup(payload);
+    const preferenceNote=sanitizeWorkspacePreferences(payload.workspace)
+      ? ' You can choose whether to import workspace preferences after restoring the projects.' : '';
+    const preview=`Backup verified. Restore ${restored.projects.length} active project(s) and ${restored.recycled.length} Recycle Bin project(s) as new copies? Existing projects will be kept.${preferenceNote}`;
+    if(!confirm(preview))return;
     const saved=await organizeProjects(restored.projects.concat(restored.recycled),[],restored.categories,()=>{
       for(const project of restored.projects)projects.set(project.id,project);
       for(const project of restored.recycled)recycledProjects.set(project.id,project);
