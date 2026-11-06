@@ -21,6 +21,9 @@ jobs:
       - name: Verify recovery and backup behavior in Chromium
         if: github.event_name == 'pull_request'
         run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-protection-browser.cjs
+      - name: Test written patterns in Chromium
+        if: github.event_name == 'pull_request'
+        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-written-pattern-browser.cjs
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./mobile/package.json").version) process.exit(1)'

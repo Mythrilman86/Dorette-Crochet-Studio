@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.4.2",
+    "version": "2.4.1",
     "notes": "Keeps routine edits in the current project and improves lettering color and editing controls."
   },
   "ios": null,
-  "version": "2.4.2",
+  "version": "2.4.1",
   "notes": "Keeps routine edits in the current project and improves lettering color and editing controls."
 }

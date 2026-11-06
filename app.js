@@ -2334,7 +2334,11 @@ async function exportBackup(all=false, share=false, project=active){
     const preferences=exportWorkspacePreferences();
     if(preferences)data.workspace=preferences;
   }
-  const payload=JSON.stringify(data);
+  const payload=textEncoder.encode(JSON.stringify(data));
+  if(payload.byteLength>45*1024*1024){
+    toast('This backup is too large to restore. '+(all?'Export the projects individually instead.':'Reduce the project size or remove a large reference image from a copy.'));
+    return;
+  }
   const readme=`Dorette Crochet Studio backup\nExported: ${new Date().toISOString()}\nProjects: ${items.length}\n\nRestore using the Restore backup button inside Dorette Crochet Studio.\nThis ZIP includes backup.json with project data, progress, yarn colors, and any embedded reference images.\nDo not extract or modify the ZIP before restoring. Store a copy in Google Drive.\n`;
   const bytes=makeZip({'README.txt':readme,'backup.json':payload});
   const date=new Date().toISOString().slice(0,10);
