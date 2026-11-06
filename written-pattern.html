@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Written Pattern Companion</title>
+<link rel="stylesheet" href="./written-pattern.css">
+<script type="module" src="./assets/written-pattern.mjs"></script>
+</head>
+<body>
+<header><a href="./">Back to Studio charts</a><h1>Written Pattern Companion</h1></header>
+<main>
+<section aria-label="Pattern library">
+<p>Import a private PDF and mark where you are working. The original file stays unchanged.</p>
+<label>Project name <input id="name" maxlength="100"></label>
+<label>Original PDF <input id="pdf" type="file" accept=".pdf,application/pdf"></label>
+<button id="add">Import new pattern</button>
+<label>Saved patterns <select id="patterns"></select></label>
+<button id="open">Open pattern</button><button id="remove">Remove selected pattern</button>
+<p id="status" role="status"></p>
+</section>
+<section id="reader" hidden aria-label="Pattern reader">
+<h2 id="title"></h2>
+<p id="working" role="status"></p>
+<div class="controls">
+<button id="previous">Previous page</button><button id="next">Next page</button>
+<label>PDF page <input id="page" type="number" min="1" value="1"></label>
+<label>Zoom <select id="zoom"><option value="1">Fit width</option><option value="1.5">150%</option><option value="2">200%</option></select></label>
+<button id="resume">Return to current instructions</button>
+</div>
+<div id="viewport" tabindex="0" aria-label="PDF page, scroll to inspect">
+<div id="paper"><canvas id="canvas"></canvas><div id="highlight"></div></div>
+</div>
+<div class="controls">
+<label>Instruction label <input id="label" maxlength="100" placeholder="Round 4 or Rows 40–41"></label>
+<button id="region">Mark instruction area</button>
+<button id="commit">Set as working position</button>
+</div>
+<p>Mark instruction area, then drag a rectangle around the original instructions. Redraw to correct the highlight. Browsing does not change your saved working position.</p>
+<label>Saved instructions <select id="instructions"></select></label>
+<button id="inspect">Browse selected instruction</button>
+<label>Personal note <textarea id="note" maxlength="2000"></textarea></label>
+<button id="saveNote">Save note for current instruction</button>
+<button id="complete">Mark current instruction complete</button>
+</section>
+</main>
+</body>
+</html>
