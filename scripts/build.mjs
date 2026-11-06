@@ -27,6 +27,8 @@ if (native) {
     .replace('<strong>Dorette</strong>', '<strong>Dee’s</strong>')
     .replace('</head>', '  <script src="./mobile.js"></script>\n</head>');
   await cp('mobile/mobile.js', out + '/mobile.js');
+  const written = await readFile('written-pattern.html', 'utf8');
+  await writeFile(out + '/written-pattern.html', written.replace('</head>', '  <script src="./mobile.js"></script>\n</head>'));
 } else {
   await cp('release.json', out + '/release.json');
 }
