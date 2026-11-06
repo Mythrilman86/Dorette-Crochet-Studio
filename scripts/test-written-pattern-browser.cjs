@@ -1,8 +1,12 @@
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path');
 const cp = require('node:child_process'), assert = require('node:assert/strict');
 const types = {'.js':'application/javascript','.mjs':'application/javascript','.html':'text/html','.css':'text/css','.png':'image/png'};
+let transientFailure=false;
 const server = http.createServer((req,res) => {
   const pathname = new URL(req.url,'http://localhost').pathname;
+  if(pathname==='/assets/pdfjs/pdf.worker.min.mjs'&&!transientFailure){
+    transientFailure=true;res.writeHead(503).end();return;
+  }
   const file = path.join(__dirname, '../dist', pathname === '/' ? 'index.html' : pathname);
   if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
@@ -52,6 +56,12 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await delay(200);
     }
     assert.equal(await evaluate('!!navigator.serviceWorker?.controller'),true,'offline cache installed');
+    assert.equal(transientFailure,true,'first precache request encountered HTTP 503');
+    for(let i=0;i<50;i++){
+      if(await evaluate("document.querySelector('#offlineSetupStatus')?.textContent.startsWith('Ready for offline use')"))break;
+      await delay(100);
+    }
+    assert.equal(await evaluate("document.querySelector('#offlineSetupStatus').textContent.startsWith('Ready for offline use')"),true);
     for(let i=0;i<50;i++){
       if(await evaluate("!!window.editorProbe?.('active')").catch(()=>false))break;
       await delay(100);
@@ -186,6 +196,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     })`);
     assert.equal(chartRecord.notes,'Integration chart fixture');
     assert.equal(chartRecord.done[0],1,'written-pattern work leaves chart progress intact on the same origin');
+    await call('Page.navigate',{url:url+'/'});
+    let offlineChart=false;
+    for(let i=0;i<50;i++){
+      await delay(100);
+      offlineChart=await evaluate("window.editorProbe?.(\"active?.notes==='Integration chart fixture' && active.done[0]===1\")").catch(()=>false);
+      if(offlineChart)break;
+    }
+    assert.equal(offlineChart,true,'first-visit chart reopens offline with saved progress');
     await call('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     const cleared=await call('Storage.clearDataForOrigin',{origin:url,storageTypes:'all'});
     assert.equal(cleared.error,undefined,'disposable site storage cleared');

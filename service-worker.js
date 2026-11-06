@@ -1,9 +1,35 @@
 importScripts('./assets/pdfjs/offline-files.js');
-const CACHE = 'dorette-crochet-v2.5.0-build21-unified';
+const CACHE = 'dorette-crochet-v2.5.0-offline-reliability-preview';
 const FILES = [...self.writtenPdfFiles,'./written-pattern.html','./written-pattern.css','./assets/written-pattern.mjs','./assets/written-backup.mjs','./updates.js','./release-config.js','./stitch-studio.css','./stitch-library.js','./stitch-match.js','./stitch-studio.js','./','./index.html','./styles.css?v=1.8.1-chart-first','./app.js?v=1.8.1','./pattern-tools.js?v=1.8.1','./advanced.js?v=1.8.1','./next-features.js?v=1.8.1','./pdf-export.js?v=1.8.1','./help.js?v=1.8.1','./reliability.js?v=1.8.1','./pdf-worker.js?v=1.8.1','./image-worker.js?v=1.8.1','./studio-ops.js?v=1.8.1','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(file => new Request(file, { cache: 'reload' })))));
-});
+async function installOfflineFiles(){
+  const cache=await caches.open(CACHE);
+  async function store(file){
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const request=new Request(file,{cache:'reload'});
+        const response=await fetch(request);
+        if(!response.ok)throw Error('HTTP '+response.status);
+        await cache.put(request,response);
+        return;
+      }catch(error){
+        if(attempt===2)throw Error('Offline setup failed for '+file+': '+error.message);
+        await new Promise(resolve=>setTimeout(resolve,250*2**attempt));
+      }
+    }
+  }
+  try{
+    for(let i=0;i<FILES.length;i+=6){
+      const results=await Promise.allSettled(FILES.slice(i,i+6).map(store));
+      const failed=results.find(result=>result.status==='rejected');
+      if(failed)throw failed.reason;
+    }
+  }catch(error){
+    await caches.delete(CACHE);
+    console.error(error.message);
+    throw error;
+  }
+}
+self.addEventListener('install',event=>event.waitUntil(installOfflineFiles()));
 self.addEventListener('activate', event => {
   event.waitUntil(Promise.all([caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('dorette-crochet-') && k !== CACHE).map(k => caches.delete(k)))), self.clients.claim()]));
 });
@@ -22,4 +48,14 @@ self.addEventListener('fetch', event => {
   }));
 });
 
-self.addEventListener('message',event=>{if(event.data?.type==='SKIP_WAITING')self.skipWaiting();});
+self.addEventListener('message',event=>{
+  if(event.data?.type==='SKIP_WAITING')self.skipWaiting();
+  if(event.data?.type==='CHECK_OFFLINE'&&event.ports[0]){
+    event.waitUntil((async()=>{
+      const cache=await caches.open(CACHE);
+      const urls=new Set((await cache.keys()).map(request=>request.url));
+      const ready=FILES.every(file=>urls.has(new URL(file,self.registration.scope).href));
+      event.ports[0].postMessage({ready});
+    })().catch(()=>event.ports[0].postMessage({ready:false})));
+  }
+});
