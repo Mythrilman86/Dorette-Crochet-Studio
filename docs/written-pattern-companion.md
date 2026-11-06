@@ -1,0 +1,20 @@
+# Written Pattern Companion prototype
+
+The companion opens from Written Patterns in the Studio navigation. Chart Crochet View follows stitches in a grid, while the companion follows the original pages of a PDF. It uses Studio's existing shared web and mobile asset packaging and service worker. The chart database, project and Settings backup formats, notes, guided chart progress, scanner, and encyclopedia keep their existing entry points and formats. This branch starts from stable main and has no dependency on PR #19.
+
+PDF.js 6.5.438 legacy distribution is pinned and vendored under assets/pdfjs with its Apache 2.0 license and the resource directories' notices. The build bundles its worker, fonts, CMaps, ICC profiles, and WASM resources. No CDN, document upload, OCR, or PDF scripting interface is used. The prototype draws one page at a time and caps its longest canvas side at 2,200 pixels. Imports are limited to 20 MiB and 300 pages. There is no physical-device memory benchmark yet.
+
+The original PDF is stored once for each imported project in a separate IndexedDB document store. Working instruction labels, notes, completion, page coordinates, and revision live in a small metadata store. Import and removal update both stores atomically. A progress update checks the stored revision before committing, so an older open tab cannot silently overwrite a newer revision. Success is shown only after the write commits. Browsing another page or saved marker has no effect on the working position. Choose Work on selected instruction to change it. Add and update are separate actions. Repeated labels retain separate identities. Numbered ranges do not assign PDF locations. Complete & Next advances in list order and can be undone. Row names can include rounds, sections, and grouped rows. Highlights are stored as page-relative rectangles. Drag again to correct the area. Use the original page when a reference is ambiguous.
+
+The canvas shows the original PDF visually. Searchable text, a screen-reader text layer, password-protected PDFs, and automatic row detection are outside this prototype. The AMA Dress PDF was not used. The browser fixture generates an original two-page PDF. For private manual verification, import the purchased pattern on your own device and try the cross-references, grouped rows, armhole section, and photograph browsing.
+
+## Independent backup
+
+Existing chart ZIPs do not include companion documents or progress. A separate .deewritten file starts with a four-byte big-endian JSON header length, followed by a UTF-8 version-1 header and optional original PDF bytes. The header carries bounded metadata, the document size, and SHA-256 digests for both metadata and the original PDF. Digests detect accidental corruption and verify reattachment. They do not authenticate who created a file.
+
+Export includes the PDF by default. Opting out requires retaining the exact original independently. Export prepares a file first, then uses a separate user gesture to save or share. Verify it in Files or Downloads. Restore validates metadata and PDF bytes, checks page bounds, and atomically inserts a new project and document after confirmation. The regular chart ZIP format is unchanged.
+
+The disposable browser test clears the complete test origin and restores both full and metadata-only backups. Keep external backups because clearing website data also removes the local document and progress.
+## Reproduce
+
+Build with node scripts/build.mjs web. Set STUDIO_TEST_BROWSER to a Chromium or Edge executable and run node scripts/test-written-pattern-browser.cjs. This starts a disposable profile and uses a synthetic PDF. For touch testing, serve dist on a separate trusted HTTPS origin. Load Studio online first so its service worker can cache the companion. Visit the companion, import an original test PDF, mark a row, and browse another page. Return to the working row, go offline, and reopen. Repeat with different projects, in both orientations, and on a Home Screen installation. Verify Android WebView rendering separately before any signed device release.

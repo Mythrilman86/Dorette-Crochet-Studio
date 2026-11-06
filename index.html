@@ -14,7 +14,7 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
-    <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button></nav>
+    <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button><a href="./written-pattern.html">Written Patterns</a></nav>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" aria-label="Back up all projects" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" aria-label="Restore backup" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
   <div id="tabLockBanner" class="reliability-alert conflict-alert" role="alert" hidden><strong>Read-only in this tab.</strong><span id="tabLockMessage">Another Studio tab is editing local projects. Close that tab to prevent overwrites.</span><button id="retryEditing" class="button secondary" type="button">Retry editing</button></div>
@@ -129,11 +129,31 @@
       <details class="reliability-drawer"><summary><span>Studio health &amp; updates</span><span class="reliability-subline">Project integrity, safe saves, diagnostics</span></summary>
         <div class="reliability-grid">
           <div class="health-mini"><strong>Save status</strong><p id="saveStateDetails" role="status">Opening local storage…</p><button id="checkUpdates" class="button ghost" type="button">Check for Studio updates</button></div>
-          <div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
+          <div class="health-mini"><a href="./written-pattern.html">Written Pattern Companion</a></div><div class="health-mini"><strong>Project integrity</strong><p id="integrityStatus" role="status">Project check not run yet.</p><button id="runIntegrityCheck" class="button ghost" type="button">Run project check</button><button id="exportInvalid" class="button ghost" type="button">Export invalid original records</button></div>
         </div>
         <div class="health-mini storage-mini"><strong>Local storage capacity</strong><p id="storageInfo" role="status">Not checked</p><button id="refreshStorage" class="button ghost" type="button">Check storage usage</button><p class="muted">Storage estimates are approximate. This is not a cloud backup.</p></div>
         <p class="muted">Checks never modify a broken project. Invalid records stay in your browser's local database until you decide what to do. Diagnostics do not include pattern images, names, yarn records, notes, or stitch colors.</p>
         <div class="health-mini"><strong>Privacy-safe diagnostics</strong><button id="copyDiagnostic" class="button secondary" type="button">Copy diagnostic report</button><pre id="diagnosticSummary" class="diagnostic-output" aria-label="Current diagnostics"></pre></div>
+      </details>
+      <details id="protectionDrawer" class="reliability-drawer">
+        <summary>Project Protection</summary>
+        <p id="protectionSaveStatus" role="status">No new local write confirmed this session.</p>
+        <p class="muted">Local saves and recovery snapshots can be lost if website data is cleared. Keep ZIP backups in Files, Downloads, or another location outside Studio.</p>
+        <p id="persistenceStatus" role="status">Storage protection has not been checked.</p>
+        <button id="requestPersistence" class="button ghost" type="button">Request persistent storage</button>
+        <p id="localRecoveryStatus" role="status"></p><div id="localRecoveryList"></div>
+        <p id="protectionStatus" role="status"></p>
+        <p id="libraryProtectionStatus" role="status"></p>
+        <p class="muted">Use a full-library ZIP to protect all projects, custom categories, and Recycle Bin records.</p>
+        <label>Backup reminders <select id="backupReminderDays"><option value="0">Off</option><option value="7">Every 7 days</option><option value="30">Every 30 days</option></select></label>
+        <p id="backupReminder" hidden>Keep an independent ZIP of this project. <button id="snoozeBackupReminder" class="button ghost" type="button">Remind me tomorrow</button></p>
+        <button id="prepareProtectionBackup" class="button primary" type="button">Save Project Backup</button>
+        <button id="prepareLibraryBackup" class="button ghost" type="button">Prepare Full-Library ZIP</button>
+        <button id="savePreparedBackup" class="button ghost" type="button" disabled>Save or Share ZIP</button>
+        <button id="confirmProtectionBackup" class="button ghost" type="button" disabled>I verified the ZIP outside Studio</button>
+        <p id="protectionExportStatus" role="status"></p>
+        <p class="muted">On iPhone or iPad, choose Save to Files in the share sheet. Choose an available device folder or iCloud Drive, then check that the ZIP appears there.</p>
+        <button id="protectionRestore" class="button ghost" type="button">Preview and restore backup ZIP</button>
       </details>
       <details class="reliability-drawer history-drawer"><summary><span>Design Undo / Redo history</span><span class="reliability-subline">Separate from crochet progress</span></summary>
         <div class="history-actions"><button id="historyUndo" type="button" class="button ghost">Undo</button><button id="historyRedo" type="button" class="button ghost">Redo</button></div><div id="designHistory" aria-live="polite"></div><p class="muted">Undo and Redo track chart edits and crochet progress together for the current project session. Use saved design versions for long-term milestones.</p>
@@ -253,7 +273,8 @@
         <div class="pair"><button id="previewText" class="button ghost" type="button">Preview text</button><button id="clearTextPreview" class="button ghost" type="button">Clear preview</button></div>
         <div class="pair"><button id="rotateTextLeft" class="button ghost" type="button">Rotate left 90°</button><button id="rotateTextRight" class="button ghost" type="button">Rotate right 90°</button></div>
         <label class="toggle"><input id="flipText" type="checkbox"> Flip lettering left to right</label><div class="text-nudge-grid"><button id="textUp" class="button ghost" type="button">↑ Up</button><button id="textLeft" class="button ghost" type="button">← Left</button><button id="textDown" class="button ghost" type="button">↓ Down</button><button id="textRight" class="button ghost" type="button">Right →</button></div>
-        <div class="pair"><button id="placeText" class="button ghost" type="button" aria-pressed="false">Place on chart</button><button id="newLettering" class="button ghost" type="button">New lettering</button><button id="editLastText" class="button ghost" type="button">Edit selected or last lettering</button></div>
+        <div class="pair lettering-actions"><button id="newLettering" class="button ghost" type="button">New lettering</button><button id="placeText" class="button ghost" type="button" aria-pressed="false">Place on chart</button></div>
+        <button id="editLastText" class="button ghost block" type="button">Edit selected or last lettering</button>
         <div class="advanced-text-controls"><label class="field">Lettering style<select id="textStyle"><option value="regular">Classic block</option><option value="bold">Bold block</option><option value="outline">Outline only</option></select></label><label class="field">Spacing between letters<select id="letterSpacing"><option value="0">Tight</option><option value="1" selected>Normal</option><option value="2">Wide</option><option value="3">Extra wide</option></select></label><label class="field">Wrap letters<select id="textWrap"><option value="0">No wrapping</option><option value="8">8 characters / line</option><option value="12">12 characters / line</option><option value="16">16 characters / line</option></select></label><label class="field">Text layout<select id="textLayout"><option value="straight">Straight</option><option value="diagonal">Diagonal</option><option value="curve">Curved arc</option></select></label><button id="centerText" type="button" class="button ghost">Center text on chart</button><button id="autoFitText" type="button" class="button ghost">Auto-fit text to selected area</button><button id="centerSelectionText" type="button" class="button ghost">Center in selected area</button></div><div class="next-text-favorites"><label>Saved lettering style<select id="textStyleFavorite"></select></label><button id="saveTextFavorite" type="button" class="button ghost">Save current text style</button><button id="applyTextFavorite" type="button" class="button ghost">Load style</button><button id="deleteTextFavorite" type="button" class="button ghost">Remove style</button></div>
         <p id="textFitStatus" class="muted" role="status"></p>
         <button id="applyText" class="button primary block" type="button">Apply text to chart</button>
