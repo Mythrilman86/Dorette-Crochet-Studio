@@ -88,7 +88,15 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       if(el('reader').hidden)throw Error(el('status').textContent);
       const canvas=el('canvas'),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
       if(!pixels.some((value,index)=>index%4===0&&value<100&&pixels[index+3]===255))throw Error('PDF page did not render its test artwork');
-      el('label').value='Round 4';await el('commit').onclick();
+      el('label').value='Round 4';await el('commit').onclick();await el('setCurrent').onclick();
+      const tx=IDBDatabase.prototype.transaction;
+      IDBDatabase.prototype.transaction=function(stores,mode){
+        if(this.name==='dee-written-patterns'&&mode==='readwrite')throw new DOMException('Simulated storage exhaustion','QuotaExceededError');
+        return tx.call(this,stores,mode);
+      };
+      el('note').value='Failed write fixture';
+      try{await el('saveNote').onclick();}finally{IDBDatabase.prototype.transaction=tx;}
+      if(!el('status').textContent.includes('Could not save'))throw Error('Failed write appeared saved');
       el('note').value='Use the smaller hook';await el('saveNote').onclick();
       await el('complete').onclick();
       await el('next').onclick();
@@ -107,7 +115,65 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       if(reopened)break;
     }
     assert.equal(reopened,true,'offline reload preserves saved working position and notes');
-    console.log('PASS synthetic PDF import and rendering, separate browsing, completion, note, and offline reopen');
+    const backup=await evaluate(`(async()=>{
+      const el=id=>document.getElementById(id);
+      el('rangeFirst').value=40;el('rangeLast').value=41;
+      await el('addRange').onclick();
+      el('instructions').selectedIndex=1;await el('setCurrent').onclick();
+      await el('completeNext').onclick();
+      if(!el('working').textContent.includes('Row 41'))throw Error('Did not advance');
+      await el('undoComplete').onclick();
+      if(!el('working').textContent.includes('Row 40'))throw Error('Did not return on undo');
+      el('label').value='Round 4';await el('commit').onclick();
+      if([...el('instructions').options].filter(o=>o.text.includes('Round 4')).length!==2)throw Error('Duplicate label overwrote marker');
+      el('label').value='Rows 40–41';await el('commit').onclick();
+      el('instructions').selectedIndex=0;await el('setCurrent').onclick();
+      Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>false});
+      let archive;
+      URL.createObjectURL=value=>{archive=value;return 'blob:fixture';};
+      HTMLAnchorElement.prototype.click=()=>{};
+      const exportFile=async omit=>{
+        el('omitPdf').checked=omit;
+        await el('exportBackup').onclick();await el('saveBackup').onclick();
+        if(!archive)throw Error(el('status').textContent);
+        return Array.from(new Uint8Array(await archive.arrayBuffer()));
+      };
+      return {full:await exportFile(false),metadata:await exportFile(true)};
+    })()`);
+    await call('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+    const cleared=await call('Storage.clearDataForOrigin',{origin:url,storageTypes:'all'});
+    assert.equal(cleared.error,undefined,'disposable site storage cleared');
+    await call('Page.navigate',{url:url+'/written-pattern.html'});
+    for(let i=0;i<60;i++){
+      await delay(100);
+      if(await evaluate("document.readyState==='complete'&&!!document.querySelector('#restoreBackup')?.onclick").catch(()=>false))break;
+    }
+    const restored=await evaluate(`(async()=>{
+      const el=id=>document.getElementById(id);
+      const attach=(id,data,name)=>{
+        const transfer=new DataTransfer();transfer.items.add(new File([data],name));
+        el(id).files=transfer.files;
+      };
+      if(el('patterns').options.length)throw Error('Storage was not clean');
+      window.confirm=()=>true;
+      const full=new Uint8Array(${JSON.stringify(backup.full)});
+      const bad=full.slice();bad[bad.length-1]^=1;
+      attach('backupFile',bad,'bad.deewritten');
+      await el('restoreBackup').onclick();
+      if(!el('status').textContent.includes('checksum')||el('patterns').options.length)throw Error('Corruption was not rejected atomically');
+      attach('backupFile',full,'full.deewritten');await el('restoreBackup').onclick();
+      if(el('patterns').options.length!==1||el('note').value!=='Use the smaller hook'||!el('complete').textContent.includes('Undo'))throw Error(el('status').textContent);
+      const first=el('patterns').value;
+      attach('backupFile',new Uint8Array(${JSON.stringify(backup.metadata)}),'metadata.deewritten');
+      await el('restoreBackup').onclick();
+      if(el('patterns').options.length!==1||!el('status').textContent.includes('exact original'))throw Error('Missing original accepted');
+      attach('pdf',${JSON.stringify(source)},'original.pdf');
+      await el('restoreBackup').onclick();
+      if(el('patterns').options.length!==2||el('patterns').value===first||el('note').value!=='Use the smaller hook')throw Error(el('status').textContent);
+      return true;
+    })()`);
+    assert.equal(restored,true);
+    console.log('PASS PDF import, marker identity, Complete & Next, offline reopening, backup corruption rejection, and clean-storage restore with PDF or reattachment');
     ws.close();
   } finally { edge.kill(); server.close(); }
 })().catch(error=>{ console.error(error); process.exit(1)});

@@ -17,6 +17,9 @@
 <button id="add">Import new pattern</button>
 <label>Saved patterns <select id="patterns"></select></label>
 <button id="open">Open pattern</button><button id="remove">Remove selected pattern</button>
+<label>Written-pattern backup <input id="backupFile" type="file" accept=".deewritten"></label>
+<button id="restoreBackup">Restore backup as a copy</button>
+<p>For a backup without the PDF, select the matching original in the Original PDF field above.</p>
 <p id="status" role="status"></p>
 </section>
 <section id="reader" hidden aria-label="Pattern reader">
@@ -34,14 +37,28 @@
 <div class="controls">
 <label>Instruction label <input id="label" maxlength="100" placeholder="Round 4 or Rows 40–41"></label>
 <button id="region">Mark instruction area</button>
-<button id="commit">Set as working position</button>
+<button id="commit">Add new instruction marker</button>
+<button id="editMarker">Update selected marker</button>
 </div>
-<p>Mark instruction area, then drag a rectangle around the original instructions. Redraw to correct the highlight. Browsing does not change your saved working position.</p>
+<p>Mark instruction area, then drag a rectangle around the original instructions. Redraw to correct the highlight. Choose Work on selected instruction to change where you resume.</p>
 <label>Saved instructions <select id="instructions"></select></label>
 <button id="inspect">Browse selected instruction</button>
+<button id="setCurrent">Work on selected instruction</button>
+<div class="controls">
+<label>Numbered instructions <select id="rangeType"><option>Row</option><option>Round</option></select></label>
+<label>First <input id="rangeFirst" type="number" min="1" max="9999" value="1"></label>
+<label>Last <input id="rangeLast" type="number" min="1" max="9999" value="61"></label>
+<button id="addRange">Add numbered range</button>
+</div>
 <label>Personal note <textarea id="note" maxlength="2000"></textarea></label>
 <button id="saveNote">Save note for current instruction</button>
 <button id="complete">Mark current instruction complete</button>
+<button id="completeNext">Complete &amp; Next</button><button id="undoComplete">Undo last completion</button>
+<h2>Independent written-pattern backup</h2>
+<label><input id="omitPdf" type="checkbox"> Omit original PDF</label>
+<p>If you omit it, keep the exact original PDF separately. Check that the backup appears in Downloads or Files before relying on it.</p>
+<button id="exportBackup">Prepare written-pattern backup</button>
+<button id="saveBackup" disabled>Save or share backup</button>
 </section>
 </main>
 </body>
