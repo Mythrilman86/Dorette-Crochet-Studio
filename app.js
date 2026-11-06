@@ -4564,19 +4564,41 @@ function setupServiceWorkerUpdates(){
    return;
  }
  let installingUpdate=false,registration=null;
+ let checkingWorker=null,cancelReadinessCheck=()=>{};
  function checkOfflineReady(){
    const worker=navigator.serviceWorker.controller;
-   if(!worker)return;
-   const channel=new MessageChannel();
-   const timer=setTimeout(()=>channel.port1.close(),3000);
-   channel.port1.onmessage=event=>{
-     clearTimeout(timer);channel.port1.close();
-     if(navigator.serviceWorker.controller!==worker)return;
-     offlineStatus.textContent=event.data?.ready
-       ?'Ready for offline use: Crochet Charts and Written Patterns.'
-       :'Offline files are incomplete. Keep this tab online and check for updates.';
-   };
-   worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);
+   if(!worker||checkingWorker===worker)return;
+   cancelReadinessCheck();
+   checkingWorker=worker;
+   let attempt=0;
+   function probe(){
+     attempt++;
+     const channel=new MessageChannel();
+     function close(){clearTimeout(timer);channel.port1.close();}
+     function missedReply(){
+       close();
+       if(navigator.serviceWorker.controller!==worker){checkingWorker=null;return;}
+       if(attempt<3){
+         offlineStatus.textContent='Offline verification is taking longer than expected. Retrying…';
+         probe();
+       }else{
+         checkingWorker=null;
+         offlineStatus.textContent='Offline readiness could not be verified. Check for Studio updates to try again.';
+       }
+     }
+     const timer=setTimeout(missedReply,3000);
+     cancelReadinessCheck=close;
+     channel.port1.onmessage=event=>{
+       close();checkingWorker=null;
+       if(navigator.serviceWorker.controller!==worker)return;
+       offlineStatus.textContent=event.data?.ready===true
+         ?'Ready for offline use: Crochet Charts and Written Patterns.'
+         :'Offline files are incomplete. Keep this tab online and check for updates.';
+     };
+     try{worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);}
+     catch{channel.port2.close();missedReply();}
+   }
+   probe();
  }
  navigator.serviceWorker.addEventListener('controllerchange',()=>{
    checkOfflineReady();
@@ -4596,6 +4618,7 @@ function setupServiceWorkerUpdates(){
      if(!navigator.serviceWorker.controller)offlineStatus.textContent='Preparing offline files. Keep this tab online.';
      worker.addEventListener('statechange',()=>{
        if(worker.state==='installed')readyUpdate(reg);
+       if(worker.state==='activated')checkOfflineReady();
        if(worker.state==='redundant'&&!navigator.serviceWorker.controller){
          registration=null;
          offlineStatus.textContent='Offline setup did not finish. Check your connection and choose Check for Studio updates to retry.';

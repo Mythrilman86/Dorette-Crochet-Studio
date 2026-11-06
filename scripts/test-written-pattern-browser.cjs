@@ -30,7 +30,17 @@ const server = http.createServer((req,res) => {
     res.end(fs.readFileSync(file,'utf8').replace('</head>',setup+'</head>'));return;
   }
   if (pathname==='/app.js') {
-    const source=fs.readFileSync(file,'utf8').replace(/^initialize\(\)\.catch/m,'window.editorProbe = source => eval(source);\ninitialize().catch');
+    const source=fs.readFileSync(file,'utf8').replace(/^initialize\(\)\.catch/m,`
+      window.editorProbe = source => eval(source);
+      window.offlineChecks = 0;
+      const post = ServiceWorker.prototype.postMessage;
+      ServiceWorker.prototype.postMessage = function(message, ports){
+        if(message.type==='CHECK_OFFLINE'&&++window.offlineChecks===1){
+          ports[0].close();return;
+        }
+        return post.call(this,message,ports);
+      };
+      initialize().catch`);
     res.end(source);return;
   }
   fs.createReadStream(file).pipe(res);
@@ -90,6 +100,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await delay(100);
     }
     assert.equal(await evaluate("document.querySelector('#offlineSetupStatus').textContent.startsWith('Ready for offline use')"),true);
+    assert.equal(await evaluate('window.offlineChecks'),2,'readiness recovers after its first reply is lost');
     for(let i=0;i<50;i++){
       if(await evaluate("!!window.editorProbe?.('active')").catch(()=>false))break;
       await delay(100);
