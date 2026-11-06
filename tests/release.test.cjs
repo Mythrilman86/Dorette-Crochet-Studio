@@ -17,16 +17,22 @@ test('website and Capacitor builds share the engine and preserve identifiers', (
   assert.equal(config.appId, 'com.deescrochetstudio.app');
   assert.equal(config.server, undefined);
   const context = { window: {} };
+  const nativeContext = { window: {} };
   const metadata = read('release-config.js');
   vm.runInNewContext(metadata, context);
+  vm.runInNewContext(read('mobile/www/release-config.js'), nativeContext);
+  assert.equal(read('dist/release-config.js'), metadata);
   for (const directory of ['dist', 'mobile/www']) {
-    assert.equal(read(directory + '/release-config.js'), metadata);
     assert.match(read(directory + '/index.html'), /id="studioBuildBadge"/);
   }
   const release = context.window.StudioRelease;
-  assert.equal(release.version, JSON.parse(read('mobile/package.json')).version);
-  assert.ok(read('mobile/android/app/build.gradle').includes('versionName "' + release.version + '"'));
-  assert.ok(read('mobile/ios/App/App.xcodeproj/project.pbxproj').includes('MARKETING_VERSION = ' + release.version + ';'));
+  const native = nativeContext.window.StudioRelease;
+  assert.equal(release.version, JSON.parse(read('dist/release.json')).web.version);
+  assert.equal(native.version, release.nativeVersion);
+  assert.equal(native.version, JSON.parse(read('mobile/package.json')).version);
+  assert.equal(native.manifest, release.manifest);
+  assert.ok(read('mobile/android/app/build.gradle').includes('versionName "' + native.version + '"'));
+  assert.ok(read('mobile/ios/App/App.xcodeproj/project.pbxproj').includes('MARKETING_VERSION = ' + native.version + ';'));
 });
 
 test('native icon PNG sizes, opacity and adaptive safe area', () => {
@@ -163,7 +169,7 @@ test('GitHub updates select the newest eligible asset and save before Android co
   wrongHost.assets[0].browser_download_url = 'https://example.org/fake.apk';
   const wrongDigest = githubRelease('1.8.31');
   wrongDigest.assets[0].digest = null;
-  const body = [wrongHost, wrongDigest, githubRelease('1.8.99', { prerelease: true }),
+  const body = [githubRelease('1.8.40', { assets: [] }), wrongHost, wrongDigest, githubRelease('1.8.99', { prerelease: true }),
     githubRelease('1.8.100', { draft: true }), githubRelease('1.8.4'), githubRelease('1.8.10')];
   const view = updates({ platform: 'android', play, body });
   await view.click();
