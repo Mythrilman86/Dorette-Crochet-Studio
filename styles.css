@@ -358,7 +358,28 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 .settings-customizing .settings-drop-before{box-shadow:0 -5px #5a2489}.settings-customizing .settings-drop-after{box-shadow:0 5px #5a2489}
 @media(min-width:600px) and (min-height:600px){
   .native-android.crochet-view .crochet-view-actions{padding-top:calc(48px + env(safe-area-inset-top, 0px))}
-  .native-android:not(.crochet-view)>.topbar{height:calc(106px + env(safe-area-inset-top, 0px));padding-top:calc(32px + env(safe-area-inset-top, 0px))}
+}
+
+/* Capacitor pads older WebViews natively and forwards zero insets in that case. */
+.native-android:not(.crochet-view)>.topbar{
+  --studio-top-inset:max(env(safe-area-inset-top, 0px),var(--safe-area-inset-top, 0px));
+  height:auto;
+  min-height:calc(74px + var(--studio-top-inset));
+  padding-top:var(--studio-top-inset);
+  padding-left:calc(12px + max(env(safe-area-inset-left, 0px),var(--safe-area-inset-left, 0px)));
+  padding-right:calc(12px + max(env(safe-area-inset-right, 0px),var(--safe-area-inset-right, 0px)));
+}
+@media(max-width:640px){
+  .native-android:not(.crochet-view)>.topbar{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,auto);
+    padding-bottom:8px;
+  }
+  .native-android:not(.crochet-view)>.topbar .app-navigation{
+    grid-column:1/-1;grid-row:2;flex-wrap:wrap;min-width:0;
+  }
+  .native-android:not(.crochet-view)>.topbar .header-right{grid-column:2;grid-row:1;min-width:0}
+  .native-android:not(.crochet-view)>.topbar .save-status{max-width:none;white-space:normal;overflow-wrap:anywhere}
 }
 #recycleSelectionControls[hidden]{display:none}#recycleSelectionControls .button,#toggleRecycleSelection{min-height:44px;white-space:normal}.recycle-select-row{display:flex;align-items:center;gap:8px;min-height:44px}.recycle-select-row input{width:20px;height:20px}
 #phoneCrochetControls{display:none}
