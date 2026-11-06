@@ -173,7 +173,54 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return true;
     })()`);
     assert.equal(restored,true);
+    const downloads=path.join(profile,'downloads');
+    fs.mkdirSync(downloads);
+    const downloadBehavior=await call('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:downloads});
+    assert.equal(downloadBehavior.error,undefined);
+    const downloadReady=await evaluate(`(async()=>{
+      const el=id=>document.getElementById(id);
+      if(!el('saveBackup').disabled||!el('shareBackup').disabled)throw Error('Unprepared backup actions enabled');
+      Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>true});
+      let rejectShare,shares=0;
+      Object.defineProperty(navigator,'share',{configurable:true,value:()=>{
+        shares++;
+        return new Promise((_,reject)=>{rejectShare=reject;});
+      }});
+      await el('exportBackup').onclick();
+      if(el('saveBackup').disabled||el('shareBackup').disabled)throw Error('Prepared backup actions unavailable');
+      el('shareBackup').click();
+      if(!el('shareBackup').hasAttribute('aria-busy')||el('exportBackup').getAttribute('aria-disabled')!=='true')throw Error('Busy feedback missing');
+      el('shareBackup').click();
+      if(shares!==1)throw Error('Duplicate share started');
+      rejectShare(new DOMException('Permission denied','NotAllowedError'));
+      await new Promise(resolve=>setTimeout(resolve,0));
+      if(!el('status').textContent.includes('Choose Download Backup')||el('saveBackup').disabled)throw Error('Sharing did not offer download recovery');
+      el('saveBackup').scrollIntoView({block:'center'});
+      el('saveBackup').focus();
+      return shares===1&&document.activeElement===el('saveBackup');
+    })()`);
+    assert.equal(downloadReady,true);
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32,text:' '});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});
+    let downloaded;
+    for(let i=0;i<50;i++){
+      downloaded=fs.readdirSync(downloads).find(name=>name.endsWith('.deewritten'));
+      if(downloaded)break;
+      await delay(100);
+    }
+    assert.ok(downloaded,'keyboard activation creates an actual download after sharing fails. Status: '+
+      await evaluate("document.querySelector('#status').textContent")+'; files: '+fs.readdirSync(downloads).join(', '));
+    assert.ok(fs.statSync(path.join(downloads,downloaded)).size>0);
+    assert.match(await evaluate("document.querySelector('#status').textContent"),/Check Downloads or Files/);
+    for(const [width,height] of [[320,640],[430,932],[820,1180],[1180,820],[1366,900]]){
+      await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      assert.equal(await evaluate(`[...document.querySelectorAll('button')].every(button=>{
+        const r=button.getBoundingClientRect();
+        return !r.width||(r.left>=0&&r.right<=innerWidth&&button.scrollWidth<=button.clientWidth+2);
+      })`),true,'buttons fit viewport '+width+' × '+height);
+    }
     console.log('PASS PDF import, marker identity, Complete & Next, offline reopening, backup corruption rejection, and clean-storage restore with PDF or reattachment');
+    console.log('PASS busy feedback, duplicate-share guard, denied-sharing fallback, and actual keyboard-triggered backup download');
     ws.close();
   } finally { edge.kill(); server.close(); }
 })().catch(error=>{ console.error(error); process.exit(1)});

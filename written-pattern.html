@@ -9,18 +9,18 @@
 </head>
 <body>
 <header><a href="./">Back to Studio charts</a><h1>Written Pattern Companion</h1></header>
+<p id="status" role="status" aria-atomic="true"></p>
 <main>
 <section aria-label="Pattern library">
 <p>Import a private PDF and mark where you are working. The original file stays unchanged.</p>
 <label>Project name <input id="name" maxlength="100"></label>
 <label>Original PDF <input id="pdf" type="file" accept=".pdf,application/pdf"></label>
-<button id="add">Import new pattern</button>
+<button id="add" class="primary">Import new pattern</button>
 <label>Saved patterns <select id="patterns"></select></label>
 <button id="open">Open pattern</button><button id="remove">Remove selected pattern</button>
 <label>Written-pattern backup <input id="backupFile" type="file" accept=".deewritten"></label>
 <button id="restoreBackup">Restore backup as a copy</button>
 <p>For a backup without the PDF, select the matching original in the Original PDF field above.</p>
-<p id="status" role="status"></p>
 </section>
 <section id="reader" hidden aria-label="Pattern reader">
 <h2 id="title"></h2>
@@ -36,7 +36,7 @@
 </div>
 <div class="controls">
 <label>Instruction label <input id="label" maxlength="100" placeholder="Round 4 or Rows 40–41"></label>
-<button id="region">Mark instruction area</button>
+<button id="region" aria-pressed="false">Mark instruction area</button>
 <button id="commit">Add new instruction marker</button>
 <button id="editMarker">Update selected marker</button>
 </div>
@@ -57,8 +57,10 @@
 <h2>Independent written-pattern backup</h2>
 <label><input id="omitPdf" type="checkbox"> Omit original PDF</label>
 <p>If you omit it, keep the exact original PDF separately. Check that the backup appears in Downloads or Files before relying on it.</p>
-<button id="exportBackup">Prepare written-pattern backup</button>
-<button id="saveBackup" disabled>Save or share backup</button>
+<button id="exportBackup" class="primary">Prepare written-pattern backup</button>
+<button id="saveBackup" disabled>Download Backup</button>
+<button id="shareBackup" disabled>Share Backup</button>
+<p id="backupHelp">Prepare a backup to enable Download Backup. Sharing is available on supported devices.</p>
 </section>
 </main>
 </body>

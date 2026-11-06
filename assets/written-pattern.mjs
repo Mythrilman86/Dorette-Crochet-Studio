@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 const assets=new URL('./pdfjs/',import.meta.url).href;
 GlobalWorkerOptions.workerSrc=assets+'pdf.worker.min.mjs';
 let db,pattern,pdf,page=1,draft=null,drag=null,opening=0,rendering=null,renderId=0,saving=false,saveChain=Promise.resolve();
-let preparedBackup=null,backupGeneration=0;
+let preparedBackup=null,backupGeneration=0,operationPending=false;
 const say=message=>{$('status').textContent=message;};
 const init=new Promise((resolve,reject)=>{
  const req=indexedDB.open('dee-written-patterns',1);
@@ -50,6 +50,7 @@ async function render(target,position=null){
  if(generation!==renderId||document!==pdf)return;
  page=Math.max(1,Math.min(document.numPages,target));
  $('page').value=page;$('page').max=document.numPages;
+ $('previous').disabled=page===1;$('next').disabled=page===document.numPages;
  const pdfPage=await document.getPage(page);
  if(generation!==renderId||document!==pdf)return;
  const base=pdfPage.getViewport({scale:1});
@@ -74,12 +75,12 @@ function updateControls(){
  $('working').textContent=(row?`Working on ${row.label} · ${row.page===null?'No PDF location mapped':'PDF page '+row.page}`:'Working position not set')+
   ` · ${pattern.instructions.filter(entry=>entry.done).length} completed`;
  $('instructions').replaceChildren(...pattern.instructions.map((entry,index)=>new Option(
-  `${index+1}. ${entry.label}${entry.page===null?'':' · PDF page '+entry.page}`,entry.id)));
+  `${index+1}. ${entry.label}${entry.page===null?'':' · PDF page '+entry.page}${entry.id===row?.id?' · Working':''}${entry.done?' · Completed':''}`,entry.id)));
  $('instructions').value=row?.id||'';
  $('note').value=row?.note||'';
  $('saveNote').disabled=$('complete').disabled=!row;
  $('complete').textContent=row?.done?'Undo current completion':'Mark current instruction complete';
- $('completeNext').disabled=!row||row.done;
+ $('completeNext').disabled=!row||row.done||pattern.instructions.at(-1)===row;
  $('undoComplete').disabled=!pattern.lastCompletion;
 }
 async function resume(){
@@ -130,8 +131,26 @@ function updateCurrent(changes){
  const row=current();if(!row)return;
  return save({...pattern,instructions:pattern.instructions.map(entry=>entry.id===row.id?{...entry,...changes}:entry)});
 }
-function run(action){
- return async()=>{try{if(!db)throw Error('Local pattern storage is still opening.');await action();}catch(error){say(error.message||'The operation failed.');}};
+function run(action,processing='Working…'){
+ return async event=>{
+  if(operationPending)return;
+  const control=event?.currentTarget;
+  const controls=[...document.querySelectorAll('button:not(:disabled)')];
+  operationPending=true;
+  controls.forEach(button=>button.setAttribute('aria-disabled','true'));
+  control?.setAttribute('aria-busy','true');
+  say(processing);
+  try{
+   if(!db)throw Error('Local pattern storage is still opening.');
+   await action();
+   if($('status').textContent===processing)say('Ready.');
+  }catch(error){say(error.message||'The operation failed.');}
+  finally{
+   operationPending=false;
+   controls.forEach(button=>button.removeAttribute('aria-disabled'));
+   control?.removeAttribute('aria-busy');
+  }
+ };
 }
 $('add').onclick=run(async()=>{
  const file=$('pdf').files[0],name=$('name').value.trim();
@@ -148,9 +167,9 @@ $('add').onclick=run(async()=>{
  await transaction(['patterns','documents'],'readwrite',tx=>{
   tx.objectStore('patterns').add(entry);tx.objectStore('documents').add(file,entry.id);
  });
- await openPattern(entry.id);await refreshLibrary();$('pdf').value='';
-});
-$('open').onclick=run(()=>openPattern($('patterns').value));
+ await openPattern(entry.id);await refreshLibrary();$('pdf').value='';say('PDF imported successfully.');
+},'Importing PDF…');
+$('open').onclick=run(()=>openPattern($('patterns').value),'Opening pattern…');
 $('remove').onclick=run(async()=>{
  const id=$('patterns').value;
  if(!id||!confirm('Remove this local pattern, its stored PDF, and its progress? Keep your original file outside Studio.'))return;
@@ -164,9 +183,9 @@ $('remove').onclick=run(async()=>{
  }
  await refreshLibrary();say('Pattern removed from this device.');
 });
-for(const [id,delta] of [['previous',-1],['next',1]])$(id).onclick=run(()=>render(page+delta));
-$('page').onchange=run(()=>render(Number($('page').value)||1));
-$('zoom').onchange=run(()=>render(page));
+for(const [id,delta] of [['previous',-1],['next',1]])$(id).onclick=run(()=>render(page+delta),'Rendering PDF page…');
+$('page').onchange=run(()=>render(Number($('page').value)||1),'Rendering PDF page…');
+$('zoom').onchange=run(()=>render(page),'Rendering PDF page…');
 $('resume').onclick=run(resume);
 $('inspect').onclick=run(async()=>{
  const row=pattern.instructions.find(entry=>entry.id===$('instructions').value);
@@ -201,30 +220,36 @@ $('editMarker').onclick=run(async()=>{
 });
 $('setCurrent').onclick=run(async()=>{
  const id=$('instructions').value;if(!pattern.instructions.some(row=>row.id===id))return;
- await save({...pattern,current:id});await resume();
-});
+ await save({...pattern,current:id});await resume();say('Working position saved: '+current().label+'.');
+},'Saving working position…');
 $('addRange').onclick=run(async()=>{
  const first=Number($('rangeFirst').value),last=Number($('rangeLast').value),type=$('rangeType').value;
  if(!Number.isInteger(first)||!Number.isInteger(last)||first<1||last<first||last>9999||last-first+1+pattern.instructions.length>300)throw Error('Enter a valid range with at most 300 total markers.');
  const rows=Array.from({length:last-first+1},(_,i)=>({id:crypto.randomUUID(),label:type+' '+(first+i),page:null,position:{x:0,y:0},box:null,note:'',done:false}));
  await save({...pattern,current:pattern.current||rows[0].id,instructions:[...pattern.instructions,...rows]});
 });
-$('saveNote').onclick=run(()=>updateCurrent({note:$('note').value}));
+$('saveNote').onclick=run(async()=>{await updateCurrent({note:$('note').value});say('Note saved.');},'Saving note…');
 $('complete').onclick=run(()=>updateCurrent({done:!current()?.done}));
 $('completeNext').onclick=run(async()=>{
  const row=current();if(!row||row.done)return;
  const index=pattern.instructions.indexOf(row);
  await save({...pattern,lastCompletion:row.id,current:pattern.instructions[index+1]?.id||row.id,
   instructions:pattern.instructions.map(entry=>entry.id===row.id?{...entry,done:true}:entry)});
- await resume();
-});
+ await resume();say(row.label+' completed. '+(current()?.id===row.id?'This was the final instruction.':'Now working on '+current().label+'.'));
+},'Saving completion…');
 $('undoComplete').onclick=run(async()=>{
  const id=pattern.lastCompletion;if(!id)return;
  await save({...pattern,lastCompletion:null,current:id,instructions:pattern.instructions.map(row=>row.id===id?{...row,done:false}:row)});
  await resume();
 });
 function invalidateBackup(){
- preparedBackup=null;$('saveBackup').disabled=true;return ++backupGeneration;
+ preparedBackup=null;$('saveBackup').disabled=$('shareBackup').disabled=true;
+ $('backupHelp').textContent='Prepare a backup to enable Download Backup. Sharing is available on supported devices.';
+ return ++backupGeneration;
+}
+function canShareBackup(file){
+ if(window.StudioMobile?.nativeFiles)return true;
+ try{return !!(navigator.share&&navigator.canShare?.({files:[file]}));}catch{return false;}
 }
 $('omitPdf').onchange=invalidateBackup;
 $('exportBackup').onclick=run(async()=>{
@@ -241,20 +266,34 @@ $('exportBackup').onclick=run(async()=>{
  const name=entry.name.replace(/[^a-z0-9_-]+/gi,'-').slice(0,60)||'pattern';
  preparedBackup=new File([blob],name+'.deewritten',{type:blob.type});
  $('saveBackup').disabled=false;
- say('Backup ready. Save or share it, then verify the file outside Studio.');
-});
+ $('shareBackup').disabled=!canShareBackup(preparedBackup);
+ $('backupHelp').textContent=$('shareBackup').disabled?'Download Backup is ready. File sharing is unavailable here.':'Choose Download Backup or Share Backup.';
+ say('Backup prepared. '+$('backupHelp').textContent);
+},'Preparing backup…');
 $('saveBackup').onclick=run(async()=>{
  const file=preparedBackup;if(!file)return;
  if(window.StudioMobile?.nativeFiles){
-  if(!await window.StudioMobile.save(file,file.name))return;
- }else if(navigator.canShare?.({files:[file]})){
-  try{await navigator.share({files:[file]});}catch(error){if(error.name==='AbortError')return;throw error;}
+  if(!await window.StudioMobile.save(file,file.name)){say('Save canceled. The backup is still ready to download.');return;}
  }else{
   const url=URL.createObjectURL(file),link=document.createElement('a');
-  link.href=url;link.download=file.name;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+  link.href=url;link.download=file.name;document.body.append(link);
+  try{link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
  }
- say('Check that the backup exists in Downloads or Files. Studio cannot verify that destination.');
-});
+ say('Download requested. Check Downloads or Files for '+file.name+'. If no file appears, check the browser’s download permissions and try again.');
+},'Starting download…');
+$('shareBackup').onclick=run(async()=>{
+ const file=preparedBackup;if(!file)return;
+ if(!canShareBackup(file)){say('File sharing is unavailable. Choose Download Backup instead.');return;}
+ try{
+  if(window.StudioMobile?.nativeFiles)await window.StudioMobile.share(file,file.name);
+  else await navigator.share({files:[file]});
+ }
+ catch(error){
+  say(error.name==='AbortError'?'Sharing canceled. You can still choose Download Backup.':'Sharing could not open or was denied. Choose Download Backup instead.');
+  return;
+ }
+ say('Check Files or your selected destination to verify the backup.');
+},'Opening file sharing…');
 $('restoreBackup').onclick=run(async()=>{
  const {project,pdf:original}=await readWrittenBackup($('backupFile').files[0],$('pdf').files[0]);
  const doc=await loadPdf(new Uint8Array(await original.arrayBuffer()));
@@ -267,13 +306,18 @@ $('restoreBackup').onclick=run(async()=>{
   tx.objectStore('patterns').add(entry);tx.objectStore('documents').add(original,entry.id);
  });
  await openPattern(entry.id);await refreshLibrary();say('Restored as a separate written-pattern project.');
-});
+},'Restoring backup…');
 const paper=$('paper');
 function point(event){
  const r=paper.getBoundingClientRect(),clamp=n=>Math.min(1,Math.max(0,n));
  return {x:clamp((event.clientX-r.left)/r.width),y:clamp((event.clientY-r.top)/r.height)};
 }
-$('region').onclick=()=>{paper.classList.add('mapping');say('Drag around the instructions to mark the area.');};
+$('region').onclick=()=>{
+ if(operationPending)return;
+ const enabled=paper.classList.toggle('mapping');
+ $('region').setAttribute('aria-pressed',String(enabled));
+ say(enabled?'Drag around the instructions to mark the area.':'Instruction marking canceled.');
+};
 paper.onpointerdown=event=>{
  if(!paper.classList.contains('mapping'))return;
  drag=point(event);paper.setPointerCapture(event.pointerId);
@@ -284,7 +328,11 @@ paper.onpointermove=event=>{
  draft={page,box:{x:Math.min(drag.x,end.x),y:Math.min(drag.y,end.y),w:Math.abs(drag.x-end.x),h:Math.abs(drag.y-end.y)}};
  drawHighlight();
 };
-paper.onpointerup=paper.onpointercancel=()=>{drag=null;paper.classList.remove('mapping');};
+paper.onpointerup=paper.onpointercancel=()=>{
+ if(!drag)return;
+ drag=null;paper.classList.remove('mapping');$('region').setAttribute('aria-pressed','false');
+ say('Instruction area ready. Add a marker or update the selected marker to keep it.');
+};
 init.then(async database=>{
  db=database;await refreshLibrary();
  const id=localStorage.getItem('dee-current-written-pattern');
