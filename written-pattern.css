@@ -10,3 +10,4 @@ button[aria-pressed=true]{background:#583984;color:white;border-color:#3e275f}
 button:not(:disabled):not([aria-disabled=true]):active{filter:brightness(.78);box-shadow:inset 0 2px 4px #32284966}
 input[type=checkbox]{accent-color:#614398}
 button[aria-busy=true]{outline:2px dashed #7954ad;outline-offset:2px}
+#viewport{touch-action:pan-x pan-y}

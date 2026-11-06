@@ -43,7 +43,17 @@ function drawHighlight(){
  h.hidden=!box;
  if(box)for(const [key,value] of Object.entries({left:box.x,top:box.y,width:box.w,height:box.h}))h.style[key]=100*value+'%';
 }
-async function render(target,position=null){
+let pageAspect=0;
+const viewport=$('viewport'),paper=$('paper');
+const fitWidth=()=>Math.max(100,viewport.clientWidth);
+function sizePage(zoom){
+ const width=fitWidth()*zoom,canvas=$('canvas');
+ canvas.style.width=width+'px';canvas.style.height=width*pageAspect+'px';
+}
+function scrollPosition(){
+ return {x:viewport.scrollLeft/(paper.offsetWidth||1),y:viewport.scrollTop/(paper.offsetHeight||1)};
+}
+async function render(target,position=null,anchor={x:0,y:0}){
  const generation=++renderId,document=pdf;
  if(!document)return;
  if(rendering){rendering.cancel();await rendering.promise.catch(()=>{});}
@@ -54,18 +64,21 @@ async function render(target,position=null){
  const pdfPage=await document.getPage(page);
  if(generation!==renderId||document!==pdf)return;
  const base=pdfPage.getViewport({scale:1});
- const scale=Math.min(2200/Math.max(base.width,base.height),Math.max(100,$('viewport').clientWidth)/base.width*Number($('zoom').value));
+ pageAspect=base.height/base.width;
+ const zoom=Number($('zoom').value);
+ const scale=Math.min(2200/Math.max(base.width,base.height),fitWidth()/base.width*zoom);
  const view=pdfPage.getViewport({scale});
  const canvas=$('canvas');
  canvas.width=Math.ceil(view.width);canvas.height=Math.ceil(view.height);
+ sizePage(zoom);
  rendering=pdfPage.render({canvas,canvasContext:canvas.getContext('2d'),viewport:view});
  try{await rendering.promise;}
  catch(error){if(error.name!=='RenderingCancelledException')throw error;}
  finally{if(generation===renderId)rendering=null;}
  if(generation!==renderId)return;
  drawHighlight();
- $('viewport').scrollTop=position?canvas.height*position.y:0;
- $('viewport').scrollLeft=position?canvas.width*position.x:0;
+ viewport.scrollTop=position?paper.offsetHeight*position.y-anchor.y:0;
+ viewport.scrollLeft=position?paper.offsetWidth*position.x-anchor.x:0;
  pdfPage.cleanup();
 }
 const current=()=>pattern?.instructions.find(entry=>entry.id===pattern.current);
@@ -185,7 +198,7 @@ $('remove').onclick=run(async()=>{
 });
 for(const [id,delta] of [['previous',-1],['next',1]])$(id).onclick=run(()=>render(page+delta),'Rendering PDF page…');
 $('page').onchange=run(()=>render(Number($('page').value)||1),'Rendering PDF page…');
-$('zoom').onchange=run(()=>render(page),'Rendering PDF page…');
+$('zoom').onchange=run(()=>render(page,scrollPosition()),'Rendering PDF page…');
 $('resume').onclick=run(resume);
 $('inspect').onclick=run(async()=>{
  const row=pattern.instructions.find(entry=>entry.id===$('instructions').value);
@@ -197,8 +210,7 @@ $('inspect').onclick=run(async()=>{
 function marker(existing){
  const label=$('label').value.trim();
  if(!label)throw Error('Enter a row, round, or section label.');
- const viewport=$('viewport'),canvas=$('canvas');
- const position={x:viewport.scrollLeft/canvas.width,y:viewport.scrollTop/canvas.height};
+ const position=scrollPosition();
  return {id:existing?.id||crypto.randomUUID(),label,page,position,
   box:draft?.page===page?draft.box:null,note:existing?.note||'',done:existing?.done||false};
 }
@@ -225,6 +237,9 @@ $('setCurrent').onclick=run(async()=>{
 $('addRange').onclick=run(async()=>{
  const first=Number($('rangeFirst').value),last=Number($('rangeLast').value),type=$('rangeType').value;
  if(!Number.isInteger(first)||!Number.isInteger(last)||first<1||last<first||last>9999||last-first+1+pattern.instructions.length>300)throw Error('Enter a valid range with at most 300 total markers.');
+ const existing=new Set(pattern.instructions.map(row=>row.label.trim().toLowerCase()));
+ const overlap=Array.from({length:last-first+1},(_,i)=>type+' '+(first+i)).filter(label=>existing.has(label.toLowerCase()));
+ if(overlap.length&&!confirm(`${overlap.length} instruction label(s) already exist in this range. Add separate duplicate markers anyway?`))return;
  const rows=Array.from({length:last-first+1},(_,i)=>({id:crypto.randomUUID(),label:type+' '+(first+i),page:null,position:{x:0,y:0},box:null,note:'',done:false}));
  await save({...pattern,current:pattern.current||rows[0].id,instructions:[...pattern.instructions,...rows]});
 });
@@ -307,7 +322,60 @@ $('restoreBackup').onclick=run(async()=>{
  });
  await openPattern(entry.id);await refreshLibrary();say('Restored as a separate written-pattern project.');
 },'Restoring backup…');
-const paper=$('paper');
+let pinch=null,multiTouch=false,markPointer=null,originalDraft=null,resizeTimer;
+function touchGeometry(touches){
+ const [a,b]=touches,r=viewport.getBoundingClientRect();
+ return {distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),
+  x:(a.clientX+b.clientX)/2-r.left,y:(a.clientY+b.clientY)/2-r.top};
+}
+function setZoomChoice(zoom){
+ const select=$('zoom'),custom=select.querySelector('[data-pinch]');
+ if(custom)custom.remove();
+ const value=String(zoom);
+ if(![...select.options].some(option=>option.value===value)){
+  const option=new Option(Math.round(zoom*100)+'%',value);option.dataset.pinch='';select.add(option);
+ }
+ select.value=value;
+}
+viewport.addEventListener('touchstart',event=>{
+ if(event.touches.length<2||!pdf||!pageAspect||operationPending)return;
+ event.preventDefault();
+ if(pinch)return;
+ multiTouch=true;
+ if(drag){draft=originalDraft;drawHighlight();}
+ drag=null;markPointer=null;endMarking();
+ const at=touchGeometry(event.touches);
+ pinch={...at,zoom:Number($('zoom').value),
+  position:{x:(viewport.scrollLeft+at.x)/paper.offsetWidth,y:(viewport.scrollTop+at.y)/paper.offsetHeight}};
+},{passive:false});
+viewport.addEventListener('touchmove',event=>{
+ if(!multiTouch)return;
+ event.preventDefault();
+ if(!pinch||event.touches.length!==2)return;
+ const at=touchGeometry(event.touches);
+ const zoom=Math.round(Math.max(1,Math.min(3,pinch.zoom*at.distance/Math.max(1,pinch.distance)))*100)/100;
+ setZoomChoice(zoom);sizePage(zoom);
+ viewport.scrollLeft=paper.offsetWidth*pinch.position.x-at.x;
+ viewport.scrollTop=paper.offsetHeight*pinch.position.y-at.y;
+},{passive:false});
+function finishPinch(event){
+ if(!multiTouch)return;
+ if(pinch&&event.touches.length<2){
+  pinch=null;
+  void render(page,scrollPosition()).catch(error=>say(error.message));
+ }
+ if(!event.touches.length)multiTouch=false;
+}
+viewport.addEventListener('touchend',finishPinch);
+viewport.addEventListener('touchcancel',finishPinch);
+new ResizeObserver(()=>{
+ if(!pdf||pinch||$('reader').hidden)return;
+ clearTimeout(resizeTimer);
+ resizeTimer=setTimeout(()=>{if(!pinch)void render(page,scrollPosition()).catch(error=>say(error.message));},120);
+}).observe(viewport);
+function endMarking(){
+ paper.classList.remove('mapping');$('region').setAttribute('aria-pressed','false');
+}
 function point(event){
  const r=paper.getBoundingClientRect(),clamp=n=>Math.min(1,Math.max(0,n));
  return {x:clamp((event.clientX-r.left)/r.width),y:clamp((event.clientY-r.top)/r.height)};
@@ -319,19 +387,24 @@ $('region').onclick=()=>{
  say(enabled?'Drag around the instructions to mark the area.':'Instruction marking canceled.');
 };
 paper.onpointerdown=event=>{
- if(!paper.classList.contains('mapping'))return;
+ if(!paper.classList.contains('mapping')||multiTouch||markPointer!==null)return;
+ markPointer=event.pointerId;originalDraft=draft;
  drag=point(event);paper.setPointerCapture(event.pointerId);
 };
 paper.onpointermove=event=>{
- if(!drag)return;
+ if(!drag||multiTouch||markPointer!==event.pointerId)return;
  const end=point(event);
  draft={page,box:{x:Math.min(drag.x,end.x),y:Math.min(drag.y,end.y),w:Math.abs(drag.x-end.x),h:Math.abs(drag.y-end.y)}};
  drawHighlight();
 };
-paper.onpointerup=paper.onpointercancel=()=>{
- if(!drag)return;
- drag=null;paper.classList.remove('mapping');$('region').setAttribute('aria-pressed','false');
+paper.onpointerup=event=>{
+ if(!drag||markPointer!==event.pointerId)return;
+ drag=null;markPointer=null;endMarking();
  say('Instruction area ready. Add a marker or update the selected marker to keep it.');
+};
+paper.onpointercancel=event=>{
+ if(markPointer!==event.pointerId)return;
+ drag=null;markPointer=null;draft=originalDraft;endMarking();drawHighlight();
 };
 init.then(async database=>{
  db=database;await refreshLibrary();

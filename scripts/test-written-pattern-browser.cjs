@@ -88,6 +88,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       if(el('reader').hidden)throw Error(el('status').textContent);
       const canvas=el('canvas'),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
       if(!pixels.some((value,index)=>index%4===0&&value<100&&pixels[index+3]===255))throw Error('PDF page did not render its test artwork');
+      const paper=el('paper'),rect=paper.getBoundingClientRect();
+      const capture=paper.setPointerCapture;paper.setPointerCapture=()=>{};
+      el('region').click();
+      for(const [type,x,y] of [['pointerdown',.12,.15],['pointermove',.6,.25],['pointerup',.6,.25]]){
+        paper.dispatchEvent(new PointerEvent(type,{pointerId:1,clientX:rect.left+x*rect.width,clientY:rect.top+y*rect.height}));
+      }
+      paper.setPointerCapture=capture;
       el('label').value='Round 4';await el('commit').onclick();await el('setCurrent').onclick();
       const tx=IDBDatabase.prototype.transaction;
       IDBDatabase.prototype.transaction=function(stores,mode){
@@ -105,6 +112,23 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return el('page').value==='1'&&el('canvas').width>0&&el('complete').textContent.includes('Undo');
     })()`);
     assert.equal(result,true);
+    assert.equal(await evaluate(`(async()=>{
+      const el=id=>document.getElementById(id),target=el('paper');
+      const event=(type,positions)=>target.dispatchEvent(new TouchEvent(type,{bubbles:true,cancelable:true,
+        touches:positions.map(([clientX,clientY],identifier)=>new Touch({target,identifier,clientX,clientY}))}));
+      const initial=target.offsetWidth;
+      const highlight=el('highlight'),original=highlight.style.cssText;
+      if(highlight.hidden||!original)return false;
+      el('region').click();
+      event('touchstart',[[100,120],[200,120]]);
+      event('touchmove',[[50,120],[250,120]]);
+      if(target.offsetWidth<initial*1.9||el('region').getAttribute('aria-pressed')!=='false'||highlight.hidden||highlight.style.cssText!==original)return false;
+      event('touchmove',[[110,120],[190,120]]);
+      if(Math.abs(target.offsetWidth-initial)>2)return false;
+      event('touchend',[]);
+      await new Promise(resolve=>setTimeout(resolve,150));
+      return el('page').value==='1'&&el('working').textContent.includes('Round 4');
+    })()`),true,'pinch zooms both directions and cancels marking without moving working row');
     await call('Network.enable');
     await call('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
     await call('Page.reload');
@@ -119,6 +143,10 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const el=id=>document.getElementById(id);
       el('rangeFirst').value=40;el('rangeLast').value=41;
       await el('addRange').onclick();
+      const count=el('instructions').options.length;
+      window.confirm=()=>false;
+      await el('addRange').onclick();
+      if(el('instructions').options.length!==count)throw Error('Overlapping range added without confirmation');
       el('instructions').selectedIndex=1;await el('setCurrent').onclick();
       await el('completeNext').onclick();
       if(!el('working').textContent.includes('Row 41'))throw Error('Did not advance');
