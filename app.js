@@ -4557,9 +4557,29 @@ window.StudioBeforeUpdate = async () => {
  return !needsSave() && !memoryOnly;
 };
 function setupServiceWorkerUpdates(){
- if(window.Capacitor?.isNativePlatform()||!('serviceWorker' in navigator)||!location.protocol.startsWith('http'))return;
+ const offlineStatus=$('offlineSetupStatus');
+ if(window.Capacitor?.isNativePlatform()){offlineStatus.hidden=true;return;}
+ if(!('serviceWorker' in navigator)||!location.protocol.startsWith('http')){
+   offlineStatus.textContent='This browser or address does not support website offline setup.';
+   return;
+ }
  let installingUpdate=false,registration=null;
+ function checkOfflineReady(){
+   const worker=navigator.serviceWorker.controller;
+   if(!worker)return;
+   const channel=new MessageChannel();
+   const timer=setTimeout(()=>channel.port1.close(),3000);
+   channel.port1.onmessage=event=>{
+     clearTimeout(timer);channel.port1.close();
+     if(navigator.serviceWorker.controller!==worker)return;
+     offlineStatus.textContent=event.data?.ready
+       ?'Ready for offline use: Crochet Charts and Written Patterns.'
+       :'Offline files are incomplete. Keep this tab online and check for updates.';
+   };
+   worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);
+ }
  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+   checkOfflineReady();
    if(installingUpdate&&!needsSave())location.reload();
    else if(installingUpdate)toast('Update installed. Finish saving, then reload to open it.');
    installingUpdate=false;
@@ -4568,16 +4588,31 @@ function setupServiceWorkerUpdates(){
    $('updateAvailable').hidden=false;
    $('updateAvailableText').textContent='A newer Studio version is ready. Save your changes before applying the update.';
  }
- navigator.serviceWorker.register('./service-worker.js').then(reg=>{
+ async function registerOffline(){
+   const reg=await navigator.serviceWorker.register('./service-worker.js');
    registration=reg;readyUpdate(reg);
-   reg.addEventListener('updatefound',()=>{const w=reg.installing;if(!w)return;
-     w.addEventListener('statechange',()=>{if(w.state==='installed')readyUpdate(reg);});
-   });
- }).catch(e=>{console.warn('Service worker registration unavailable:',e.message);});
+   function watch(){
+     const worker=reg.installing;if(!worker)return;
+     if(!navigator.serviceWorker.controller)offlineStatus.textContent='Preparing offline files. Keep this tab online.';
+     worker.addEventListener('statechange',()=>{
+       if(worker.state==='installed')readyUpdate(reg);
+       if(worker.state==='redundant'&&!navigator.serviceWorker.controller){
+         registration=null;
+         offlineStatus.textContent='Offline setup did not finish. Check your connection and choose Check for Studio updates to retry.';
+       }
+     });
+   }
+   reg.addEventListener('updatefound',watch);watch();checkOfflineReady();
+ }
+ function offlineRegistrationFailed(error){
+   offlineStatus.textContent='Offline setup is unavailable. Choose Check for Studio updates to retry while online.';
+   console.warn('Service worker registration unavailable:',error.message);
+ }
+ registerOffline().catch(offlineRegistrationFailed);
  $('checkUpdates').addEventListener('click',async()=>{
    if(!navigator.onLine)return toast('Connect to the internet to check for an update.');
-   if(!registration)return toast('Update service is not ready yet.');
-   try{await registration.update();readyUpdate(registration);if(!registration.waiting)toast('Update check complete. No ready update detected.');}
+   if(!registration){await registerOffline().catch(offlineRegistrationFailed);return;}
+   try{await registration.update();readyUpdate(registration);checkOfflineReady();if(!registration.waiting)toast('Update check complete. No ready update detected.');}
    catch(e){toast('Update check failed: '+e.message);}
  });
  $('installReadyUpdate').addEventListener('click',async()=>{

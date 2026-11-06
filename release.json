@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.5.0",
-    "notes": "Adds Project Protection and the offline Written Pattern Companion."
+    "version": "2.5.1",
+    "notes": "Improves first-visit offline setup and written-pattern startup."
   },
   "ios": null,
-  "version": "2.5.0",
-  "notes": "Adds Project Protection and the offline Written Pattern Companion."
+  "version": "2.5.1",
+  "notes": "Improves first-visit offline setup and written-pattern startup."
 }

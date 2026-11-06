@@ -1,11 +1,34 @@
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path');
 const cp = require('node:child_process'), assert = require('node:assert/strict');
 const types = {'.js':'application/javascript','.mjs':'application/javascript','.html':'text/html','.css':'text/css','.png':'image/png'};
+let transientFailure=false;
+let persistentFailure=process.env.STUDIO_PERSISTENT_FAILURE==='1';
 const server = http.createServer((req,res) => {
   const pathname = new URL(req.url,'http://localhost').pathname;
+  if(pathname==='/assets/pdfjs/pdf.worker.min.mjs'&&(persistentFailure||!transientFailure)){
+    transientFailure=true;res.writeHead(503).end();return;
+  }
   const file = path.join(__dirname, '../dist', pathname === '/' ? 'index.html' : pathname);
   if (!fs.existsSync(file)) { res.writeHead(404).end(); return; }
   res.setHeader('Content-Type', types[path.extname(file)] || 'application/octet-stream');
+  if(pathname==='/written-pattern.html'){
+    const setup=`<script>
+      const originalOpen=IDBFactory.prototype.open;
+      IDBFactory.prototype.open=function(name,...args){
+        const request=originalOpen.call(this,name,...args);
+        if(name==='dee-written-patterns'&&!sessionStorage.getItem('studio-test-held-open')){
+          sessionStorage.setItem('studio-test-held-open','1');
+          Object.defineProperty(request,'onsuccess',{
+            set(handler){request.addEventListener('success',event=>{
+              window.releaseTestPatternStorage=()=>{delete window.releaseTestPatternStorage;handler.call(request,event);};
+            });}
+          });
+        }
+        return request;
+      };
+    </script>`;
+    res.end(fs.readFileSync(file,'utf8').replace('</head>',setup+'</head>'));return;
+  }
   if (pathname==='/app.js') {
     const source=fs.readFileSync(file,'utf8').replace(/^initialize\(\)\.catch/m,'window.editorProbe = source => eval(source);\ninitialize().catch');
     res.end(source);return;
@@ -47,11 +70,26 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       return result.result.value;
     };
     await call('Page.navigate',{url});
+    if(persistentFailure){
+      for(let i=0;i<80;i++){
+        if(await evaluate("document.querySelector('#offlineSetupStatus')?.textContent.includes('retry')"))break;
+        await delay(200);
+      }
+      assert.equal(await evaluate("document.querySelector('#offlineSetupStatus')?.textContent.includes('retry') && !navigator.serviceWorker.controller"),true);
+      persistentFailure=false;
+      await evaluate("document.querySelector('#checkUpdates').click()");
+    }
     for(let i=0;i<80;i++){
       if(await evaluate('!!navigator.serviceWorker?.controller'))break;
       await delay(200);
     }
     assert.equal(await evaluate('!!navigator.serviceWorker?.controller'),true,'offline cache installed');
+    assert.equal(transientFailure,true,'first precache request encountered HTTP 503');
+    for(let i=0;i<50;i++){
+      if(await evaluate("document.querySelector('#offlineSetupStatus')?.textContent.startsWith('Ready for offline use')"))break;
+      await delay(100);
+    }
+    assert.equal(await evaluate("document.querySelector('#offlineSetupStatus').textContent.startsWith('Ready for offline use')"),true);
     for(let i=0;i<50;i++){
       if(await evaluate("!!window.editorProbe?.('active')").catch(()=>false))break;
       await delay(100);
@@ -60,7 +98,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     assert.ok(chart,'saved chart fixture');
     await call('Page.navigate',{url:url+'/written-pattern.html'});
     for(let i=0;i<50;i++){
-      if(await evaluate("!!document.querySelector('#add')?.onclick").catch(()=>false))break;
+      if(await evaluate("!!window.releaseTestPatternStorage").catch(()=>false))break;
+      await delay(100);
+    }
+    assert.equal(await evaluate("!!window.releaseTestPatternStorage && document.querySelector('#add').matches(':disabled')"),true,'imports disabled while IndexedDB open is pending');
+    await evaluate("window.releaseTestPatternStorage()");
+    for(let i=0;i<50;i++){
+      if(await evaluate("document.querySelector('#patternLibrary')?.disabled===false").catch(()=>false))break;
       await delay(100);
     }
     const pdfObjects=[
@@ -86,12 +130,14 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       invalid.items.add(new File(['invalid'],'broken.pdf',{type:'application/pdf'}));
       el('pdf').files=invalid.files;
       await el('add').onclick();
-      if(!el('status').textContent.includes('valid PDF header')||el('patterns').options.length)throw Error('Invalid PDF was accepted');
+      if(!el('status').textContent.includes('valid PDF header')||el('patterns').options.length)
+        throw Error('Invalid PDF rejection failed: status='+el('status').textContent+'; patterns='+el('patterns').options.length);
       const transfer=new DataTransfer();
       transfer.items.add(new File([${JSON.stringify(source)}],'fixture.pdf',{type:'application/pdf'}));
       el('pdf').files=transfer.files;
       await el('add').onclick();
       if(el('reader').hidden)throw Error(el('status').textContent);
+      if(el('patterns').options.length!==1)throw Error('Valid import did not create exactly one pattern');
       const canvas=el('canvas'),pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
       if(!pixels.some((value,index)=>index%4===0&&value<100&&pixels[index+3]===255))throw Error('PDF page did not render its test artwork');
       const paper=el('paper'),rect=paper.getBoundingClientRect();
@@ -186,13 +232,22 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     })`);
     assert.equal(chartRecord.notes,'Integration chart fixture');
     assert.equal(chartRecord.done[0],1,'written-pattern work leaves chart progress intact on the same origin');
+    await call('Page.navigate',{url:url+'/'});
+    let offlineChart=false;
+    for(let i=0;i<50;i++){
+      await delay(100);
+      offlineChart=await evaluate("window.editorProbe?.(\"active?.notes==='Integration chart fixture' && active.done[0]===1\")").catch(()=>false);
+      if(offlineChart)break;
+    }
+    assert.equal(offlineChart,true,'first-visit chart reopens offline with saved progress');
     await call('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     const cleared=await call('Storage.clearDataForOrigin',{origin:url,storageTypes:'all'});
     assert.equal(cleared.error,undefined,'disposable site storage cleared');
     await call('Page.navigate',{url:url+'/written-pattern.html'});
     for(let i=0;i<60;i++){
       await delay(100);
-      if(await evaluate("document.readyState==='complete'&&!!document.querySelector('#restoreBackup')?.onclick").catch(()=>false))break;
+      await evaluate("window.releaseTestPatternStorage?.()").catch(()=>{});
+      if(await evaluate("document.readyState==='complete'&&document.querySelector('#patternLibrary')?.disabled===false").catch(()=>false))break;
     }
     const restored=await evaluate(`(async()=>{
       const el=id=>document.getElementById(id);

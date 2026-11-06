@@ -11,7 +11,10 @@ const out = native ? 'mobile/www' : 'dist';
 const window = {};
 runInNewContext(await readFile('release-config.js', 'utf8'), { window });
 const pkg = JSON.parse(await readFile('mobile/package.json', 'utf8'));
-if (window.StudioRelease.version !== pkg.version) throw new Error('Build metadata and package versions must match');
+const release = JSON.parse(await readFile('release.json', 'utf8'));
+if (window.StudioRelease.nativeVersion !== pkg.version || window.StudioRelease.version !== release.web.version) {
+  throw new Error('Website and native build metadata must match their respective manifests');
+}
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 for (const entry of await readdir('.', { withFileTypes: true })) {
@@ -22,6 +25,9 @@ for (const entry of await readdir('.', { withFileTypes: true })) {
 }
 let html = await readFile('index.html', 'utf8');
 if (native) {
+  const { nativeVersion, ...config } = window.StudioRelease;
+  await writeFile(out + '/release-config.js', 'window.StudioRelease = ' +
+    JSON.stringify({ ...config, version: nativeVersion }) + ';\n');
   html = html.replace(/  <link rel="manifest"[^\n]*\n/, '')
     .replace('<title>Dorette Crochet Studio</title>', '<title>Dee’s Crochet Studio</title>')
     .replace('<strong>Dorette</strong>', '<strong>Dee’s</strong>')
