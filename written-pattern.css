@@ -11,3 +11,4 @@ button:not(:disabled):not([aria-disabled=true]):active{filter:brightness(.78);bo
 input[type=checkbox]{accent-color:#614398}
 button[aria-busy=true]{outline:2px dashed #7954ad;outline-offset:2px}
 #viewport{touch-action:pan-x pan-y}
+#patternLibrary{min-inline-size:0;margin:0;padding:0;border:0}

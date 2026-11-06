@@ -12,6 +12,8 @@
 <p id="status" role="status" aria-atomic="true"></p>
 <main>
 <section aria-label="Pattern library">
+<fieldset id="patternLibrary" disabled>
+<legend>Local patterns</legend>
 <p>Import a private PDF and mark where you are working. The original file stays unchanged.</p>
 <label>Project name <input id="name" maxlength="100"></label>
 <label>Original PDF <input id="pdf" type="file" accept=".pdf,application/pdf"></label>
@@ -21,6 +23,7 @@
 <label>Written-pattern backup <input id="backupFile" type="file" accept=".deewritten"></label>
 <button id="restoreBackup">Restore backup as a copy</button>
 <p>For a backup without the PDF, select the matching original in the Original PDF field above.</p>
+</fieldset>
 </section>
 <section id="reader" hidden aria-label="Pattern reader">
 <h2 id="title"></h2>

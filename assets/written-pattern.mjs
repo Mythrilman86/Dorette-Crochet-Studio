@@ -406,8 +406,12 @@ paper.onpointercancel=event=>{
  if(markPointer!==event.pointerId)return;
  drag=null;markPointer=null;draft=originalDraft;endMarking();drawHighlight();
 };
+say('Opening local pattern storage…');
 init.then(async database=>{
  db=database;await refreshLibrary();
+ say('Local pattern storage is ready.');
  const id=localStorage.getItem('dee-current-written-pattern');
- if(id&&[...$('patterns').options].some(option=>option.value===id))await openPattern(id);
+ try{
+  if(id&&[...$('patterns').options].some(option=>option.value===id))await openPattern(id);
+ }finally{$('patternLibrary').disabled=false;}
 }).catch(error=>say('Local pattern storage is unavailable: '+error.message));
