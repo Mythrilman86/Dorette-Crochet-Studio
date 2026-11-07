@@ -431,5 +431,5 @@
     });
     $('motifChoice').before(choice, add);
   }
-  window.StudioExperience = { setup, applyVisibility, highlight };
+  window.StudioExperience = { setup, applyVisibility, highlight, clearHighlight };
 })();

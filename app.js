@@ -3999,6 +3999,7 @@ function setupAppNavigation(){
   toggle.onclick=()=>{if(nav.classList.contains('menu-open'))close();else{nav.classList.add('menu-open');toggle.setAttribute('aria-expanded','true');}};
   $('headerFindTool').onclick=()=>{close();$('openCommandSearch').click();};
   function go(id,action){
+    window.StudioExperience?.clearHighlight();
     const node=id==='guidePdf'?document.querySelector('.guide-link'):$(id);if(!node)return;
     if(inCrochetView()&&['toggleProjects','toggleSettings'].includes(id)){
       setStudioMode('edit');
