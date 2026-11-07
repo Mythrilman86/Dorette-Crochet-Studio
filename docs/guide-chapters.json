@@ -1,0 +1,165 @@
+[
+  [
+    "start",
+    "Getting started and privacy",
+    [
+      "Dee’s Crochet Studio is free and works locally. Charts, written patterns and backups are stored on your device. Keep external backups of important work. No account is required.",
+      "Open a normal browser window or the installed Android application. Website and native application versions can differ. Help → About Studio identifies the running platform and version.",
+      "On the website, remain online until Studio reports Ready for offline use. Open the charts and PDFs you will need, then test them offline. An intermittent Chromium first-install abort remains under investigation. Refresh or retry online if setup fails."
+    ],
+    "workspace"
+  ],
+  [
+    "projects",
+    "Projects and organization",
+    [
+      "Use File → New Project to create a chart. Projects can be searched, categorized, favorited and pinned. Pinning and Favorites are independent. Pinned projects are protected from recycling.",
+      "Use the project menu for explicit duplication. Major edits update the current project unless you deliberately enable separate-copy protection.",
+      "The Recycle Bin allows restoration. Permanent deletion needs confirmation. Deleting a category does not delete its projects."
+    ],
+    "projects"
+  ],
+  [
+    "navigation",
+    "Navigation and personalization",
+    [
+      "Use File, Edit, View, Tools and Help, or Find a Tool (Ctrl+K). Search reveals collapsed or hidden sections and highlights the target until you click elsewhere, press Escape or navigate again.",
+      "Customize Layout changes section order. Choose a Section can follow My Layout Order, Alphabetical A–Z or Favorites First. Sorting navigation does not reorder chart data.",
+      "Interface offers Beginner, Advanced and Personalized. Use Personalize sections and tools to select registered sections and the supported painting/area-selection tool groups. Select All enables them. Restore Advanced recovers the full interface. Search can temporarily reveal hidden features without changing your selection.",
+      "Settings & Layout JSON transfers the validated workspace preferences, independently of projects. Export before replacing device preferences."
+    ],
+    "personalization"
+  ],
+  [
+    "editing",
+    "Chart creation, photos and lettering",
+    [
+      "Row 1 is at the bottom and column 1 at the left. Each colored square is a stitch cell. Use Select, Paint, Erase, Pick and Pan as appropriate.",
+      "Text to Chart supports horizontal or upright vertical lettering, separate letter width and height, spacing, rotation and an independent letter color. Preview before applying.",
+      "Placed lettering stays on an editable layer. Select the layer and enable Paint and erase on selected text layer to change its individual stitches. Pattern Lock and Layer Lock must allow editing.",
+      "Photo conversion has a preview and confirmation. Dimension-changing conversion can reset crochet progress and clear editable layers. Preserve a backup or copy before applying it."
+    ],
+    "editing"
+  ],
+  [
+    "layers",
+    "Layers, motifs and dimensions",
+    [
+      "Editable layers can be selected, moved, locked and flattened. Flattening removes independent layer editing. Use Undo/Redo to recover edits in the current session.",
+      "The original motif collection provides a heart, star, smiley, peace sign, flower, diamond and square. Choose a preset, preview it, position it on the chart and apply it as an editable layer. Presets enter the existing local motif library. Colors use the current chart background and a contrasting palette color.",
+      "Chart Settings can add or remove rows and columns from chosen edges. Insert/Delete Row or Column works within the chart. Review the preview and deletion warning before confirming. Surviving artwork shifts without scaling.",
+      "Structural edits preserve surviving progress and annotations. Photo alignment and editable text metadata may require explicit review after geometry changes.",
+      "Routine row and column insertion, deletion and Apply Dimensions preserve zoom and the artwork near the viewport center. Deleted focal stitches use the nearest surviving location. Advanced resize and photo conversion retain their separate fitting behavior."
+    ],
+    "motif"
+  ],
+  [
+    "crochet",
+    "Crochet View and daily progress",
+    [
+      "Open Crochet View for guided work. Select stitches, complete stitches, color runs or rows, and follow your chosen row direction and alternating directions.",
+      "Row Color Instructions show actual color runs, symbols, names and the next change. This panel collapses independently of the lower controls.",
+      "Use the compact progress bar to collapse or expand the lower controls on phones, tablets and desktop. Studio remembers the existing preference. With no saved preference the controls start expanded.",
+      "Center remains available while controls are collapsed and preserves zoom. Fit Chart changes zoom. Show yarn letters hides only chart-cell identification letters; colors, numbering, selection, progress and row instructions remain. Emphasize yarn letters still controls the zoom threshold when letters are shown."
+    ],
+    "crochet"
+  ],
+  [
+    "yarn",
+    "Yarn, sizing and enlarged previews",
+    [
+      "The Personal Yarn Library saves reusable yarn colors locally. Use saved yarn applies a selected saved color through the existing palette workflow. The library is separate from individual chart backups.",
+      "Size and yarn estimates depend on your actual gauge and entered measurements. The simulation is illustrative and does not predict tension, drape or exact yarn use.",
+      "Render the Simulated Crochet Preview, then click Chart or Simulation to enlarge it. Fit and Reset frame the image. Use buttons, the mouse wheel, pinch or plus/minus to zoom. Drag or use arrow keys to pan. Close or Android Back returns to the workspace without changing the chart."
+    ],
+    "preview"
+  ],
+  [
+    "written",
+    "Written Pattern Companion",
+    [
+      "Open Written Patterns from the header. Enter a project title and import a PDF using the file picker. Your original PDF remains local.",
+      "Track rows or rounds independently from PDF page numbers. Add notes and instruction highlights. Complete & Next advances progress; Undo reverses the companion action.",
+      "Use a .deewritten backup to preserve the written pattern and original PDF. Restore creates an independent copy. Chart ZIP backups are separate.",
+      "Open the pattern while online before a browser offline test. Test the PDF after closing and reopening. Browser autofill suggestions are controlled partly by the browser even when a project-title field requests autocomplete off."
+    ],
+    "written"
+  ],
+  [
+    "scanner",
+    "Stitch Scanner and offline references",
+    [
+      "Open Tools → Stitch Scanner. Use a photograph or chart image you have permission to use. Review crop, rotation and image adjustments before recognizing symbols.",
+      "Scanner matches are suggestions. Compare them with the pattern legend and correct or reject every uncertain result. Chart-symbol matching is separate from identifying stitches in photographs of crocheted fabric.",
+      "Use the offline stitch encyclopedia for abbreviations, US/UK terminology and instructions. Curated online references require internet access. No paid AI or automatic image upload is required.",
+      "The production recognizer has known accuracy limits. Do not treat its first suggestion as a confirmed stitch or automatically alter a project based on it."
+    ],
+    "scanner"
+  ],
+  [
+    "annotations",
+    "Annotations, versions and quality checks",
+    [
+      "Use stitch, row or section notes to attach reminders to the chart. Select the target location and scope before saving. Notes and completed stitches serve different purposes.",
+      "Save design versions or checkpoints before substantial changes. Design Undo/Redo and crochet progress history have different roles; exporting an external backup adds protection beyond local history.",
+      "Quality checks identify suspicious cells or color changes for review. Preview cleanup and confirm the intended result. A safe copy or checkpoint is appropriate before an uncertain correction.",
+      "Large-chart sections help navigate a design without changing its dimensions. Keep numbering and row direction in view when working on a section."
+    ],
+    "annotations"
+  ],
+  [
+    "exports",
+    "Printing, images and written color instructions",
+    [
+      "Use File → Print / Export PDF for printable chart pages and the palette legend. Review paper size, orientation, margins, page layout and available numbering or symbol options before exporting.",
+      "PNG and SVG exports provide chart images. Written-instruction PDF export describes the chart’s color runs. These are colorwork instructions, not inferred crochet stitch types or turning-chain instructions.",
+      "Show yarn letters on chart changes interactive viewing only. It does not remove stored symbol assignments or automatically change the existing print/export options.",
+      "Review exported files in an external viewer. An image or PDF export is not a restorable chart ZIP backup. Keep the editable project and its backup separately."
+    ],
+    "exports"
+  ],
+  [
+    "backups",
+    "Saving, recovery and three backup systems",
+    [
+      "A save is confirmed only after local storage acknowledges it. Respond to failed-save warnings. Retry saving or export current in-memory work for recovery when appropriate.",
+      "Chart ZIP backups preserve chart projects and their supported progress, layers and organization data. Restores create copies. Full backups can optionally include workspace preferences.",
+      "Settings & Layout JSON changes preferences independently from projects. It requires a valid SHA-256 checksum, shows an import preview and supports Cancel. Older chart ZIPs remain supported.",
+      "Written Pattern Companion uses .deewritten backups. Verify all important downloaded files exist outside the app. Project Protection and recovery snapshots help with persisted data but cannot recover edits that never saved. Never clear browser/app storage to update Studio."
+    ],
+    "health"
+  ],
+  [
+    "support",
+    "Offline setup, updates and diagnostics",
+    [
+      "The website caches its offline resources through a service worker. An update waits while the current worker remains available. Save work before applying an offered update.",
+      "Help → Diagnostics & Support shows a bounded local history of event codes, timestamps, version and platform. Export shows exactly what is being saved. You choose whether to share it.",
+      "Diagnostics exclude project names, notes, file paths, filenames, PDF contents and raw exception messages. Clear Log removes the local history. Browser-level worker termination may not supply a record.",
+      "Android updates must use the same application ID and signing certificate and a higher version code. Follow the tested release instructions. This guide does not imply Google Play or App Store availability."
+    ],
+    "diagnostics"
+  ],
+  [
+    "accessibility",
+    "Accessibility and device controls",
+    [
+      "Use keyboard Tab and Shift+Tab to navigate. Buttons support Enter or Space. Escape closes dialogs or clears a target highlight. Native Android Back dismisses dialogs through Studio’s existing handling.",
+      "Use high contrast, symbols and number scaling when helpful. Hiding yarn letters can reduce visual clutter but removes one color cue. The legend and Row Color Instructions still include symbols and names.",
+      "On Samsung devices test portrait, landscape, touch and S Pen. Keep controls below the Android system area. Physical device acceptance is required for each native candidate.",
+      "Use synthetic projects when experimenting. Do not upload purchased patterns or personal documents into public support reports."
+    ],
+    "workspace"
+  ],
+  [
+    "history",
+    "Limitations and version history",
+    [
+      "Advanced motif resizing is deferred. Existing motif rotation, flip and editable placement are retained.",
+      "The Chromium first-visit service-worker abort is tracked separately as Issue #24. This interface update does not establish a cure. Safari and iOS Home Screen behavior require actual supported testing.",
+      "2.5.2 improved readiness retries and stale-reply handling. 2.5.0 introduced integrated Written Pattern Companion, Project Protection and Android header fixes. Older releases added structural editing, settings backup and guided crochet improvements.",
+      "Historical guide content was reviewed and reorganized into these feature chapters. The original guide remains accessible in Git history. Use the installed version’s release notes for its exact availability."
+    ],
+    "about"
+  ]
+]

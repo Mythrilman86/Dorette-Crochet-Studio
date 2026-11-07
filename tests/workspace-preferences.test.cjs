@@ -26,3 +26,13 @@ test('older backups and invalid preference blocks do not change layout',()=>{
     assert.equal(window.prefs(value),null);
   }
 });
+
+test('personalized settings, navigation sorting and yarn visibility remain portable',()=>{
+  const prefs=window.prefs({version:1,sections:{order:['layerPanel'],collapsed:[],favorites:['layerPanel'],sort:'favorites',personalizedConfigured:true,personalized:['layerPanel'],hiddenTools:['painting']},display:{mode:'personalized',showYarnLetters:false}});
+  assert.equal(prefs.display.mode,'personalized');
+  assert.equal(prefs.display.showYarnLetters,false);
+  assert.equal(prefs.sections.sort,'favorites');
+  assert.equal(prefs.sections.personalizedConfigured,true);
+  assert.equal(prefs.sections.personalized.join(','),'layerPanel');
+  assert.equal(window.prefs({version:1,display:{mode:'advanced'}}).display.showYarnLetters,true);
+});
