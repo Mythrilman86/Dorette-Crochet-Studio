@@ -4237,6 +4237,8 @@ function setupSettingsLayout(){
 }
 function setupCommandPalette(){
  const commands=[
+  ['Paint stitches','#toolPaint','Edit'],['Erase stitches','#toolErase','Edit'],['Pick yarn color','#toolPick','Edit'],['Fill bucket','#toolBucket','Edit'],['Select area','#toolArea','Edit'],['Draw rectangle','#toolRect','Edit'],['Paste stitches','#toolPaste','Edit'],
+  ['Personalize interface','#configurePersonalized','Edit'],['Show yarn letters','.yarn-visibility input','Edit'],
   ['New project','#newName','Edit','Start a blank chart','create start crochet project'],
   ['Recycle Bin','#projectBin','Edit','Find and restore deleted projects','where deleted project trash recover'],
   ['Chart dimensions','#colsInput','Edit','Resize from the top, bottom, left or right edge','remove rows from bottom make chart bigger add remove columns resize'],
@@ -4300,6 +4302,7 @@ function setupCommandPalette(){
    btn.append(name,where);
    btn.onclick=()=>{
     jumping=true;dialog.close();setStudioMode(mode.toLowerCase());
+    node.classList.add('tool-revealed');
     const section=node.closest('.settings-section');
     if(section)revealSettingsSection(section);
     if(node.closest('.sidebar')){$('toggleProjects').dataset.hidden='0';refreshWorkspaceLayout();}
