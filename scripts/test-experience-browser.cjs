@@ -318,6 +318,12 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     assert.equal(await evaluate("window.editorProbe('!!motifPreview')"), true);
     await evaluate("window.editorProbe('applyMotifLayer()')");
     assert.equal(await evaluate("window.editorProbe('active.layers.at(-1).type')"), 'motif');
+    await evaluate("window.savedPreviewProject=window.editorProbe('active');window.editorProbe(\"active=blankProject('Tiny preview',1,1)\");document.querySelector('#textureOriginal').click()");
+    await evaluate("[...document.querySelectorAll('#crochetImageViewer button')].find(button=>button.textContent==='Fit').click()");
+    const fitted = await evaluate("new DOMMatrix(getComputedStyle(document.querySelector('#crochetImageViewer canvas')).transform).a");
+    await evaluate("[...document.querySelectorAll('#crochetImageViewer button')].find(button=>button.textContent==='Zoom In').click()");
+    assert.ok(await evaluate("new DOMMatrix(getComputedStyle(document.querySelector('#crochetImageViewer canvas')).transform).a") > fitted,'Zoom In grows a fitted 1×1 preview');
+    await evaluate("document.querySelector('#crochetImageViewer').close();window.editorProbe('active=window.savedPreviewProject')");
     console.log(
       'PASS responsive controls, Crochet View collapse and Center, yarn visibility and backup, personalization, About, preview and original motif layer'
     );

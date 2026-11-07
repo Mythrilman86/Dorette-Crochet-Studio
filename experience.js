@@ -329,7 +329,8 @@
       paint();
     }
     function zoom(factor, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2) {
-      const next = Math.max(0.03, Math.min(8, scale * factor));
+      const fittedScale = Math.min((stage.clientWidth - 16) / image.width, (stage.clientHeight - 16) / image.height);
+      const next = Math.max(0.03, Math.min(Math.max(8, fittedScale * 8), scale * factor));
       x = cx - ((cx - x) * next) / scale;
       y = cy - ((cy - y) * next) / scale;
       scale = next;
