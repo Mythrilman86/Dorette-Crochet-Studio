@@ -211,6 +211,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await snap('preview', "document.querySelector('#textureSimulated').click()");
     await evaluate("document.querySelector('#crochetImageViewer').close()");
+    await snap('exports', "document.querySelector('#previewExport').click()");
+    await evaluate("document.querySelector('#exportPreviewDialog').close()");
+    await snap('annotations', "window.editorProbe(\"selected={col:5,row:5};revealSettingsSection(document.querySelector('#annotationsPanel'))\");document.querySelector('#annotationText').value='Synthetic stitch reminder';document.querySelector('#addAnnotation').click();document.querySelector('#annotationText').scrollIntoView({block:'center'})");
     await snap('scanner',"document.querySelector('#openStitchStudio').click()");
     await evaluate("document.querySelector('#stitchStudio').close()");
     await snap(

@@ -104,7 +104,7 @@
       "Quality checks identify suspicious cells or color changes for review. Preview cleanup and confirm the intended result. A safe copy or checkpoint is appropriate before an uncertain correction.",
       "Large-chart sections help navigate a design without changing its dimensions. Keep numbering and row direction in view when working on a section."
     ],
-    "workspace"
+    "annotations"
   ],
   [
     "exports",
@@ -115,7 +115,7 @@
       "Show yarn letters on chart changes interactive viewing only. It does not remove stored symbol assignments or automatically change the existing print/export options.",
       "Review exported files in an external viewer. An image or PDF export is not a restorable chart ZIP backup. Keep the editable project and its backup separately."
     ],
-    "health"
+    "exports"
   ],
   [
     "backups",
