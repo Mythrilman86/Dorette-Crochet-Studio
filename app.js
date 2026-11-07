@@ -4564,33 +4564,46 @@ function setupServiceWorkerUpdates(){
    return;
  }
  let installingUpdate=false,registration=null;
- let checkingWorker=null,cancelReadinessCheck=()=>{};
+ let activeProbe=null;
  function checkOfflineReady(){
    const worker=navigator.serviceWorker.controller;
-   if(!worker||checkingWorker===worker)return;
-   cancelReadinessCheck();
-   checkingWorker=worker;
-   let attempt=0;
-   function probe(){
-     attempt++;
+   if(worker&&activeProbe?.worker===worker)return;
+   const hadProbe=!!activeProbe;
+   activeProbe?.close();
+   activeProbe=null;
+   if(!worker){
+     if(!hadProbe)return;
+     offlineStatus.textContent='Offline readiness is unavailable until Studio reconnects to its offline worker.';
+     return;
+   }
+   offlineStatus.textContent='Verifying offline files…';
+   function probe(attempt){
      const channel=new MessageChannel();
-     function close(){clearTimeout(timer);channel.port1.close();}
-     function missedReply(){
+     const current={worker,close};
+     function close(){
+       clearTimeout(timer);
+       channel.port1.onmessage=null;
+       channel.port1.close();
+     }
+     function finish(){
+       if(activeProbe!==current)return false;
        close();
-       if(navigator.serviceWorker.controller!==worker){checkingWorker=null;return;}
+       activeProbe=null;
+       return navigator.serviceWorker.controller===worker;
+     }
+     function missedReply(){
+       if(!finish())return;
        if(attempt<3){
          offlineStatus.textContent='Offline verification is taking longer than expected. Retrying…';
-         probe();
+         probe(attempt+1);
        }else{
-         checkingWorker=null;
          offlineStatus.textContent='Offline readiness could not be verified. Check for Studio updates to try again.';
        }
      }
      const timer=setTimeout(missedReply,3000);
-     cancelReadinessCheck=close;
+     activeProbe=current;
      channel.port1.onmessage=event=>{
-       close();checkingWorker=null;
-       if(navigator.serviceWorker.controller!==worker)return;
+       if(!finish())return;
        offlineStatus.textContent=event.data?.ready===true
          ?'Ready for offline use: Crochet Charts and Written Patterns.'
          :'Offline files are incomplete. Keep this tab online and check for updates.';
@@ -4598,7 +4611,7 @@ function setupServiceWorkerUpdates(){
      try{worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);}
      catch{channel.port2.close();missedReply();}
    }
-   probe();
+   probe(1);
  }
  navigator.serviceWorker.addEventListener('controllerchange',()=>{
    checkOfflineReady();
