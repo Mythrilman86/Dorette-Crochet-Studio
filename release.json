@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.5.1",
-    "notes": "Improves first-visit offline setup and written-pattern startup."
+    "version": "2.5.2",
+    "notes": "Improves offline-readiness feedback when verification is delayed or interrupted."
   },
   "ios": null,
-  "version": "2.5.1",
-  "notes": "Improves first-visit offline setup and written-pattern startup."
+  "version": "2.5.2",
+  "notes": "Improves offline-readiness feedback when verification is delayed or interrupted."
 }

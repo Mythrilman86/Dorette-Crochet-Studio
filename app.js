@@ -4564,19 +4564,54 @@ function setupServiceWorkerUpdates(){
    return;
  }
  let installingUpdate=false,registration=null;
+ let activeProbe=null;
  function checkOfflineReady(){
    const worker=navigator.serviceWorker.controller;
-   if(!worker)return;
-   const channel=new MessageChannel();
-   const timer=setTimeout(()=>channel.port1.close(),3000);
-   channel.port1.onmessage=event=>{
-     clearTimeout(timer);channel.port1.close();
-     if(navigator.serviceWorker.controller!==worker)return;
-     offlineStatus.textContent=event.data?.ready
-       ?'Ready for offline use: Crochet Charts and Written Patterns.'
-       :'Offline files are incomplete. Keep this tab online and check for updates.';
-   };
-   worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);
+   if(worker&&activeProbe?.worker===worker)return;
+   const hadProbe=!!activeProbe;
+   activeProbe?.close();
+   activeProbe=null;
+   if(!worker){
+     if(!hadProbe)return;
+     offlineStatus.textContent='Offline readiness is unavailable until Studio reconnects to its offline worker.';
+     return;
+   }
+   offlineStatus.textContent='Verifying offline files…';
+   function probe(attempt){
+     const channel=new MessageChannel();
+     const current={worker,close};
+     function close(){
+       clearTimeout(timer);
+       channel.port1.onmessage=null;
+       channel.port1.close();
+     }
+     function finish(){
+       if(activeProbe!==current)return false;
+       close();
+       activeProbe=null;
+       return navigator.serviceWorker.controller===worker;
+     }
+     function missedReply(){
+       if(!finish())return;
+       if(attempt<3){
+         offlineStatus.textContent='Offline verification is taking longer than expected. Retrying…';
+         probe(attempt+1);
+       }else{
+         offlineStatus.textContent='Offline readiness could not be verified. Check for Studio updates to try again.';
+       }
+     }
+     const timer=setTimeout(missedReply,3000);
+     activeProbe=current;
+     channel.port1.onmessage=event=>{
+       if(!finish())return;
+       offlineStatus.textContent=event.data?.ready===true
+         ?'Ready for offline use: Crochet Charts and Written Patterns.'
+         :'Offline files are incomplete. Keep this tab online and check for updates.';
+     };
+     try{worker.postMessage({type:'CHECK_OFFLINE'},[channel.port2]);}
+     catch{channel.port2.close();missedReply();}
+   }
+   probe(1);
  }
  navigator.serviceWorker.addEventListener('controllerchange',()=>{
    checkOfflineReady();
@@ -4596,6 +4631,7 @@ function setupServiceWorkerUpdates(){
      if(!navigator.serviceWorker.controller)offlineStatus.textContent='Preparing offline files. Keep this tab online.';
      worker.addEventListener('statechange',()=>{
        if(worker.state==='installed')readyUpdate(reg);
+       if(worker.state==='activated')checkOfflineReady();
        if(worker.state==='redundant'&&!navigator.serviceWorker.controller){
          registration=null;
          offlineStatus.textContent='Offline setup did not finish. Check your connection and choose Check for Studio updates to retry.';
