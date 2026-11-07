@@ -2,9 +2,9 @@
   "schema": 1,
   "web": {
     "version": "2.6.0",
-    "notes": "User Experience & Personalization development candidate."
+    "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
   },
   "ios": null,
   "version": "2.6.0",
-  "notes": "User Experience & Personalization development candidate."
+  "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
 }

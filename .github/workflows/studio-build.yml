@@ -27,6 +27,9 @@ jobs:
       - name: Verify interface and personalization in Chromium
         if: github.event_name == 'pull_request'
         run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-experience-browser.cjs
+      - name: Verify structural-edit viewport preservation in Chromium
+        if: github.event_name == 'pull_request'
+        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-editor-browser.cjs
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").web.version) process.exit(1)'

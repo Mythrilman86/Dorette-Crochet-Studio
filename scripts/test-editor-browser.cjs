@@ -115,7 +115,39 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       $('safeEdits').checked=false;$('safeEdits').dispatchEvent(new Event('change'));
       await duplicateProject(active);await writeChain;
       ok(await count()===before+2,'explicit duplicate adds exactly one record');
-      return 'PASS independent color, editable lettering, in-place conversion, undo and persisted project count';
+
+      $('safeEdits').checked=false;$('safeEdits').dispatchEvent(new Event('change'));
+      let cases=0;
+      for(const layout of ['single','dual']){
+       setChartLayout(layout,false);resizeCanvas();
+       for(const axis of ['row','column'])for(const add of [true,false]){
+        selected={col:20,row:30};setZoom(2.5);view.x=-500;view.y=-700;
+        const old=structuredClone(active),point={...selected};
+        const center={col:Math.max(1,Math.min(active.cols,Math.floor(((canvasWidth/2-view.x)/view.scale-M)/CELL)+1)),row:Math.max(1,Math.min(active.rows,active.rows-Math.floor(((canvasHeight/2-view.y)/view.scale-M)/CELL)))};
+        const before={x:(M+(center.col-.5)*CELL)*view.scale+view.x,y:(M+(active.rows-center.row+.5)*CELL)*view.scale+view.y};
+        const at=axis==='row'?point.row:point.col,result=NF.editChartLine(old,axis,at,add);
+        structurePreview={axis,at,insert:add};await applyChartStructure();
+        const mapped=result.position(center,true),selection=result.position(point,true);
+        ok(view.scale===2.5,'structural zoom unchanged');
+        ok(Math.abs((M+(mapped.col-.5)*CELL)*view.scale+view.x-before.x)<.001,'structural visual x preserved');
+        ok(Math.abs((M+(active.rows-mapped.row+.5)*CELL)*view.scale+view.y-before.y)<.001,'structural visual y preserved');
+        ok(selected.col===selection.col&&selected.row===selection.row,'selection follows structural mapping');
+        const after=JSON.stringify(active.cells);undo();ok(JSON.stringify(active.cells)===JSON.stringify(old.cells),'structural undo artwork');redo();ok(JSON.stringify(active.cells)===after,'structural redo artwork');undo();cases++;
+       }
+       for(const columnEdge of ['left','right'])for(const rowEdge of ['top','bottom'])for(const delta of [-1,1]){
+        selected={col:20,row:30};setZoom(3);view.x=-550;view.y=-750;
+        const anchor=NF.captureChartViewport(active,view,canvasWidth,canvasHeight,CELL,M),old=structuredClone(active);
+        const result=NF.resizeChartEdges(active,active.cols+delta,active.rows+delta,columnEdge,rowEdge);
+        const expected=NF.restoreChartViewport(anchor,{...active,...result.patch},result.position,canvasWidth,canvasHeight,CELL,M);
+        dimensionRequest={project:active,revision:renderRevision,result};await confirmDimensions();
+        ok(view.scale===3&&Math.abs(view.x-expected.x)<.001&&Math.abs(view.y-expected.y)<.001,'edge resize preserves mapped visual anchor');
+        undo();ok(JSON.stringify(active.cells)===JSON.stringify(old.cells),'edge resize undo artwork');cases++;
+       }
+      }
+      await flushSave();await writeChain;
+      ok((await disk()).find(p=>p.id===active.id).cols===active.cols,'structure dimensions persisted');
+      console.log('PASS '+cases+' real structural and edge-resize operations preserve visual anchors, scale, selection and Undo/Redo');
+      return 'PASS independent color, editable lettering, in-place conversion, undo, persisted project count and '+cases+' structural viewport operations';
     })()`;
     console.log(await evaluate("window.editorProbe("+JSON.stringify(probe)+")"));
     ws.close();

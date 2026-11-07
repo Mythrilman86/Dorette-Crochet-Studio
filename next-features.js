@@ -213,5 +213,17 @@ function remapChartLines(project,columnEdit,rowEdit){
  return {patch:{...dimensions,cells,done,rowDone,layers,annotations,guide,diagonalIndex,converted:true,
    ...(project.referenceImage?{opacity:0}:{})},position,nonempty,losses};
 }
-window.DoretteNext=Object.freeze({editChartLine,resizeChartEdges,locateNote,detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
+// Preserve the fractional position within the center stitch; rows count from the bottom.
+function captureChartViewport(project,view,width,height,cell,margin){
+ const wx=(width/2-view.x)/view.scale,wy=(height/2-view.y)/view.scale;
+ const col=Math.max(1,Math.min(project.cols,Math.floor((wx-margin)/cell)+1));
+ const row=Math.max(1,Math.min(project.rows,project.rows-Math.floor((wy-margin)/cell)));
+ return {scale:view.scale,col,row,dx:wx-(margin+(col-.5)*cell),dy:wy-(margin+(project.rows-row+.5)*cell)};
+}
+function restoreChartViewport(anchor,project,position,width,height,cell,margin){
+ const point=position({col:anchor.col,row:anchor.row},true);
+ return {scale:anchor.scale,x:width/2-(margin+(point.col-.5)*cell+anchor.dx)*anchor.scale,
+ y:height/2-(margin+(project.rows-point.row+.5)*cell+anchor.dy)*anchor.scale};
+}
+window.DoretteNext=Object.freeze({captureChartViewport,restoreChartViewport,editChartLine,resizeChartEdges,locateNote,detectGrid,backgroundRemove,remap,sections,diagonal,analyze,colorDistance,svg});
 })();

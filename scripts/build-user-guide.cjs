@@ -241,11 +241,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           paragraphs.map((p) => '<p>' + escape(p) + '</p>').join('') +
           '<img alt="Actual Studio candidate interface with synthetic data" src="data:image/png;base64,' +
           screenshots[image] +
-          '"><p class="caption">Actual v2.6.0 development interface. Synthetic data. Controls may rearrange on a phone.</p></section>'
+          '"><p class="caption">Actual v2.6.0 interface. Synthetic data. Controls may rearrange on a phone.</p></section>'
       )
       .join('');
     const html =
-      '<!doctype html><html><head><meta charset="utf-8"><title>Dee’s Crochet Studio User Guide</title><style>@page{size:A4;margin:16mm 16mm 18mm}body{font:11pt/1.4 Arial;color:#30243c}section{break-before:page}h1{font-size:23pt;color:#67469c}h2{color:#67469c}p{margin:10pt 0}img{display:block;width:100%;max-height:94mm;object-fit:contain;border:1px solid #d7cbe4}.caption{font-size:8pt;color:#756781}a{color:#59358d}li{margin:7pt 0}.cover{padding-top:38mm}section p{orphans:3;widows:3}</style></head><body><div class="cover"><h1>Dee’s Crochet Studio</h1><h2>User Experience & Personalization</h2><p>Version 2.6.0 development guide</p><p>Charts · Guided crochet · Written patterns · Local backups</p><p>Free, local and offline-capable. Keep external backups.</p></div><section><h1>Contents</h1><ol>' +
+      '<!doctype html><html><head><meta charset="utf-8"><title>Dee’s Crochet Studio User Guide</title><style>@page{size:A4;margin:16mm 16mm 18mm}body{font:11pt/1.4 Arial;color:#30243c}section{break-before:page}h1{font-size:23pt;color:#67469c}h2{color:#67469c}p{margin:10pt 0}img{display:block;width:100%;max-height:94mm;object-fit:contain;border:1px solid #d7cbe4}.caption{font-size:8pt;color:#756781}a{color:#59358d}li{margin:7pt 0}.cover{padding-top:38mm}section p{orphans:3;widows:3}</style></head><body><div class="cover"><h1>Dee’s Crochet Studio</h1><h2>User Experience & Personalization</h2><p>Version 2.6.0 user guide</p><p>Charts · Guided crochet · Written patterns · Local backups</p><p>Free, local and offline-capable. Keep external backups.</p></div><section><h1>Contents</h1><ol>' +
       chapters
         .map(([id, title]) => '<li><a href="#chapter-' + id + '">' + escape(title) + '</a></li>')
         .join('') +

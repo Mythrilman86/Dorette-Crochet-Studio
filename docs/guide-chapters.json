@@ -48,7 +48,8 @@
       "Editable layers can be selected, moved, locked and flattened. Flattening removes independent layer editing. Use Undo/Redo to recover edits in the current session.",
       "The original motif collection provides a heart, star, smiley, peace sign, flower, diamond and square. Choose a preset, preview it, position it on the chart and apply it as an editable layer. Presets enter the existing local motif library. Colors use the current chart background and a contrasting palette color.",
       "Chart Settings can add or remove rows and columns from chosen edges. Insert/Delete Row or Column works within the chart. Review the preview and deletion warning before confirming. Surviving artwork shifts without scaling.",
-      "Structural edits preserve surviving progress and annotations. Photo alignment and editable text metadata may require explicit review after geometry changes."
+      "Structural edits preserve surviving progress and annotations. Photo alignment and editable text metadata may require explicit review after geometry changes.",
+      "Routine row and column insertion, deletion and Apply Dimensions preserve zoom and the artwork near the viewport center. Deleted focal stitches use the nearest surviving location. Advanced resize and photo conversion retain their separate fitting behavior."
     ],
     "motif"
   ],
@@ -154,7 +155,7 @@
     "history",
     "Limitations and version history",
     [
-      "2.6.0 is a private development candidate pending final acceptance. Advanced motif resizing is deferred. Existing motif rotation, flip and editable placement are retained.",
+      "Advanced motif resizing is deferred. Existing motif rotation, flip and editable placement are retained.",
       "The Chromium first-visit service-worker abort is tracked separately as Issue #24. This interface update does not establish a cure. Safari and iOS Home Screen behavior require actual supported testing.",
       "2.5.2 improved readiness retries and stale-reply handling. 2.5.0 introduced integrated Written Pattern Companion, Project Protection and Android header fixes. Older releases added structural editing, settings backup and guided crochet improvements.",
       "Historical guide content was reviewed and reorganized into these feature chapters. The original guide remains accessible in Git history. Use the installed version’s release notes for its exact availability."

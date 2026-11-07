@@ -1046,6 +1046,7 @@ async function confirmDimensions(){
   const request=dimensionRequest,point=selected&&{...selected};
   $('dimensionPreviewDialog').close();
   if(!request||request.project!==active||request.revision!==renderRevision||pendingConversion||editBlocked('resize the chart'))return;
+  const viewport=NF.captureChartViewport(active,view,canvasWidth,canvasHeight,CELL,M);
   if(!await safeMajorCopy('resized chart')||editBlocked('resize the chart'))return;
   const {patch,position}=request.result;
   selected=point;
@@ -1053,7 +1054,9 @@ async function confirmDimensions(){
   Object.assign(active,patch);
   selected=point&&position(point,true);
   areaSelection=null;clearMotifPreview();clearTextPreview();
-  invalidateChartCache();scheduleSave();refreshInspector();fitChart();
+  invalidateChartCache();scheduleSave();refreshInspector();
+ Object.assign(view,NF.restoreChartViewport(viewport,active,position,canvasWidth,canvasHeight,CELL,M));
+ updateZoomText();requestDraw();
 }
 function syncImage(){
   const src=active?.referenceImage||'';
@@ -3093,6 +3096,7 @@ async function applyChartStructure(){
  const {axis,at,insert}=structurePreview,point=selected&&{...selected};
  const dialog=$('chartStructureDialog'),button=$('applyChartStructure');
  button.disabled=true;dialog.close();
+ const viewport=NF.captureChartViewport(active,view,canvasWidth,canvasHeight,CELL,M);
  if(!await safeMajorCopy('before chart structure change')||editBlocked('change chart structure'))return;
  const {patch,position}=NF.editChartLine(active,axis,at,insert);
  selected=point;
@@ -3100,7 +3104,9 @@ async function applyChartStructure(){
  Object.assign(active,patch);
  selected=point&&position(point,true);
  areaSelection=null;clearMotifPreview();clearTextPreview();
- invalidateChartCache();scheduleSave();refreshInspector();fitChart();
+ invalidateChartCache();scheduleSave();refreshInspector();
+ Object.assign(view,NF.restoreChartViewport(viewport,active,position,canvasWidth,canvasHeight,CELL,M));
+ updateZoomText();requestDraw();
 }
 function hookAdvanced(){
  $('openChartStructure').onclick=()=>{

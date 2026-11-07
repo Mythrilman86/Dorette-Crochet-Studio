@@ -179,7 +179,7 @@
       paragraph(news.content, `${version()} · ${platform()}`);
       paragraph(
         news.content,
-        '2.6.0 development — Personalized interface, clearer navigation, local diagnostics, enlarged crochet previews, original motifs and improved Crochet View controls.'
+        '2.6.0 — Personalized interface, clearer navigation, local diagnostics, enlarged crochet previews, original motifs and improved Crochet View controls.'
       );
       paragraph(
         news.content,
