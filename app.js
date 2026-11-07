@@ -2711,6 +2711,7 @@ function setCrochetView(enabled){
   if(enabled&&(!active||pendingConversion))return toast('Finish the chart preview before opening Crochet View.');
   if(enabled===inCrochetView())return;
   document.body.classList.toggle('crochet-view',enabled);
+  window.StudioExperience?.positionCenter(enabled);
   const nav=$('appNavigation');
   if(enabled)document.querySelector('.crochet-view-actions').append(nav);
   else document.querySelector('.topbar').insertBefore(nav,document.querySelector('.header-right'));
@@ -4957,7 +4958,7 @@ async function initialize(){
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
-  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,center:centerView,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download,notify:toast});
+  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download,notify:toast});
   setupAppNavigation();
   setupPhoneCrochetControls();
   setupStandaloneSettings();

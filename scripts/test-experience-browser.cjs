@@ -217,7 +217,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       "window.editorProbe('view.scale=1.7;view.x=-300;view.y=-200;selected={col:7,row:8};requestDraw()')"
     );
     await delay(80);
-    await evaluate("document.querySelector('#compactCenter').click()");
+    await evaluate("document.querySelector('#resetView').click()");
     assert.equal(await evaluate("window.editorProbe('view.scale')"), 1.7);
     assert.equal(await evaluate("window.editorProbe('selected.col')"), 7);
     assert.equal(await evaluate("window.editorProbe('JSON.stringify(active)')"), baseline);

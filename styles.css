@@ -447,3 +447,5 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
     }
   }
 }
+#crochetCenterMount{display:contents}
+.crochet-compact-actions .button{min-height:44px}

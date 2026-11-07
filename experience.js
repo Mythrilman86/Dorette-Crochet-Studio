@@ -3,6 +3,13 @@
   const $ = (id) => document.getElementById(id);
   let bridge,
     target = null;
+  let centerHome, centerNext;
+  function positionCenter(enabled) {
+    if (!centerHome) return;
+    const control = $('resetView');
+    if (enabled) $('crochetCenterMount').append(control);
+    else centerHome.insertBefore(control, centerNext);
+  }
   const layoutKey = 'studio.settings.layout.v1';
   function layout() {
     try {
@@ -125,7 +132,11 @@
         api.draw();
       };
     syncLetters();
-    $('compactCenter').onclick = api.center;
+    const center = $('resetView');
+    centerHome = center.parentNode;
+    centerNext = center.nextSibling;
+    center.setAttribute('aria-label', 'Center chart without changing zoom');
+    positionCenter(document.body.classList.contains('crochet-view'));
     const about = dialog('aboutStudioDialog', 'About Dee’s Crochet Studio');
     const news = dialog('whatsNewDialog', 'What’s New');
     const diagnostics = dialog('diagnosticsDialog', 'Diagnostics & Support');
@@ -442,5 +453,5 @@
     });
     $('motifChoice').before(choice, add);
   }
-  window.StudioExperience = { setup, applyVisibility, highlight, clearHighlight };
+  window.StudioExperience = { setup, applyVisibility, highlight, clearHighlight, positionCenter };
 })();
