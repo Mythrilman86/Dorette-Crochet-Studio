@@ -244,6 +244,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await evaluate("document.querySelector('#personalizedDialog input[data-section]').click()");
     assert.equal(await evaluate("document.querySelectorAll('.personalized-hidden').length"), 1);
+
+    const beforeHidingTool=await evaluate("window.editorProbe('JSON.stringify(active)')");
+    await evaluate("document.querySelector('#toolPaint').click();if(document.querySelector('#toolPaint').getAttribute('aria-pressed')!=='true')throw Error('Painting was not active');document.querySelector('#personalizedDialog input[data-tool=painting]').click()");
+    assert.equal(await evaluate("document.querySelector('#toolSelect').getAttribute('aria-pressed')"),'true');
+    assert.equal(await evaluate("window.editorProbe('JSON.stringify(active)')"),beforeHidingTool);
     await evaluate("document.querySelector('#personalizedDialog').close()");
     const hidden = await evaluate(
       "document.querySelector('.personalized-hidden').dataset.settingsKey"

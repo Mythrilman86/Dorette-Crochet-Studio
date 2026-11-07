@@ -49,6 +49,9 @@
           enabled && saved.hiddenTools?.includes(key)
         );
       }
+    if (document.querySelector('.personalized-tool-hidden:not(.tool-revealed)[aria-pressed=true]')) {
+      $('toolSelect').click();
+    }
   }
   function dialog(id, title) {
     const node = document.createElement('dialog');
