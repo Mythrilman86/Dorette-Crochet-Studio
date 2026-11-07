@@ -190,6 +190,9 @@
         '2.5.2 website maintenance — improved offline-readiness replies. Intermittent Chromium installation aborts remain under investigation.'
       );
       news.content.append(guideLink('Guide to navigation and display', 5));
+      news.content.append(guideLink('Guide to Crochet View', 8));
+      news.content.append(guideLink('Guide to yarn and previews', 9));
+      news.content.append(guideLink('Guide to diagnostics', 15));
       news.open();
     });
     command('diagnosticsSupport', () => {
