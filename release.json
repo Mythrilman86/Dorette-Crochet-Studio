@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.6.0",
-    "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
+    "version": "2.7.0",
+    "notes": "Private Stage A Pattern Creator authoring candidate. Not a public release."
   },
   "ios": null,
-  "version": "2.6.0",
-  "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
+  "version": "2.7.0",
+  "notes": "Private Stage A Pattern Creator authoring candidate. Not a public release."
 }

@@ -60,3 +60,7 @@ test('checksum generation fails closed when SHA-256 is unavailable',async()=>{
   const digest=vm.runInNewContext(code+'\nsettingsDigest',{TextEncoder});
   await assert.rejects(digest({chart:'dual'}),/SHA-256 is unavailable/);
 });
+
+test('unset expanded and explicit collapsed toolbar settings survive export/import',async()=>{
+ for(const raw of [null,'true','false']){const origin=new Map(raw===null?[]:[['studio.phone.crochet-controls.expanded',raw]]),target=new Map();const read=api.readStandaloneSettings({getItem:k=>origin.get(k)??null});assert.equal(read.phoneControls,raw!=='false');const file={application:'com.deescrochetstudio.app.settings',format:1,studioVersion:'2.7.0',exportedAt:'2026-11-07T00:00:00Z',categories:{phoneControls:read.phoneControls},sha256:await api.settingsDigest({phoneControls:read.phoneControls})};const imported=await api.decodeSettingsFile(file);api.writeStandaloneSettings({getItem:k=>target.get(k)??null,setItem:(k,v)=>target.set(k,v),removeItem:k=>target.delete(k)},imported.values,['phoneControls']);assert.equal(target.get('studio.phone.crochet-controls.expanded'),String(raw!=='false'));}
+});

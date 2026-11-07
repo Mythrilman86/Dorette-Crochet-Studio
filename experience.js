@@ -29,9 +29,12 @@
   function clearHighlight() {
     target?.classList.remove('settings-highlight');
     target = null;
+    for(const section of document.querySelectorAll('.settings-revealed'))section.classList.remove('settings-revealed');
+    for(const tool of document.querySelectorAll('.tool-revealed'))tool.classList.remove('tool-revealed');
   }
   function highlight(node) {
-    clearHighlight();
+    const reveal=node.closest('.settings-revealed'),tool=node.closest('.tool-revealed');
+    clearHighlight();reveal?.classList.add('settings-revealed');tool?.classList.add('tool-revealed');
     target = node;
     node.classList.add('settings-highlight');
   }
@@ -41,12 +44,13 @@
   };
   function applyVisibility() {
     if (!bridge) return;
-    const saved = layout(),
-      enabled = bridge.prefs.mode === 'personalized' && saved.personalizedConfigured === true;
+    const saved = layout();
+    if(saved.personalizedConfigured&&!Array.isArray(saved.hiddenSections)){const known=saved.personalizedKnown||saved.order||[...bridge.sections.keys()];saved.hiddenSections=known.filter(key=>!saved.personalized?.includes(key));saved.personalizedKnown=[...bridge.sections.keys()];saveLayout(saved);}
+    const enabled = bridge.prefs.mode === 'personalized' && saved.personalizedConfigured === true;
     for (const [key, section] of bridge.sections) {
       section.classList.toggle(
         'personalized-hidden',
-        enabled && !saved.personalized?.includes(key)
+        Boolean(enabled && saved.hiddenSections?.includes(key))
       );
     }
     for (const [key, ids] of Object.entries(groups))
@@ -101,7 +105,7 @@
   function guideLink(label, page) {
     const link = document.createElement('a');
     link.href = './Dorette-Crochet-Studio-User-Guide.pdf' + (page ? '#page=' + page : '');
-    link.textContent = label;
+    link.textContent = label+(page&&window.StudioMobile?.nativeFiles?' (use guide contents)':'');
     link.target = '_blank';
     link.rel = 'noopener';
     link.onclick = (event) => {
@@ -115,7 +119,7 @@
   function setup(api) {
     bridge = api;
     document.addEventListener('pointerdown', (event) => {
-      if (target && !target.contains(event.target)) clearHighlight();
+      if (target && !target.contains(event.target)&&!target.closest('.settings-revealed')?.contains(event.target)) clearHighlight();
     });
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') clearHighlight();
@@ -244,7 +248,7 @@
         label.className = 'toggle';
         const input = document.createElement('input');
         input.type = 'checkbox';
-        input.checked = !saved.personalizedConfigured || saved.personalized?.includes(key);
+        input.checked = !saved.personalizedConfigured || !(saved.hiddenSections||((saved.personalizedKnown||saved.order||[...api.sections.keys()]).filter(k=>!saved.personalized?.includes(k)))).includes(key);
         input.onchange = () => persist();
         label.append(input, document.createTextNode(section.dataset.settingsLabel));
         input.dataset.section = key;
@@ -271,6 +275,8 @@
       saved.personalized = [...items.querySelectorAll('input[data-section]:checked')].map(
         (input) => input.dataset.section
       );
+      saved.hiddenSections=[...items.querySelectorAll('input[data-section]:not(:checked)')].map(input=>input.dataset.section);
+      saved.personalizedKnown=[...api.sections.keys()];
       saved.hiddenTools = [...items.querySelectorAll('input[data-tool]:not(:checked)')].map(
         (input) => input.dataset.tool
       );
@@ -448,12 +454,7 @@
           colors: rows.join('').split('').map(Number)
         }
       };
-      const existing = api.motifs().filter((m) => m.id !== id);
-      if (existing.length >= 30)
-        return alert('The motif library is full. Remove a saved motif before adding this preset.');
-      api.saveMotifs([...existing, motif]);
-      $('motifChoice').value = id;
-      api.placeMotif();
+      api.previewPreset({...motif.clip,builtin:name,transparentZero:true});
     });
     $('motifChoice').before(choice, add);
   }
