@@ -380,13 +380,27 @@ function updateRecycleSelection(){
 function selectedRecycledProjects(){
   return [...recycledProjects.values()].filter(project=>recycleSelection.has(project.id));
 }
+let thumbnailObserver;const thumbnailDraws=new WeakMap();
+function projectThumbnail(p){const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';thumb.setAttribute('aria-label','Chart thumbnail');const draw=()=>{
+    const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
+    const s=Math.min(54/p.cols,54/p.rows),ox=(54-p.cols*s)/2,oy=(54-p.rows*s)/2;
+    const display=window.DoretteAdvanced.compose(p),usedW=p.cols*s,usedH=p.rows*s;
+    // Sample at thumbnail pixel resolution, not once per source stitch. Large charts remain responsive.
+    for(let y=Math.floor(oy);y<Math.ceil(oy+usedH);y++)for(let x=Math.floor(ox);x<Math.ceil(ox+usedW);x++){
+      const col=clamp(Math.floor((x-ox)/s),0,p.cols-1),row=clamp(Math.floor((y-oy)/s),0,p.rows-1);
+      const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
+    }
+
+};if('IntersectionObserver' in window){thumbnailObserver??=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){thumbnailDraws.get(e.target)?.();thumbnailObserver.unobserve(e.target);}});thumbnailDraws.set(thumb,draw);thumbnailObserver.observe(thumb);}else draw();return thumb;}
+
 function renderRecycleBin(){
   updateRecycleSelection();
-  const list=$('projectBinList');list.replaceChildren();
+  const list=$('projectBinList');for(const old of list.querySelectorAll('canvas'))thumbnailObserver?.unobserve(old);list.replaceChildren();
   $('projectBinCount').textContent=recycledProjects.size;
   $('emptyProjectBin').disabled=!recycledProjects.size;
   for(const project of recycledProjects.values()){
     const row=document.createElement('div');row.className='project-bin-row';
+    row.append(projectThumbnail(project));
     const name=document.createElement('strong');name.textContent=project.name;
     if(selectingRecycled){
       const label=document.createElement('label'),box=document.createElement('input');
@@ -534,6 +548,7 @@ async function applyBulkProjectAction(){
   });
 }
 function refreshProjectList(){
+  thumbnailObserver?.disconnect();
   const list=$('projectList');list.replaceChildren();
   $('projectCount').textContent=projects.size;
   refreshCategorySelectors();
@@ -548,15 +563,7 @@ function refreshProjectList(){
   updateBulkProjectControls();
   visible.forEach(p=>{
     const item=document.createElement('div');item.className='gallery-item'+(p.id===activeId?' active':'');
-    const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';
-    const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
-    const s=Math.min(54/p.cols,54/p.rows),ox=(54-p.cols*s)/2,oy=(54-p.rows*s)/2;
-    const display=window.DoretteAdvanced.compose(p),usedW=p.cols*s,usedH=p.rows*s;
-    // Sample at thumbnail pixel resolution, not once per source stitch. Large charts remain responsive.
-    for(let y=Math.floor(oy);y<Math.ceil(oy+usedH);y++)for(let x=Math.floor(ox);x<Math.ceil(ox+usedW);x++){
-      const col=clamp(Math.floor((x-ox)/s),0,p.cols-1),row=clamp(Math.floor((y-oy)/s),0,p.rows-1);
-      const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
-    }
+    const thumb=projectThumbnail(p);
     const choose=document.createElement('button');choose.type='button';choose.className='gallery-choose';
     const title=document.createElement('strong');title.textContent=(p.pinned?'📌 ':'')+p.name;
     const meta=document.createElement('small');meta.textContent=`${p.cols} × ${p.rows} · ${p.category||'Other'}`;
@@ -1503,6 +1510,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     const {clip,col,row}=motifPreview;
     ctx.save();ctx.globalAlpha=.55;
     for(let y=0;y<clip.height&&row-y>=1;y++)for(let x=0;x<clip.width&&col+x<=cols;x++){
+      if(clip.transparentZero&&clip.colors[y*clip.width+x]===0)continue;
       ctx.fillStyle=clip.palette[clip.colors[y*clip.width+x]];
       ctx.fillRect(M+(col+x-1)*CELL+1,M+(rows-row+y)*CELL+1,CELL-2,CELL-2);
     }
@@ -2153,7 +2161,7 @@ function sanitizeWorkspacePreferences(input){
   const strings=list=>Array.isArray(list)?[...new Set(list.filter(v=>typeof v==='string'&&v.length<=100))].slice(0,100):[];
   if(input.sections&&typeof input.sections==='object'&&!Array.isArray(input.sections)){
     const {order,collapsed,favorites}=input.sections;
-    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites),sort:['layout','az','favorites'].includes(input.sections.sort)?input.sections.sort:'layout',personalized:strings(input.sections.personalized),hiddenTools:strings(input.sections.hiddenTools),personalizedConfigured:input.sections.personalizedConfigured===true};
+    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites),sort:['layout','az','favorites'].includes(input.sections.sort)?input.sections.sort:'layout',personalized:strings(input.sections.personalized),hiddenTools:strings(input.sections.hiddenTools),personalizedConfigured:input.sections.personalizedConfigured===true,...(Array.isArray(input.sections.hiddenSections)?{hiddenSections:strings(input.sections.hiddenSections)}:{}),...(Array.isArray(input.sections.personalizedKnown)?{personalizedKnown:strings(input.sections.personalizedKnown)}:{})};
   }
   if(input.tools&&typeof input.tools==='object'){
     const {favorites,recent}=input.tools;
@@ -2193,7 +2201,7 @@ const settingsBackupLimit=256*1024;
 const settingsCategories={
   sections:'Section order, expansion and favorites',tools:'Favorite and recent tools',
   panels:'Panel visibility',display:'Appearance and accessibility',chart:'Single or Dual Chart',
-  safeEdits:'Safe-copy editing default',phoneControls:'Phone Crochet View toolbar',
+  safeEdits:'Safe-copy editing default',phoneControls:'Crochet View controls (all layouts)',
   lettering:'Saved lettering styles',references:'Favorite reference shortcuts'
 };
 const standaloneKeys={...workspacePreferenceKeys,safeEdits:'dorette-safe-edits-opt-in',
@@ -2237,7 +2245,7 @@ function readStandaloneSettings(storage){
     if(raw===null)continue;
     try{data[key]=key==='chart'?raw:JSON.parse(raw);}catch{}
   }
-  return normalizeSettingsCategories({chart:'dual',safeEdits:false,phoneControls:false,...data}).values;
+  return normalizeSettingsCategories({chart:'dual',safeEdits:false,phoneControls:true,...data}).values;
 }
 async function settingsDigest(value){
   if(!globalThis.crypto?.subtle?.digest)throw Error('SHA-256 is unavailable in this environment. Open Studio in the installed app or a secure browser page.');
@@ -2766,7 +2774,7 @@ function moveMotifPreview(col,row){
   requestDraw();
 }
 function placeMotif(rotation=false,flip=false){
-  const m=chosenMotif();
+  const m=(rotation||flip)&&motifPreview?.clip.builtin?{clip:motifPreview.clip}:chosenMotif();
   if(!active||!m||pendingConversion||editBlocked('place a motif'))return;
   progressBrush=null;updateSelection();
   const clip=structuredClone(m.clip);
@@ -2776,13 +2784,14 @@ function placeMotif(rotation=false,flip=false){
       const x=i%width,y=Math.floor(i/width);
       return rotation?clip.colors[(clip.height-1-x)*clip.width+y]:clip.colors[y*clip.width+width-1-x];
     });
-    saveMotifs(motifs.map(item=>item.id===m.id?{...m,clip:{...clip,width,height,colors}}:item));
+    Object.assign(clip,{width,height,colors});
+    if(!clip.builtin)saveMotifs(motifs.map(item=>item.id===m.id?{...m,clip}:item));
     $('motifChoice').value=m.id;
   }
   const anchor=motifPreview||selected||{col:1,row:active.rows};
   clearTextPreview();
   setTool('select');
-  motifPreview={clip:structuredClone(chosenMotif().clip),col:anchor.col,row:anchor.row};
+  motifPreview={clip:structuredClone(clip),col:anchor.col,row:anchor.row};
   $('motifPreviewTools').hidden=false;
   moveMotifPreview(anchor.col,anchor.row);
   toast('Tap either chart to place the preview, then choose Apply motif.');
@@ -3012,6 +3021,7 @@ function putTextOnLayer(){
  editingLayerId=null;lastText={config:{...previewTextConfig()},original:new Map()};$('editLastText').disabled=false;
  clearTextPreview();$('textColor').value='';updateTextControls();toast('Text saved as a separate editable layer.');
 }
+function previewBuiltinMotif(clip){if(!active||pendingConversion||editBlocked('preview a motif'))return;clearTextPreview();setTool('select');motifPreview={clip:structuredClone(clip),col:selected?.col||1,row:selected?.row||active.rows};$('motifPreviewTools').hidden=false;moveMotifPreview(motifPreview.col,motifPreview.row);}
 function applyMotifLayer(){
  if(!active||!motifPreview||pendingConversion||editBlocked('apply motif'))return;
  const {clip,col,row}=motifPreview;
@@ -3020,10 +3030,11 @@ function applyMotifLayer(){
  if(active.palette.length+missing.length>12)return toast('This motif needs more than the available 12 yarn colors.');
  snapshot();for(const hex of missing)active.palette.push({hex,name:'Motif yarn '+(active.palette.length+1),symbol:SYMBOLS[active.palette.length]});
  const entries=[];for(let dy=0;dy<clip.height;dy++)for(let dx=0;dx<clip.width;dx++){
+  if(clip.transparentZero&&clip.colors[dy*clip.width+dx]===0)continue;
   const hex=clip.palette?.[clip.colors[dy*clip.width+dx]],index=active.palette.findIndex(p=>p.hex.toLowerCase()===String(hex).toLowerCase());
   if(index>=0)entries.push([indexFor(col+dx,row-dy),index]);
  }
- const l={id:uid(),name:'Motif: '+(chosenMotif()?.name||'Saved motif'),type:'motif',visible:true,locked:false,entries,source:null};
+ const l={id:uid(),name:'Motif: '+(clip.builtin||chosenMotif()?.name||'Saved motif'),type:'motif',visible:true,locked:false,entries,source:null};
  active.layers.push(l);selectedLayerId=l.id;active.converted=true;clearMotifPreview();scheduleSave();refreshInspector();toast('Motif saved as editable layer.');
 }
 function advancedLetterPreviewTransform(mask,config){
@@ -4086,7 +4097,7 @@ function setupSettingsLayout(){
   const defaults=[];
   let order=[];
   function persist(){
-    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({...saved,order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
+    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({...saved,...JSON.parse(localStorage.getItem(settingsLayoutKey)||'{}'),order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
   }
   function navigate(section){
     revealSettingsSection(section);
@@ -4689,6 +4700,7 @@ function setupServiceWorkerUpdates(){
 
 function hookEvents(){
   hookNextEvents();
+  $('newProjectDetails').addEventListener('toggle',()=>{if($('newProjectDetails').open){const name=$('newName');name.focus();name.select();}});
   $('newProjectForm').addEventListener('submit',ev=>{
     ev.preventDefault();const presets={square:[50,50],blanket:[120,165],border:[120,24],initials:[40,30]},dims=presets[$('projectTemplate').value]||[Number($('newCols').value),Number($('newRows').value)],cols=dims[0],rows=dims[1];
     if(!validDimensions(cols,rows)){toast('Choose 1–200 columns and 1–300 rows.');return;}
@@ -4967,7 +4979,7 @@ async function initialize(){
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
-  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download,notify:toast});
+  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,previewPreset:previewBuiltinMotif,download,notify:toast});
   setupAppNavigation();
   setupPhoneCrochetControls();
   setupStandaloneSettings();

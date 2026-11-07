@@ -33,6 +33,12 @@ jobs:
       - name: Verify Pattern Creator authoring, backups and data protection
         if: github.event_name == 'pull_request'
         run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-creator-browser.cjs
+      - name: Verify Build 25 usability and safe image optimization
+        if: github.event_name == 'pull_request'
+        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-build25-browser.cjs
+      - name: Verify isolated offline cache failure behavior
+        if: github.event_name == 'pull_request'
+        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-cache-failure-browser.cjs
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").web.version) process.exit(1)'

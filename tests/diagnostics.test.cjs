@@ -21,7 +21,7 @@ test('diagnostic records are bounded, expire and exclude arbitrary content', () 
     () => now,
     () => ({ version: '2.6.0', platform: 'web', notes: 'private notes', filename: 'private.pdf' })
   );
-  for (let i = 0; i < 300; i++) log.record('SAVE_FAILED');
+  for (let i = 0; i < 300; i++) {now+=11000;log.record('SAVE_FAILED');}
   assert.equal(log.read().length, 200);
   log.record('private.pdf');
   assert.equal(log.read().length, 200);
@@ -46,6 +46,7 @@ test('diagnostics never propagate inaccessible or full storage failures', () => 
     }
   });
   assert.doesNotThrow(() => log.record('SAVE_FAILED'));
+  assert.equal(log.report().length,1);
   assert.doesNotThrow(() => log.clear());
-  assert.deepEqual(log.report(), []);
+  assert.equal(log.report().length,0);
 });

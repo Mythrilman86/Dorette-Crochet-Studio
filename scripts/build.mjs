@@ -1,9 +1,11 @@
+import {checkIdentity} from './cache-identity.mjs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(root);
+await checkIdentity();
 const target = process.argv[2];
 if (!['web', 'mobile'].includes(target)) throw new Error('Choose web or mobile');
 const native = target === 'mobile';

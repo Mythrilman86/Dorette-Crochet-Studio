@@ -449,3 +449,5 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
 }
 #crochetCenterMount{display:contents}
 .crochet-compact-actions .button{min-height:44px}
+
+.workspace-link{display:inline-flex;gap:6px;align-items:center;min-height:44px;padding:7px 11px;margin:3px;border:1px solid #c9bbde;border-radius:9px;background:#faf7ff;text-decoration:none;white-space:normal}.workspace-link.creator-link{background:#eee5fb;font-weight:650}.workspace-link:hover{border-color:#7752aa;background:#e4d7f8}.project-bin-row .gallery-thumb{flex:none;object-fit:contain}
