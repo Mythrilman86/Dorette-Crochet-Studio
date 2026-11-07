@@ -165,7 +165,7 @@
         '2.5.2 website maintenance — improved offline-readiness replies. Intermittent Chromium installation aborts remain under investigation.'
       );
       const a = document.createElement('a');
-      a.href = './Dorette-Crochet-Studio-User-Guide.pdf#chapter-navigation';
+      a.href = './Dorette-Crochet-Studio-User-Guide.pdf#page=5';
       a.textContent = 'Guide to navigation and display';
       news.content.append(a);
       news.open();
