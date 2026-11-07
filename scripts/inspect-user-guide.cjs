@@ -1,3 +1,4 @@
+const {waitForBrowserPort} = require('./browser-port.cjs');
 const http = require('node:http'),
   fs = require('node:fs'),
   path = require('node:path');
@@ -84,9 +85,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     { windowsHide: true }
   );
   try {
-    const portFile = path.join(profile, 'DevToolsActivePort');
-    for (let i = 0; i < 80 && !fs.existsSync(portFile); i++) await delay(250);
-    const port = fs.readFileSync(portFile, 'utf8').split('\n')[0].trim();
+    const port = await waitForBrowserPort(edge, profile);
     const pages = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json();
     const ws = new WebSocket(pages.find((page) => page.type === 'page').webSocketDebuggerUrl);
     await new Promise((ok, fail) => {
