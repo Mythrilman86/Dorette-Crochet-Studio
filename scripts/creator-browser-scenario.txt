@@ -28,6 +28,7 @@
  const savedGraph=draft.id;
  for(const family of ['garment','amigurumi']){$('newType').value=family;$('sourceList').value='';$('createDraft').click();await wait(()=>!busy&&!dirty&&draft.type===family);ok(!draft.chart,'standalone family');$('addPiece').click();const first=draft.pieces[0];mutate(()=>{first.name=family==='garment'?'Front panel':'Body';const section=newSection();const row=newStep(family==='garment'?'row':'round');row.text='Original synthetic author instruction';section.steps.push(row);first.sections.push(section);draft.pieces.push({...newPiece(),name:'Assembly'});});await save();ok((await store.get(draft.id)).pieces.length===2,'multiple pieces saved');}
  await open(savedGraph);
+ const standalone=(await store.list()).find(d=>d.type==='garment');await open(standalone.id);$('sourceList').value=sources[0].id;const writtenBefore=JSON.stringify(draft.pieces);$('linkCurrentChart').click();await wait(()=>!busy&&!dirty);ok(draft.chart&&JSON.stringify(draft.pieces)===writtenBefore,'standalone draft links chart without recreating written work');await open(savedGraph);
  render();await new Promise(r=>setTimeout(r,100));
  return 'PASS linked/read-only graph, pieces/rows/rounds/sizes/repeats, image persistence, numbering, immutable snapshots, complete backups/corruption/cancel/copy, transaction failure/retry, quota failure and revision conflict recovery';
 })()
