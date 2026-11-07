@@ -251,7 +251,7 @@ function queueWrite(project){
  writeChain=result;
  const complete=error=>{
    writePending--;
-   if(error)failedWrites.set(id,error.message);
+   if(error){globalThis.studioDiagnostics?.record('SAVE_FAILED');failedWrites.set(id,error.message);}
    else {failedWrites.delete(id);lastSaveTime=new Date();void captureRecovery(copy);}
    refreshSaveState();
  };
@@ -1556,7 +1556,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
   ctx.strokeStyle=v16Prefs.highContrast?'#1b0e2e':'#6d578e';ctx.lineWidth=(v16Prefs.highContrast?2.5:1.8)/s;ctx.strokeRect(M,M,bw,bh);
   drawNextChartOverlays(ctx,cols,rows,s);
   v16DrawOverlays(ctx,cols,rows,s,minCol,maxCol,minRow,maxRow);
-  if((active.converted||displayedConversion||active.layers?.length) && CELL*s>=(v16Prefs.symbols?9:16)){
+  if(v16Prefs.showYarnLetters!==false && (active.converted||displayedConversion||active.layers?.length) && CELL*s>=(v16Prefs.symbols?9:16)){
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 12px system-ui';
     for(let r=minRow;r<maxRow;r++)for(let c=minCol;c<maxCol;c++){
       const i=r*cols+c,rowNum=rows-r;
@@ -1800,7 +1800,7 @@ async function importImage(file){
     toast(keptColors
       ? 'Source photo attached. Your existing stitch colors and progress were kept. Crop, then preview the new version.'
       : 'Image loaded. Crop the artwork before previewing stitches.');
-  }catch(e){toast('Image import failed: '+e.message);status('Image import failed',true);}
+  }catch(e){globalThis.studioDiagnostics?.record('IMPORT_FAILED');toast('Image import failed: '+e.message);status('Image import failed',true);}
 }
 function hexRGB(rgb){return '#'+rgb.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');}
 function distSq(a,b){return (a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;}
@@ -2090,7 +2090,7 @@ async function download(blob,name){
     try{
       const saved=await window.StudioMobile.save(blob,name);
       toast(saved?'File saved: '+name:'Export canceled.');
-    }catch(error){toast('Could not save file: '+error.message);}
+    }catch(error){globalThis.studioDiagnostics?.record('BACKUP_FAILED');toast('Could not save file: '+error.message);}
     return;
   }
   const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -2118,7 +2118,7 @@ function runPdfJob(kind){
  const done=(result,error)=>{
    if(finished)return;finished=true;clearTimeout(timer);
    if(worker){worker.terminate();worker=null;}
-   if(error){toast('PDF export failed: '+error.message);console.error(error);}
+   if(error){globalThis.studioDiagnostics?.record('PDF_FAILED');toast('PDF export failed: '+error.message);console.error(error);}
    else if(!reliability.verifyPdf(result.bytes))toast('PDF export failed a file signature check.');
    else {download(new Blob([result.bytes],{type:'application/pdf'}),filename);if(!window.StudioMobile?.nativeFiles)toast(`${result.pages}-page PDF downloaded. Saved chart unchanged.`);}
    button.disabled=false;button.textContent=originalText;
@@ -2150,7 +2150,7 @@ function sanitizeWorkspacePreferences(input){
   const strings=list=>Array.isArray(list)?[...new Set(list.filter(v=>typeof v==='string'&&v.length<=100))].slice(0,100):[];
   if(input.sections&&typeof input.sections==='object'&&!Array.isArray(input.sections)){
     const {order,collapsed,favorites}=input.sections;
-    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites)};
+    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites),sort:['layout','az','favorites'].includes(input.sections.sort)?input.sections.sort:'layout',personalized:strings(input.sections.personalized),hiddenTools:strings(input.sections.hiddenTools),personalizedConfigured:input.sections.personalizedConfigured===true};
   }
   if(input.tools&&typeof input.tools==='object'){
     const {favorites,recent}=input.tools;
@@ -2159,9 +2159,9 @@ function sanitizeWorkspacePreferences(input){
   if(input.panels&&typeof input.panels.projects==='boolean'&&typeof input.panels.settings==='boolean'){
     result.panels={projects:input.panels.projects,settings:input.panels.settings};
   }
-  if(input.display&&['beginner','advanced'].includes(input.display.mode)){
+  if(input.display&&['beginner','advanced','personalized'].includes(input.display.mode)){
     const d=input.display;
-    result.display={mode:d.mode,highContrast:d.highContrast===true,cues:d.cues===true,symbols:d.symbols===true,ruler:d.ruler===true,numberScale:[1,1.5,2].includes(d.numberScale)?d.numberScale:1};
+    result.display={mode:d.mode,highContrast:d.highContrast===true,cues:d.cues===true,symbols:d.symbols===true,ruler:d.ruler===true,showYarnLetters:d.showYarnLetters!==false,numberScale:[1,1.5,2].includes(d.numberScale)?d.numberScale:1};
   }
   if(['single','dual'].includes(input.chart))result.chart=input.chart;
   return Object.keys(result).length>1?result:null;
@@ -2281,7 +2281,7 @@ function setupStandaloneSettings(){
         exportedAt:new Date().toISOString(),categories,sha256:await settingsDigest(categories)};
       await download(new Blob([JSON.stringify(file,null,2)+'\n'],{type:'application/json'}),
         'Dees-Crochet-Studio-Settings-'+file.exportedAt.slice(0,10)+'.json');
-    }catch(error){toast('Could not export settings: '+error.message);}
+    }catch(error){globalThis.studioDiagnostics?.record('BACKUP_FAILED');toast('Could not export settings: '+error.message);}
   };
   $('importStandaloneSettings').onclick=()=>input.click();
   input.onchange=async()=>{
@@ -2298,7 +2298,7 @@ function setupStandaloneSettings(){
       }
       status.textContent=pending.skipped.length?'Skipped: '+pending.skipped.join(', ')+'.':'';
       dialog.showModal();
-    }catch(error){toast('Could not open settings: '+error.message);}
+    }catch(error){globalThis.studioDiagnostics?.record('IMPORT_FAILED');toast('Could not open settings: '+error.message);}
   };
   apply.onclick=async()=>{
     if(!pending||apply.disabled)return;
@@ -2404,7 +2404,7 @@ async function restoreBackup(file){
       toast('Restored '+(restored.projects.length+restored.recycled.length)+' project(s) as new copies.');
       await restoreWorkspacePreferences(payload.workspace);
     }
-  }catch(e){toast('Could not restore: '+e.message);}
+  }catch(e){globalThis.studioDiagnostics?.record('RESTORE_FAILED');toast('Could not restore: '+e.message);}
 }
 
 async function removeActiveProject(){if(active)await recycleProject(active);}
@@ -2698,8 +2698,8 @@ function setupPhoneCrochetControls(){
     button.setAttribute('aria-label',(expanded?'Collapse':'Expand')+' crochet controls · '+$('phoneCrochetSummary').textContent);
     document.body.classList.toggle('phone-crochet-expanded',expanded);
   }
-  let expanded=false;
-  try{expanded=localStorage.getItem(key)==='true';}catch{}
+  let expanded=true;
+  try{const saved=localStorage.getItem(key);if(saved!==null)expanded=saved==='true';}catch{}
   apply(expanded);
   button.onclick=()=>{
     expanded=!expanded;
@@ -3610,7 +3610,8 @@ function v16ApplyPrefs(){
   if(beginner&&active&&!['select','paint','erase','pan'].includes(editorTool))setTool('select');
   if(beginner&&motifPreview)clearMotifPreview();
   document.body.classList.toggle('accessible-contrast',!!v16Prefs.highContrast);
-  $('skillMode').value=v16Prefs.mode==='beginner'?'beginner':'advanced';
+  $('skillMode').value=['beginner','personalized'].includes(v16Prefs.mode)?v16Prefs.mode:'advanced';
+  window.StudioExperience?.applyVisibility();
   $('highContrastGrid').checked=!!v16Prefs.highContrast;
   $('colorCueMode').checked=!!v16Prefs.cues;
   $('alwaysSymbols').checked=!!v16Prefs.symbols;
@@ -3805,7 +3806,7 @@ function liftShape(){
 }
 function v16DrawTexture(){
   if(!active)return;
-  const source=v16DisplayCells(active),cols=active.cols,rows=active.rows,pixel=Math.max(3,Math.min(18,Math.floor(600/Math.max(cols,rows))));
+  const source=v16DisplayCells(active),cols=active.cols,rows=active.rows,pixel=Math.max(3,Math.min(32,Math.floor(1200/Math.max(cols,rows))));
   const a=$('textureOriginal'),b=$('textureSimulated');a.width=b.width=cols*pixel;a.height=b.height=rows*pixel;
   const ac=a.getContext('2d',{alpha:false}),bc=b.getContext('2d',{alpha:false});
   const density=$('textureDensity').value,shade=density==='high'?.24:density==='low'?.10:.17;
@@ -4016,6 +4017,7 @@ function setupAppNavigation(){
       }
       node.click();return;
     }
+    node.classList.add('tool-revealed');
     const section=node.closest('.settings-section');
     if(section)revealSettingsSection(section);
     if(node.closest('.sidebar')){projects.dataset.hidden='0';refreshWorkspaceLayout();}
@@ -4028,7 +4030,7 @@ function setupAppNavigation(){
     Edit:[['Select','toolSelect',true],['Paint','toolPaint',true],['Erase','toolErase',true],['Undo','undoButton',true],['Redo','redoButton',true],['Edit Lettering','editLastText',true],['Text Layer Paint / Erase','quickTextLayer',true],['Rows & Columns','openChartStructure',true],['Editable Layers','layerList']],
     View:[['Single Chart','singleChart',true],['Dual Chart','dualChart',true],['Crochet View','crochetView',true],['Show / Hide Projects','toggleProjects',true],['Show / Hide Settings','toggleSettings',true],['Zoom In','zoomIn',true],['Zoom Out','zoomOut',true],['Fit Chart','fitChart',true],['Center Chart','resetView',true]],
     Tools:[['Text to Chart','textInput'],['Image to Chart','imageFile'],['Stitch Scanner','openStitchStudio',true],['Yarn Palette','legend'],['Finished Size Calculator','sizePanel'],['Smart Cleanup & Quality','patternHealth']],
-    Help:[['Find a Tool','openCommandSearch',true],['Guided Tutorial','quickTutorial',true],['User Guide PDF','guidePdf',true],['About Studio','studioBuildBadge']]
+    Help:[['Find a Tool','openCommandSearch',true],['Guided Tutorial','quickTutorial',true],['User Guide PDF','guidePdf',true],['About Studio','aboutStudio',true],['What’s New','whatsNew',true],['Diagnostics & Support','diagnosticsSupport',true]]
   };
   for(const [label,commands] of Object.entries(menu)){
     const detail=document.createElement('details'),summary=document.createElement('summary'),items=document.createElement('div');
@@ -4075,19 +4077,28 @@ function setupSettingsLayout(){
   const defaults=[];
   let order=[];
   function persist(){
-    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
+    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({...saved,order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
   }
   function navigate(section){
     revealSettingsSection(section);
     const heading=section.querySelector('.settings-section-toggle');
     heading.scrollIntoView({block:'center'});heading.focus({preventScroll:true});
     heading.classList.add('settings-highlight');
-    setTimeout(()=>heading.classList.remove('settings-highlight'),1400);
+    window.StudioExperience?.highlight(heading);
   }
+  const sort=$('sectionSort');
+  sort.value=['az','favorites'].includes(saved.sort)?saved.sort:'layout';
+  sort.onchange=()=>{saved.sort=sort.value;persist();renderShortcuts();};
+  document.addEventListener('studio-layout-changed',()=>{
+    try{saved=JSON.parse(localStorage.getItem(settingsLayoutKey))||{};}catch{}
+  });
   function renderShortcuts(){
     jump.replaceChildren();
     const host=$('favoriteSettings');host.replaceChildren();
-    for(const key of order){
+    const navigationOrder=order.slice();
+    if(sort.value==='az')navigationOrder.sort((a,b)=>settingsSections.get(a).dataset.settingsLabel.localeCompare(settingsSections.get(b).dataset.settingsLabel));
+    if(sort.value==='favorites')navigationOrder.sort((a,b)=>Number(favorites.has(b))-Number(favorites.has(a)));
+    for(const key of navigationOrder){
       const section=settingsSections.get(key),label=section.dataset.settingsLabel;
       const entry=make('button','button ghost',label);
       entry.onclick=()=>{jump.closest('details').open=false;navigate(section);};jump.append(entry);
@@ -4298,7 +4309,7 @@ function setupCommandPalette(){
     node.scrollIntoView({behavior:'auto',block:'center'});
     if(node.tabIndex<0)node.tabIndex=-1;
     node.focus({preventScroll:true});node.classList.add('settings-highlight');
-    setTimeout(()=>node.classList.remove('settings-highlight'),1400);
+    window.StudioExperience?.highlight(node);
     if(node.disabled)toast(description||'This tool needs an active project or selection.');
    };
    const star=document.createElement('button');star.type='button';star.className='command-star';
@@ -4597,6 +4608,7 @@ function setupServiceWorkerUpdates(){
          offlineStatus.textContent='Offline verification is taking longer than expected. Retrying…';
          probe(attempt+1);
        }else{
+         globalThis.studioDiagnostics?.record('OFFLINE_FAILED');
          offlineStatus.textContent='Offline readiness could not be verified. Check for Studio updates to try again.';
        }
      }
@@ -4633,6 +4645,7 @@ function setupServiceWorkerUpdates(){
        if(worker.state==='installed')readyUpdate(reg);
        if(worker.state==='activated')checkOfflineReady();
        if(worker.state==='redundant'&&!navigator.serviceWorker.controller){
+         globalThis.studioDiagnostics?.record('OFFLINE_FAILED');
          registration=null;
          offlineStatus.textContent='Offline setup did not finish. Check your connection and choose Check for Studio updates to retry.';
        }
@@ -4641,6 +4654,7 @@ function setupServiceWorkerUpdates(){
    reg.addEventListener('updatefound',watch);watch();checkOfflineReady();
  }
  function offlineRegistrationFailed(error){
+   globalThis.studioDiagnostics?.record('OFFLINE_FAILED');
    offlineStatus.textContent='Offline setup is unavailable. Choose Check for Studio updates to retry while online.';
    console.warn('Service worker registration unavailable:',error.message);
  }
@@ -4649,7 +4663,7 @@ function setupServiceWorkerUpdates(){
    if(!navigator.onLine)return toast('Connect to the internet to check for an update.');
    if(!registration){await registerOffline().catch(offlineRegistrationFailed);return;}
    try{await registration.update();readyUpdate(registration);checkOfflineReady();if(!registration.waiting)toast('Update check complete. No ready update detected.');}
-   catch(e){toast('Update check failed: '+e.message);}
+   catch(e){globalThis.studioDiagnostics?.record('UPDATE_FAILED');toast('Update check failed: '+e.message);}
  });
  $('installReadyUpdate').addEventListener('click',async()=>{
    if(!registration?.waiting)return toast('There is no update ready to install.');
@@ -4939,6 +4953,7 @@ async function initialize(){
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
+  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,center:centerView,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download});
   setupAppNavigation();
   setupPhoneCrochetControls();
   setupStandaloneSettings();

@@ -136,7 +136,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
     const result=await evaluate(`(async()=>{
       const el=id=>document.getElementById(id);
-      el('name').value='Synthetic instructions';
+      el('patternTitle').value='Synthetic instructions';
       const invalid=new DataTransfer();
       invalid.items.add(new File(['invalid'],'broken.pdf',{type:'application/pdf'}));
       el('pdf').files=invalid.files;

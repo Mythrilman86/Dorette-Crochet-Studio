@@ -22,7 +22,7 @@ function transaction(stores,mode,action){
   let request;
   try{request=action(tx);}catch(error){tx.abort();reject(error);return;}
   tx.oncomplete=()=>resolve(request?.result);
-  tx.onabort=()=>reject(tx.error||Error('Storage transaction aborted'));
+  tx.onabort=()=>{globalThis.studioDiagnostics?.record(mode==='readwrite'?'SAVE_FAILED':'STORAGE_FAILED');reject(tx.error||Error('Storage transaction aborted'));};
  });
 }
 async function loadPdf(data){
@@ -30,7 +30,7 @@ async function loadPdf(data){
   cMapUrl:assets+'cmaps/',cMapPacked:true,standardFontDataUrl:assets+'standard_fonts/',
   wasmUrl:assets+'wasm/',iccUrl:assets+'iccs/',maxImageSize:16_000_000});
  try{return await task.promise;}
- catch(error){await task.destroy().catch(()=>{});throw error;}
+ catch(error){globalThis.studioDiagnostics?.record('PDF_FAILED');await task.destroy().catch(()=>{});throw error;}
 }
 async function refreshLibrary(){
  const records=await transaction(['patterns'],'readonly',tx=>tx.objectStore('patterns').getAll());
@@ -157,7 +157,7 @@ function run(action,processing='Working…'){
    if(!db)throw Error('Local pattern storage is still opening.');
    await action();
    if($('status').textContent===processing)say('Ready.');
-  }catch(error){say(error.message||'The operation failed.');}
+  }catch(error){globalThis.studioDiagnostics?.record(/backup/i.test(processing)?'BACKUP_FAILED':/import|restore/i.test(processing)?'IMPORT_FAILED':'PDF_FAILED');say(error.message||'The operation failed.');}
   finally{
    operationPending=false;
    controls.forEach(button=>button.removeAttribute('aria-disabled'));
@@ -166,7 +166,7 @@ function run(action,processing='Working…'){
  };
 }
 $('add').onclick=run(async()=>{
- const file=$('pdf').files[0],name=$('name').value.trim();
+ const file=$('pdf').files[0],name=$('patternTitle').value.trim();
  if(!name||!file)throw Error('Enter a project name and select a PDF.');
  if(!/\.pdf$/i.test(file.name)||file.size>maxPdfBytes||!file.size)throw Error('Choose a PDF up to 20 MiB.');
  const header=new TextDecoder().decode(await file.slice(0,1024).arrayBuffer());

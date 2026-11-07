@@ -13,7 +13,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-icon" aria-hidden="true">✳</span><span><strong>Dorette</strong><small>CROCHET STUDIO</small></span></div>
+    <div class="brand"><img class="brand-icon" src="./assets/header-icon.png" alt=""><span><strong>Dee’s</strong><small>CROCHET STUDIO</small></span></div>
     <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button><a href="./written-pattern.html">Written Patterns</a></nav>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" aria-label="Back up all projects" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" aria-label="Restore backup" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
@@ -49,6 +49,7 @@
     <section class="workspace" aria-label="Chart editor">
       <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill" id="studioBuildBadge">Local workspace</span></div>
       <div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button> <button id="focusGuideDetails" class="button ghost" type="button" aria-controls="guideDialog" aria-expanded="false" hidden>Guide details</button></div>
+      <label class="toggle yarn-visibility"><input class="show-yarn-letters" type="checkbox" checked> Show yarn letters on chart</label>
       <div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
@@ -78,6 +79,7 @@
       </div>
       </section></div>
       <details id="focusRowColors" class="focus-row-colors" open><summary>Row Color Instructions <span id="focusRowSummary"></span></summary><div class="focus-row-body"><div id="focusRowRuns" class="focus-row-runs" aria-label="Complete color sequence"></div><p id="focusRowChange" class="muted"></p><div class="focus-row-nav"><button id="focusRowPrev" type="button" class="button ghost">Previous row</button><button id="focusRowNext" type="button" class="button ghost">Next row</button></div></div></details>
+      <div class="crochet-compact-actions"><button id="compactCenter" class="button ghost" type="button">Center</button><label class="toggle"><input class="show-yarn-letters" type="checkbox" checked> Show yarn letters</label></div>
       <button id="phoneCrochetControls" type="button" aria-expanded="false" aria-controls="crochetProgressControls chartNavigationControls"><span id="phoneCrochetSummary">Crochet controls</span><span class="phone-crochet-chevron" aria-hidden="true"></span></button>
       <div class="crochet-dock" id="crochetProgressControls" aria-label="Crochet progress controls"><div class="crochet-dock-summary"><strong id="dockStatus"></strong><span id="dockProgress" role="status"></span></div><button id="dockToggleStitch" class="button secondary" type="button">Mark stitch</button><button id="dockToggleRow" class="button secondary" type="button">Mark row</button><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
       <div class="toolbar" id="chartNavigationControls" aria-label="Chart tools">
@@ -96,7 +98,7 @@
       </div>
       <nav class="studio-modes" aria-label="Studio workspace mode"><button type="button" id="modeCreate" aria-pressed="false">Create</button><button type="button" id="modeEdit" aria-pressed="true">Edit</button><button type="button" id="modeCrochet" aria-pressed="false">Crochet</button><button type="button" id="openStitchStudio">Stitch Scanner</button><button type="button" id="quickTutorial" class="button ghost">? Guided tour</button></nav>
       <section class="v16-quickbar" aria-label="Display and skill level">
-        <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option></select></label>
+        <label>Interface <select id="skillMode" aria-label="Interface complexity"><option value="advanced">Advanced</option><option value="beginner">Beginner</option><option value="personalized">Personalized</option></select></label>
         <label class="toggle"><input id="highContrastGrid" type="checkbox"> High-contrast grid</label>
         <label class="toggle"><input id="colorCueMode" type="checkbox"> Yarn shape cues</label>
         <label class="toggle"><input id="alwaysSymbols" type="checkbox"> Emphasize yarn letters</label>
@@ -178,7 +180,7 @@
       <div class="settings-navigation">
         <h2>Settings</h2>
         <details id="settingsLayoutBackup"><summary>Settings &amp; Layout Backup</summary><p class="muted">Transfer your Studio preferences in a JSON file. Use project ZIP backups separately for charts and progress.</p><div class="stack"><button id="exportStandaloneSettings" class="button ghost" type="button">Export Settings &amp; Layout</button><button id="importStandaloneSettings" class="button ghost" type="button">Import Settings &amp; Layout</button><input id="settingsImportFile" type="file" accept=".json,application/json" hidden></div></details>
-        <details id="settingsJump"><summary>Choose a Section</summary><div id="jumpSettings" role="group" aria-label="Jump to Section"></div></details>
+        <details id="settingsJump"><summary>Choose a Section</summary><label>Section order <select id="sectionSort"><option value="layout">My Layout Order</option><option value="az">Alphabetical A–Z</option><option value="favorites">Favorites First</option></select></label><div id="jumpSettings" role="group" aria-label="Jump to Section"></div></details>
         <div class="settings-favorites" id="favoriteSettings" aria-label="Favorite Settings"></div>
         <div class="settings-layout-actions"><button id="customizeSettings" class="button ghost" type="button" aria-pressed="false">Customize Layout</button><button id="resetSettingsOrder" class="button ghost" type="button" hidden>Reset to Default</button></div>
         <p id="settingsLayoutStatus" class="muted" role="status" hidden></p>
@@ -427,6 +429,7 @@
   <script src="./next-features.js?v=1.8.1" defer></script>
   <script src="./reliability.js?v=1.8.1" defer></script>
   <script src="./studio-ops.js?v=1.8.1" defer></script>
+  <script src="./diagnostics.js" defer></script><script src="./experience.js" defer></script>
   <script src="./app.js?v=1.8.1" defer></script>
   <script src="./help.js?v=1.8.1" defer></script>
 <dialog id="stitchStudio" aria-labelledby="stitchTitle">

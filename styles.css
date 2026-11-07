@@ -405,3 +405,35 @@ body.beginner-mode .inspector.settings-customizing>[data-settings-key],body.begi
 }
 #newLettering,#placeText,#editLastText,#protectionDrawer .button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .lettering-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* Shared touch controls and compact Crochet View actions. */
+input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;padding:0!important;height:20px;flex:0 0 20px}
+.toggle{min-height:44px;cursor:pointer}
+#yarnLibraryPanel .pair{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}
+#yarnLibraryPanel .button{white-space:normal;overflow-wrap:anywhere;min-height:44px}
+.chart-pane{display:flex;flex-direction:column;min-width:0}
+.chart-pane>h2,.chart-pane>.working-chart-heading{min-height:54px;margin:0 0 8px;flex:none}
+.chart-pane>.overview-wrap,.chart-pane>.canvas-wrap{flex:1}
+.brand-icon{object-fit:contain;background:transparent;border-radius:0}
+.crochet-compact-actions{display:none}
+.crochet-view .workspace>.crochet-compact-actions{display:flex!important;gap:12px;align-items:center;flex-wrap:wrap;flex:none}
+.crochet-view .workspace>#phoneCrochetControls{display:flex;flex:none;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:6px 12px;border:1px solid #cbb8e0;border-radius:9px;background:#eee5f7;color:#392352;text-align:left;font-weight:750}
+#phoneCrochetSummary{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phone-crochet-chevron{width:.55em;height:.55em;border-right:2px solid;border-bottom:2px solid;transform:rotate(45deg)}
+#phoneCrochetControls[aria-expanded=true] .phone-crochet-chevron{transform:rotate(225deg)}
+.crochet-view:not(.phone-crochet-expanded) .workspace>#crochetProgressControls,.crochet-view:not(.phone-crochet-expanded) .workspace>#chartNavigationControls{display:none}
+.crochet-view .workspace>.yarn-visibility{display:none}
+.personalized-hidden:not(.settings-revealed),.personalized-tool-hidden:not(.tool-revealed){display:none!important}
+.settings-highlight{outline:3px solid #7b3bad!important;outline-offset:4px;box-shadow:0 0 0 7px #eadff7!important}
+.experience-dialog{width:min(760px,94vw);max-height:85dvh;overflow:auto;border:1px solid #cbb8e0;border-radius:16px;padding:20px;color:#352745;background:#faf8ff}
+.experience-dialog::backdrop{background:#21122b88}
+.experience-dialog>h2{display:inline-block;margin:0 16px 12px 0}
+.experience-content{display:flex;flex-wrap:wrap;gap:12px}
+.experience-content>p,.experience-content>pre,.experience-content>div{flex-basis:100%;max-width:100%}
+.experience-content pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}
+.experience-content a{padding:8px}
+.experience-content .button{min-height:44px;white-space:normal}
+.preview-stage{position:relative;height:55dvh;overflow:hidden;background:#eee8f5;touch-action:none;user-select:none}
+.preview-stage canvas{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none}
+#textureOriginal,#textureSimulated{cursor:zoom-in}
+@media(max-width:650px){.chart-pane>h2,.chart-pane>.working-chart-heading{min-height:0}.chart-pane>.canvas-wrap{flex:none}.crochet-compact-actions{font-size:.75rem}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
