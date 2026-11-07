@@ -85,6 +85,39 @@
     "written"
   ],
   [
+    "scanner",
+    "Stitch Scanner and offline references",
+    [
+      "Open Tools → Stitch Scanner. Use a photograph or chart image you have permission to use. Review crop, rotation and image adjustments before recognizing symbols.",
+      "Scanner matches are suggestions. Compare them with the pattern legend and correct or reject every uncertain result. Chart-symbol matching is separate from identifying stitches in photographs of crocheted fabric.",
+      "Use the offline stitch encyclopedia for abbreviations, US/UK terminology and instructions. Curated online references require internet access. No paid AI or automatic image upload is required.",
+      "The production recognizer has known accuracy limits. Do not treat its first suggestion as a confirmed stitch or automatically alter a project based on it."
+    ],
+    "scanner"
+  ],
+  [
+    "annotations",
+    "Annotations, versions and quality checks",
+    [
+      "Use stitch, row or section notes to attach reminders to the chart. Select the target location and scope before saving. Notes and completed stitches serve different purposes.",
+      "Save design versions or checkpoints before substantial changes. Design Undo/Redo and crochet progress history have different roles; exporting an external backup adds protection beyond local history.",
+      "Quality checks identify suspicious cells or color changes for review. Preview cleanup and confirm the intended result. A safe copy or checkpoint is appropriate before an uncertain correction.",
+      "Large-chart sections help navigate a design without changing its dimensions. Keep numbering and row direction in view when working on a section."
+    ],
+    "workspace"
+  ],
+  [
+    "exports",
+    "Printing, images and written color instructions",
+    [
+      "Use File → Print / Export PDF for printable chart pages and the palette legend. Review paper size, orientation, margins, page layout and available numbering or symbol options before exporting.",
+      "PNG and SVG exports provide chart images. Written-instruction PDF export describes the chart’s color runs. These are colorwork instructions, not inferred crochet stitch types or turning-chain instructions.",
+      "Show yarn letters on chart changes interactive viewing only. It does not remove stored symbol assignments or automatically change the existing print/export options.",
+      "Review exported files in an external viewer. An image or PDF export is not a restorable chart ZIP backup. Keep the editable project and its backup separately."
+    ],
+    "health"
+  ],
+  [
     "backups",
     "Saving, recovery and three backup systems",
     [

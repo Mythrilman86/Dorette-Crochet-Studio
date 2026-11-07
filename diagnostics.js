@@ -67,7 +67,7 @@
         } catch {}
       },
       report() {
-        return read().map((r) => ({ ...r, summary: messages[r.code] }));
+        return read().map((r) => ({ ...r, time: new Date(r.time).toISOString(), summary: messages[r.code] }));
       }
     };
   }

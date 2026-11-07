@@ -211,6 +211,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     );
     await snap('preview', "document.querySelector('#textureSimulated').click()");
     await evaluate("document.querySelector('#crochetImageViewer').close()");
+    await snap('scanner',"document.querySelector('#openStitchStudio').click()");
+    await evaluate("document.querySelector('#stitchStudio').close()");
     await snap(
       'health',
       "document.querySelector('.reliability-drawer').open=true;document.querySelector('.reliability-drawer').scrollIntoView()"
