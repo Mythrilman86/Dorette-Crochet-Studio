@@ -2312,7 +2312,7 @@ function setupStandaloneSettings(){
       writeStandaloneSettings(localStorage,values,selected);
       alert('Imported '+selected.length+' settings categories. Studio will reopen with your new preferences.');
       location.reload();
-    }catch(error){status.textContent='Settings import did not complete. '+error.message;}
+    }catch(error){globalThis.studioDiagnostics?.record('IMPORT_FAILED');status.textContent='Settings import did not complete. '+error.message;}
     finally{apply.disabled=false;}
   };
 }
@@ -2328,7 +2328,7 @@ async function exportBackup(all=false, share=false, project=active){
     (all&&[...recycledProjects.keys()].some(id=>failedWrites.has(id)));
   if(unconfirmed&&!confirm('Local saving has not confirmed all changes. Export a ZIP of the current in-memory project data for recovery?'))return;
   const bad=(all?items.concat([...recycledProjects.values()]):items).map(p=>({id:p.id,report:reliability.auditProject(p)})).find(v=>!v.report.ok);
-  if(bad){toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
+  if(bad){globalThis.studioDiagnostics?.record('BACKUP_FAILED');toast('Backup stopped: invalid project ('+bad.report.errors[0]+'). Open Diagnostics.');return;}
   const data=backupPayload(items,all?{categories:customCategories,recycleBin:[...recycledProjects.values()]}:undefined);
   if(all&&$('includeWorkspacePreferences').checked){
     const preferences=exportWorkspacePreferences();
@@ -2336,6 +2336,7 @@ async function exportBackup(all=false, share=false, project=active){
   }
   const payload=textEncoder.encode(JSON.stringify(data));
   if(payload.byteLength>45*1024*1024){
+    globalThis.studioDiagnostics?.record('BACKUP_FAILED');
     toast('This backup is too large to restore. '+(all?'Export the projects individually instead.':'Reduce the project size or remove a large reference image from a copy.'));
     return;
   }
@@ -4621,6 +4622,7 @@ function setupServiceWorkerUpdates(){
      activeProbe=current;
      channel.port1.onmessage=event=>{
        if(!finish())return;
+       if(event.data?.ready!==true)globalThis.studioDiagnostics?.record('OFFLINE_FAILED');
        offlineStatus.textContent=event.data?.ready===true
          ?'Ready for offline use: Crochet Charts and Written Patterns.'
          :'Offline files are incomplete. Keep this tab online and check for updates.';
@@ -4947,7 +4949,7 @@ async function initialize(){
   try{
     db=await openDatabase();const items=await loadProjects();
     loadProjectRecords(items);
-  }catch(e){memoryOnly=true;setSavePhase('blocked',e.message);toast('Local saving is unavailable. Keep private backups in a normal browser window.');}
+  }catch(e){globalThis.studioDiagnostics?.record('STORAGE_FAILED');memoryOnly=true;setSavePhase('blocked',e.message);toast('Local saving is unavailable. Keep private backups in a normal browser window.');}
   if(projects.size===0){const sample=blankProject('My First Chart',79,117);projects.set(sample.id,sample);if(!memoryOnly&&!studioReadOnly)await queueWrite(sample).catch(()=>{});}
   let preferred=null;try{preferred=localStorage.getItem('dorette-active-project');}catch{}
   resizeCanvas();selectProject(projects.has(preferred)?preferred:projects.keys().next().value);
