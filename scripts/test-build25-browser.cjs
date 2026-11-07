@@ -22,7 +22,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
   const url = 'http://127.0.0.1:' + server.address().port;
   const edge = cp.spawn(browser, [
-    '--headless=new','--disable-gpu','--no-first-run','--remote-debugging-port=0',
+    '--headless=new','--disable-gpu','--blink-settings=availableHoverTypes=2,primaryHoverType=2,availablePointerTypes=4,primaryPointerType=4','--no-first-run','--remote-debugging-port=0',
     '--user-data-dir='+profile,'about:blank'
   ], {windowsHide:true});
   try {
@@ -56,7 +56,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     for(const width of [390,1024,1600]){await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<500});assert.equal(await evaluate("(()=>{const a=document.querySelector('.workspace-link').getBoundingClientRect(),b=document.querySelector('#openPatternCreator').getBoundingClientRect();return a.right<=b.left+1||a.bottom<=b.top+1||b.bottom<=a.top+1})()"),true,'navigation links remain distinct');}
     await call('Page.navigate',{url:url+'/pattern-creator.html'});for(let i=0;i<100;i++){if(await evaluate("document.querySelector('#saveState')?.textContent.includes('ready')").catch(()=>false))break;await delay(100);}
     console.log(await evaluate('window.creatorProbe('+JSON.stringify(fs.readFileSync(path.join(__dirname,'build25-creator-scenario.txt'),'utf8'))+')'));
-    await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});await call('Emulation.setEmulatedMedia',{features:[{name:'hover',value:'hover'},{name:'pointer',value:'fine'}]});
+    await call('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});await call('Emulation.setTouchEmulationEnabled',{enabled:false});assert.equal(await evaluate("matchMedia('(hover:hover)').matches"),true,'desktop test requires a hover-capable pointer');
     await evaluate("scrollTo({top:0,behavior:'instant'})");await delay(150);
     const bounds=await evaluate("(()=>{const r=document.querySelector('#retrySave').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()");
     await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:0,y:0});await delay(150);const normal=await evaluate("getComputedStyle(document.querySelector('#retrySave')).backgroundColor");
