@@ -4945,6 +4945,7 @@ async function retryEditing(){
  finally{reloadingProjects=false;setTabReadOnly(Ops.canWrite());}
 }
 async function initialize(){
+  $('openPatternCreator').addEventListener('click',async ev=>{ev.preventDefault();if(await window.StudioBeforeUpdate())location.href='./pattern-creator.html';});
   document.body.classList.toggle('native-android',window.Capacitor?.getPlatform()==='android');
   await Ops.init(setTabReadOnly);
   hookEvents();v16Hook();
