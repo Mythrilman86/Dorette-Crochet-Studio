@@ -91,6 +91,20 @@
     p.textContent = text;
     host.append(p);
   }
+  function guideLink(label, page) {
+    const link = document.createElement('a');
+    link.href = './Dorette-Crochet-Studio-User-Guide.pdf' + (page ? '#page=' + page : '');
+    link.textContent = label;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.onclick = (event) => {
+      if (window.StudioMobile?.nativeFiles) {
+        event.preventDefault();
+        document.querySelector('.guide-link')?.click();
+      }
+    };
+    return link;
+  }
   function setup(api) {
     bridge = api;
     document.addEventListener('pointerdown', (event) => {
@@ -132,10 +146,7 @@
         about.content,
         'Free, offline crochet charts and Written Pattern Companion. No required accounts, advertising or automatic project uploads. Keep external backups of important work.'
       );
-      const guide = document.createElement('a');
-      guide.href = './Dorette-Crochet-Studio-User-Guide.pdf';
-      guide.textContent = 'User Guide (PDF)';
-      about.content.append(guide);
+      about.content.append(guideLink('User Guide (PDF)'));
       const project = document.createElement('a');
       project.href = 'https://github.com/Mythrilman86/Dorette-Crochet-Studio';
       project.textContent = 'Project source and support';
@@ -167,10 +178,7 @@
         news.content,
         '2.5.2 website maintenance — improved offline-readiness replies. Intermittent Chromium installation aborts remain under investigation.'
       );
-      const a = document.createElement('a');
-      a.href = './Dorette-Crochet-Studio-User-Guide.pdf#page=5';
-      a.textContent = 'Guide to navigation and display';
-      news.content.append(a);
+      news.content.append(guideLink('Guide to navigation and display', 5));
       news.open();
     });
     command('diagnosticsSupport', () => {

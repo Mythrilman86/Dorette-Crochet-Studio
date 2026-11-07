@@ -239,6 +239,10 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       "document.querySelector('#crochetView').click();document.querySelector('#aboutStudio').click()"
     );
     assert.equal(await evaluate("document.querySelector('#aboutStudioDialog').open"), true);
+    await evaluate("window.savedMobile=window.StudioMobile;window.guideOpenCount=0;window.StudioMobile={nativeFiles:true,openGuide:async()=>{window.guideOpenCount++;}};document.querySelector('#aboutStudioDialog a').click()");
+    assert.equal(await evaluate('window.guideOpenCount'),1,'About reuses native guide opener');
+    await evaluate("window.StudioMobile=window.savedMobile");
+
     await evaluate(
       "document.querySelector('#aboutStudioDialog').close();document.querySelector('#skillMode').value='personalized';document.querySelector('#skillMode').dispatchEvent(new Event('change'));document.querySelector('#configurePersonalized').click()"
     );
