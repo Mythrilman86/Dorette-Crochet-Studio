@@ -190,6 +190,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
       if (width > 650) assert.ok(boxes.delta < 2, JSON.stringify(boxes));
       assert.equal(boxes.overflow, false);
       assert.equal(boxes.checkbox, 20);
+    await evaluate("document.documentElement.style.fontSize='200%'");
+    await delay(100);
+    if(width>650)assert.ok(await evaluate("Math.abs(document.querySelector('#overviewCanvas').getBoundingClientRect().top-document.querySelector('#chartCanvas').getBoundingClientRect().top)<2"),'enlarged-text canvas alignment');
+    await evaluate("document.documentElement.style.fontSize=''");
+
     }
     await evaluate(`(()=>{
       document.querySelector('#crochetView').click();

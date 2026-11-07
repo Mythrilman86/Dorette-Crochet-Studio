@@ -437,3 +437,13 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
 #textureOriginal,#textureSimulated{cursor:zoom-in}
 @media(max-width:650px){.chart-pane>h2,.chart-pane>.working-chart-heading{min-height:0}.chart-pane>.canvas-wrap{flex:none}.crochet-compact-actions{font-size:.75rem}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+@supports(grid-template-rows:subgrid){
+  @media(min-width:651px){
+    body:not(.crochet-view) .dual-charts>.chart-pane:not([hidden]){
+      display:grid;
+      grid-template-rows:subgrid;
+      grid-row:span 2;
+      row-gap:0;
+    }
+  }
+}
