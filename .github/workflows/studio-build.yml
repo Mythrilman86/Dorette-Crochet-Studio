@@ -35,7 +35,7 @@ jobs:
         run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-creator-browser.cjs
       - name: Verify Build 25 usability and safe image optimization
         if: github.event_name == 'pull_request'
-        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-build25-browser.cjs
+        run: xvfb-run -a env STUDIO_TEST_HEADFUL=1 STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-build25-browser.cjs
       - name: Verify isolated offline cache failure behavior
         if: github.event_name == 'pull_request'
         run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-cache-failure-browser.cjs
