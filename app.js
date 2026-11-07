@@ -4956,7 +4956,7 @@ async function initialize(){
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
-  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,center:centerView,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download});
+  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,center:centerView,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download,notify:toast});
   setupAppNavigation();
   setupPhoneCrochetControls();
   setupStandaloneSettings();
