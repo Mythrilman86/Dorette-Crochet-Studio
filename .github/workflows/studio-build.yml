@@ -23,6 +23,34 @@ jobs:
       - run: python3 -m pip install pypdf==6.21.4
       - name: Run complete browser regression suite
         run: xvfb-run -a env NODE_PATH="$RUNNER_TEMP/studio-browser/node_modules" STUDIO_TEST_HEADFUL=1 STUDIO_TEST_BROWSER="$(command -v google-chrome)" STUDIO_BROWSER="$(command -v google-chrome)" node scripts/test-all.mjs
+      - name: Preserve synthetic Build 26 diagnostics
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/validation/v2.7.1-linux-ci' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build26-synthetic-diagnostics
+          retention-days: 3
+          if-no-files-found: warn
+          path: |
+            publication-test-output/Build26-layout-measurements.json
+            publication-test-output/Build26-enlarged-selection-measurements.json
+            publication-test-output/Build26-Recycle-viewport-390.png
+            publication-test-output/Build26-Recycle-viewport-800.png
+            publication-test-output/Build26-Recycle-viewport-1440.png
+            publication-test-output/Build26-Recycle-container-110.png
+            publication-test-output/Build26-Recycle-container-145.png
+            publication-test-output/Build26-Recycle-container-190.png
+            publication-test-output/Build26-Recycle-container-260.png
+            publication-test-output/Build26-Recycle-container-480.png
+            publication-test-output/Build26-Recycle-enlarged-container-110.png
+            publication-test-output/Build26-Recycle-enlarged-container-145.png
+            publication-test-output/Build26-Recycle-enlarged-container-190.png
+            publication-test-output/Build26-Recycle-enlarged-container-260.png
+            publication-test-output/Build26-Recycle-enlarged-container-480.png
+            publication-test-output/Build26-Recycle-enlarged-selection-110.png
+            publication-test-output/Build26-Recycle-enlarged-selection-145.png
+            publication-test-output/Build26-Recycle-enlarged-selection-190.png
+            publication-test-output/Build26-Recycle-enlarged-selection-260.png
+            publication-test-output/Build26-Recycle-enlarged-selection-480.png
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").web.version) process.exit(1)'
