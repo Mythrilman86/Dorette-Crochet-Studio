@@ -1,9 +1,11 @@
+import {checkIdentity} from './cache-identity.mjs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { runInNewContext } from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 process.chdir(root);
+await checkIdentity();
 const target = process.argv[2];
 if (!['web', 'mobile'].includes(target)) throw new Error('Choose web or mobile');
 const native = target === 'mobile';
@@ -33,6 +35,10 @@ if (native) {
     .replace('<strong>Dorette</strong>', '<strong>Dee’s</strong>')
     .replace('</head>', '  <script src="./mobile.js"></script>\n</head>');
   await cp('mobile/mobile.js', out + '/mobile.js');
+  const creator = await readFile('pattern-creator.html', 'utf8');
+  await writeFile(out + '/pattern-creator.html', creator.replace('</head>', '  <script src="./mobile.js"></script>\n</head>'));
+  const publisher = await readFile('pattern-publish.html', 'utf8');
+  await writeFile(out + '/pattern-publish.html', publisher.replace('</head>', '  <script src="./mobile.js"></script>\n</head>'));
   const written = await readFile('written-pattern.html', 'utf8');
   await writeFile(out + '/written-pattern.html', written.replace('</head>', '  <script src="./mobile.js"></script>\n</head>'));
 } else {

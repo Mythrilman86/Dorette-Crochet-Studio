@@ -295,21 +295,15 @@
   async function readPhoto(file) {
     if (!file) return;
     const request = ++imageRequest;
-    if (file.size > 30 * 1024 * 1024) {
-      status('Choose an image smaller than 30 MB.');
-      return;
-    }
-    const url = URL.createObjectURL(file);
+    let url;
     try {
-      const image = new Image();
-      image.src = url;
-      await image.decode();
-      if (request === imageRequest) loadSource(image, image.naturalWidth, image.naturalHeight);
-    } catch {
-      if (request === imageRequest) status('Could not open that photo. Try a JPEG, PNG, or WebP image.');
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+      status('Preparing photo locally…');
+      const {normalizeImageFile}=await import('./assets/image-import.mjs');
+      const result=await normalizeImageFile(file,'scanner');
+      url=URL.createObjectURL(result.file);const image=new Image();image.src=url;await image.decode();
+      if(request===imageRequest){loadSource(image,image.naturalWidth,image.naturalHeight);status('Photo ready. Your original is unchanged. Select an area to scan.');}
+    }catch(error){if(request===imageRequest)status(error.message.replace(/^Photo import: /,''));}
+    finally{if(url)URL.revokeObjectURL(url);}
   }
 
   function stopCamera() {
@@ -489,9 +483,10 @@
     status(crop ? 'Image ready. Adjust the crop for this tool.' : 'Choose an image to start.');
     showMarks();
   };
-  for (const id of ['File', 'Capture']) get(id).onchange = event => {
-    readPhoto(event.target.files[0]);
-    event.target.value = '';
+  for (const id of ['File', 'Capture']) get(id).onchange = async event => {
+    const input = event.currentTarget, file = input.files[0];
+    await readPhoto(file);
+    if (input.files[0] === file) input.value = '';
   };
   get('Camera').onclick = async () => {
     stopCamera();

@@ -21,6 +21,11 @@ public class ExampleInstrumentedTest {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        assertEquals("com.getcapacitor.app", appContext.getPackageName());
+        // Gradle writes the configured application ID into the test manifest.
+        // Reading targetPackage avoids the stale Capacitor template identity.
+        android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        android.content.pm.InstrumentationInfo info = instrumentation.getContext()
+            .getPackageManager().getInstrumentationInfo(instrumentation.getComponentName(), 0);
+        assertEquals(info.targetPackage, appContext.getPackageName());
     }
 }

@@ -1,0 +1,16 @@
+# Branch-based GitHub Pages: serve runtime files, not development fixtures.
+exclude:
+  - tests
+  - scripts
+  - mobile
+  - experimental
+  - docs
+  - portable
+  - dist
+  - node_modules
+  - README.md
+  - BUILD30-CHANGE-GUIDE.md
+  - DORETTE-USABILITY.md
+# Jekyll normally excludes vendor directories; the offline PDF runtime is needed.
+include:
+  - assets/publisher/vendor

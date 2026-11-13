@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.6.0",
-    "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
+    "version": "2.7.0",
+    "notes": "New 80 \u00d7 110 project preset, Crop to Fill and paired previews, row tracking and photo tools. Pattern Creator (Beta) and PDF Publisher (Beta) are included; publishing supports Graph / Colorwork."
   },
   "ios": null,
-  "version": "2.6.0",
-  "notes": "User Experience & Personalization, including viewport-preserving chart structure edits."
+  "version": "2.7.0",
+  "notes": "New 80 \u00d7 110 project preset, Crop to Fill and paired previews, row tracking and photo tools. Pattern Creator (Beta) and PDF Publisher (Beta) are included; publishing supports Graph / Colorwork."
 }

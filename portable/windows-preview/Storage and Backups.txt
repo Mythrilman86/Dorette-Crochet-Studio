@@ -1,0 +1,65 @@
+WHERE YOUR WORK LIVES
+Projects, drafts, photos, frozen snapshots and Companion data are saved in this
+browser profile's local IndexedDB/site storage for http://127.0.0.1:17828.
+The application folder holds program files, not a folder of editable project files.
+Copying the program folder alone does not copy or back up your patterns.
+
+Use the same Windows account, browser and regular profile each time. Edge and
+Chrome have separate data. InPrivate/Incognito data may disappear when closed.
+Clearing cookies/site data, removing the browser profile or Windows cleanup that
+removes site data can erase local work. Browser storage is not a substitute for
+external backups. Do not change the port/address to work around an error.
+
+Stopping/restarting the server, closing the browser, or moving the program folder
+does not deliberately clear site storage. After moving folders, stop the old helper
+and launch from the new folder. Keep the fixed address and same browser profile.
+
+PATTERN CREATOR BACKUP
+1. Open the draft and wait until it is saved.
+2. Go to Complete editable backups.
+3. Choose Prepare .deepattern backup, then Save prepared backup.
+4. Check the .deepattern file exists in Downloads (or your chosen folder).
+5. Keep another copy on an external USB drive or another owner-controlled location.
+Back up at the end of each session and before changing computers/browsers.
+Private .deepattern backups include original photos and may retain their original
+photo metadata. Treat them as private files, not buyer-facing PDFs.
+
+PROFESSIONAL PDF
+Open the draft, review its text/chart/photos, and use Review & Snapshots to create
+a frozen snapshot. Choose Prepare professional PDF on that snapshot, select US
+Letter or A4 and the desired photos, confirm your review, then check the preview
+and use Save reviewed PDF. Later draft edits do not change that frozen snapshot.
+The existing publisher uses its Graph / Colorwork template; no new garment or
+amigurumi publishing template is added by this Windows package.
+
+RESTORE / MOVE BETWEEN TABLET AND LAPTOP
+Export a complete .deepattern backup on the originating device. Manually transfer
+that file using a USB drive/cable or another method you choose. On the other device:
+choose Restore .deepattern, select the file, Preview restore, then Restore as copy.
+The restored pattern is a NEW independent copy. Existing patterns are not replaced.
+Later edits do not automatically return to the first device. Repeat a manual backup
+transfer when needed; identify the latest copy by its title/date.
+A .deepattern retains its reviewed chart reference. It does not replace the editable
+Studio chart database. Transfer the separate chart ZIP too if you need the original
+editable chart/progress. A missing linked source does not remove the retained chart.
+
+THE FOUR FORMATS STAY SEPARATE
+- Chart ZIP: Studio chart projects, their progress and related chart data.
+- Settings & Layout JSON: preferences and layout, not pattern/photo contents.
+- .deewritten: Written Pattern Companion data; retain/include its exact original PDF.
+- .deepattern: Pattern Creator draft, original images, chart reference and snapshots.
+Use the corresponding existing restore tool for each format.
+US Letter/A4 PDF exports are publications, not editable Creator backups.
+
+PRIVACY / NETWORK
+There are no accounts, cloud storage or automatic synchronization. The helper binds
+only to this laptop's loopback address, serves packaged files and accepts no project
+uploads. It does not send projects, photos, backups or PDFs to another computer.
+The app works without internet after transfer. Optional external links/online update
+checks naturally need a connection; they are not data synchronization.
+Browser/Windows background update traffic is outside this local helper's control.
+
+HELPER STATE
+The helper's small process state and bounded startup/shutdown log live in
+%LOCALAPPDATA%\DeesCrochetStudioPreview. They are not your project database.
+Do not manually delete browser profile folders to troubleshoot the helper.

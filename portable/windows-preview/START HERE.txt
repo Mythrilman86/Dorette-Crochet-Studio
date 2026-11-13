@@ -1,0 +1,60 @@
+DEE'S CROCHET STUDIO - WINDOWS
+Version 2.7.0 Release Candidate 1 (Android version code 33).
+
+UPDATING AFTER APPROVAL ONLY
+1. Wait for saved status, back up projects and workspace settings, and close the existing Studio tabs.
+2. Use the old folder's Stop Dee's Studio.cmd. Keep that folder as a fallback.
+3. Extract this new ZIP into a separate permanent folder and run its Open launcher.
+4. Use the same regular browser profile and http://127.0.0.1:17828.
+5. If Studio charts opens with an update message, wait for the update to finish
+   preparing, then choose Save and update. Do not clear browser/site data.
+6. Pattern Creator (Beta) remains available from the navigation. Existing charts and
+   drafts remain in the same browser storage; copying the folder is not a backup.
+
+FIRST SETUP
+1. Copy the ZIP to the laptop and choose Extract All.
+2. Put the extracted folder somewhere permanent, for example Documents\Dees Studio.
+   Do not run the launcher inside the ZIP. Keep all files together.
+3. Double-click Open Dee's Studio.cmd. A small window may appear briefly.
+   It starts a local helper and opens Pattern Creator (Beta) in Edge (or Chrome).
+4. After approval, use a disposable chart and a wide test photo. In Image to
+   Chart, choose Crop to Fill. Review the dimmed edges and use this crop.
+5. Drag the crop, then choose Preview stitches. Compare the framed photograph
+   with the stitch chart. Discard, then preview again. Apply only to the test
+   chart and confirm that it saves.
+
+ROLLBACK
+Keep the accepted Build 32 folder and the backups made before the upgrade.
+Stop this candidate with its Stop launcher. Open Build 32 from its original folder
+using the same address and browser profile. If Studio offers Save and update,
+wait for preparation and confirm so the earlier files can take control.
+Keep browser/site data in place. Check that your charts and drafts reopen.
+
+EVERYDAY USE
+Use the same regular browser and browser profile. Do not use InPrivate/Incognito.
+The fixed address is http://127.0.0.1:17828 (not localhost and not another port).
+Pattern Creator (Beta), Studio charts and Written Patterns are available in the header.
+The local helper does not need internet. All app files, PDF tools and fonts are included.
+
+FINISHING
+Wait until edits are saved. Close Studio tabs. Double-click Stop Dee's Studio.cmd.
+This stops only this local helper; it does not erase browser projects or backups.
+Closing the browser alone does not stop the helper. Repeated Open launches reuse it.
+Restart the helper with Open Dee's Studio.cmd whenever needed, even without internet.
+
+BACK UP YOUR WORK
+At the end of each work session, prepare a complete .deepattern backup and save it
+outside Studio. Read Storage and Backups.txt for the exact steps.
+A finished PDF is for reading/printing. It is not an editable pattern backup.
+
+REQUIREMENTS
+Windows 10 or 11 able to run a current supported Microsoft Edge or Chrome,
+Windows PowerShell 5.1 (included with normal Windows 10/11), and writable browser storage.
+No Node, Python, compiler, new executable or administrator access is needed.
+Windows 7/8/8.1, Edge Legacy, Internet Explorer, Windows RT and restricted S-mode
+or organization-managed environments are not certified by this package.
+If PowerShell/scripts are blocked by policy, do not weaken the machine's policy;
+ask the laptop owner for help. See Troubleshooting.txt.
+
+This laptop's exact age, browser, memory and physical touchscreen have not been
+checked. Touch emulation is not proof of hardware compatibility.

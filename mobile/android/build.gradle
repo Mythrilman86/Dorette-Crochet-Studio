@@ -27,3 +27,19 @@ allprojects {
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
+
+// Legacy Kotlin adapters duplicate classes merged into stdlib 1.8+.
+// Restrict alignment to instrumentation dependencies; production stays unchanged.
+subprojects {
+    configurations.configureEach { configuration ->
+        if (configuration.name.toLowerCase().contains('androidtest')) {
+            configuration.resolutionStrategy.eachDependency { details ->
+                if (details.requested.group == 'org.jetbrains.kotlin' &&
+                    details.requested.name in ['kotlin-stdlib-jdk7', 'kotlin-stdlib-jdk8']) {
+                    details.useVersion '1.8.22'
+                    details.because 'Align instrumentation-only Kotlin adapters with merged stdlib'
+                }
+            }
+        }
+    }
+}

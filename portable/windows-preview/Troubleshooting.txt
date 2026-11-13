@@ -1,0 +1,57 @@
+IF NOTHING OPENS
+- Extract the entire ZIP first; keep www and all launcher files together.
+- Use Open Dee's Studio.cmd, not an HTML file opened with file://.
+- Use normal Windows 10/11 with Windows PowerShell 5.1 and current Edge/Chrome.
+- Studio needs no browser sign-in. If a first-run browser setup asks, continue
+  without signing in; no Microsoft or Google account is required for Studio.
+- A work/school policy, antivirus or Windows S-mode may block scripts. The package
+  does not change global execution policy or bypass organization policy. Ask the
+  owner for help rather than disabling protection. A trusted transferred ZIP may
+  need its Properties > Unblock option before extraction, if Windows offers it.
+
+BROWSER COMPATIBILITY MESSAGE
+The opening page checks secure loopback context, local storage, IndexedDB,
+service workers, Web Locks, workers, image decoding, cryptography and PDF runtime.
+Update Edge/Chrome if a check fails. Do not install an obsolete browser simply to
+fit an unsupported Windows version. Windows 7/8/8.1 are outside this preview target.
+If the laptop cannot run a current supported browser, report its Windows version
+and browser version. No data-safety feature is silently disabled.
+Official Edge OS guidance: https://learn.microsoft.com/en-us/deployedge/microsoft-edge-supported-operating-systems
+
+PORT 17828 IS IN USE
+The launcher never silently changes ports (a different port would have different
+browser storage). If another program owns this port, close that program normally
+or ask the laptop owner for help. The launcher does not kill other programs.
+If this same preview is already running, it is reused. Stop it normally before
+switching to a different preview version. Do not delete browser data.
+
+SERVER STOPPED / CONNECTION REFUSED
+Use Open Dee's Studio.cmd again. Reopening the helper does not erase saved patterns.
+The service worker can continue serving already-cached app pages after a successful
+offline setup, but the normal supported launch method always starts the helper.
+Do not rely on a first launch until offline files have been verified.
+
+WORK APPEARS MISSING
+Check the Windows account, browser profile, regular mode and exact address:
+http://127.0.0.1:17828. Edge and Chrome do not share databases. Pick a saved draft and
+Open draft. Stop and investigate before creating replacement copies everywhere.
+If site data was cleared, use an external backup with the existing restore tools.
+
+SAVING ERROR / STORAGE FULL
+Keep the tab open, use the existing recovery/backup tools, and save a backup outside
+Studio. Free ordinary disk space without clearing Studio site data. Do not assume
+an unsaved edit survived a browser close. Original photo limits still apply.
+
+SLOW OLDER LAPTOP
+Try one pattern/browser tab at a time. Close other heavy programs. Let a large photo
+import or PDF finish before repeating the action. The publisher retains its existing
+size/page/time safeguards. Measured development-computer times are not a guarantee
+for this physical laptop. No extra paid service or server installation is required.
+
+FILE DOWNLOADS
+Check the browser Downloads list and chosen destination. A PDF is not a .deepattern
+backup. Keep the original downloaded filenames/extensions when transferring backups.
+
+SHUTDOWN
+Wait for saved status, close Studio tabs, then use Stop Dee's Studio.cmd. Shutdown is
+token-protected and does not clear site data. If already stopped, nothing is removed.

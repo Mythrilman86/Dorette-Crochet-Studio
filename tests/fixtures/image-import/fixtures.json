@@ -1,0 +1,85 @@
+{
+  "origin": "Synthetic color quadrants generated locally with Pillow and pillow-heif 1.8.1. No personal photographs or GPS coordinates. Metadata tags are fabricated.",
+  "files": {
+    "animated.gif": {
+      "bytes": 1200,
+      "sha256": "2c3f6e6e625df215e6eb974604c4a92ec30bc8d38177faba1f10223d96611cca"
+    },
+    "animated.png": {
+      "bytes": 979,
+      "sha256": "6d9128213400d526c097fe362fd16bd684c6890ec3b5b0b959655929493bc29d"
+    },
+    "camera-12mp.heic": {
+      "bytes": 31993,
+      "sha256": "6b68223e8059264951b890ca08095bd599e67dc5b5478e9fe2bf8e5126ba9045"
+    },
+    "camera-12mp.jpg": {
+      "bytes": 231975,
+      "sha256": "d36e1df54a479a416faa6c846f93f48bb724a8fabbfc9eb000b58ce285e1f3ad"
+    },
+    "camera-48mp.jpg": {
+      "bytes": 850361,
+      "sha256": "fabf85c6b009962a11413c8f33bf12dadd71756942d47803213cfc8f48a00e7c"
+    },
+    "fake.png": {
+      "bytes": 70,
+      "sha256": "fac5e2626cfc8d57aabc8a68f2f33d2477dd262d2cd7f905f37dc5c4cc0a9f74"
+    },
+    "oversized.png": {
+      "bytes": 612,
+      "sha256": "0514c7c6684997e9f4df400f4f5876e533a02510e83908bb4f89d4bf771af479"
+    },
+    "photo.avif": {
+      "bytes": 479,
+      "sha256": "e015235121686e92970c126443fd66d10cec89e0031f113739a87f18811483ef"
+    },
+    "photo.bmp": {
+      "bytes": 48054,
+      "sha256": "fa0fc7a1d55a68d6bef60c764d2d1a7d5271e09506fe453ac51af6823c9f27c7"
+    },
+    "photo.heic": {
+      "bytes": 1666,
+      "sha256": "13c4d1a743a06db7858aa72eab3912ccb764b9d3c6e01d91ce2c1667d750c7f7"
+    },
+    "photo.jfif": {
+      "bytes": 1593,
+      "sha256": "b53e48345cdb534b23a9bca1f92fb9449fcf584c4fc913f1eb738000c9136509"
+    },
+    "photo.jpg": {
+      "bytes": 1593,
+      "sha256": "b53e48345cdb534b23a9bca1f92fb9449fcf584c4fc913f1eb738000c9136509"
+    },
+    "photo.png": {
+      "bytes": 612,
+      "sha256": "291e62dcb9e74b6ac077ec1c190d23b8197bbcc7d166823457744ec7b260951b"
+    },
+    "photo.webp": {
+      "bytes": 466,
+      "sha256": "09a9144cd924fd6a1b7df430c060849ceacde992450370466b50fc00804852d7"
+    },
+    "rotated-gps.jpg": {
+      "bytes": 1791,
+      "sha256": "39dc9c5faaa285018a9401b4abcedf006ad8813bcc8266e13c8093b6ef41d4fd"
+    },
+    "rotated.heif": {
+      "bytes": 1939,
+      "sha256": "27f4336adeffcd8dbf2bd5ebc4c8d5e62589e8b40095cacc10badaf4ef88a0ea"
+    },
+    "transparent.avif": {
+      "bytes": 627,
+      "sha256": "7e094d1856063e6121e6e82c6ab025f0bd7e4b7abab8ebb0690206285cd5c5dd"
+    },
+    "transparent.png": {
+      "bytes": 361,
+      "sha256": "0aae86da46e3e70dbffb9553e79f7ec4c49ad242e234dad0306eff25613c83ad"
+    },
+    "transparent.webp": {
+      "bytes": 80,
+      "sha256": "663577ae530a615848fb2e3541fb8a78798f4ec09f887cc08a1240f8270954bd"
+    },
+    "truncated.jpg": {
+      "bytes": 1543,
+      "sha256": "7834b7e731af853d30d0d87f4c3b4d5c94d3541dfc40d17f7ce8ab971bf73afe"
+    }
+  }
+}

@@ -6,6 +6,15 @@
 .photo-crop-panel{border:1px solid #ded2ea;background:#fbf8ff;border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:10px}
 .photo-crop-panel[hidden],.conversion-preview[hidden]{display:none!important}
 .photo-crop-panel .section-title strong{font-size:.76rem;color:#574375}
+.photo-framing-actions{display:flex;flex-wrap:wrap;gap:8px;margin-block:8px}
+.photo-framing-actions button{min-height:44px}
+.photo-stitch-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-block:10px}
+.photo-stitch-pair[hidden]{display:none}
+.photo-stitch-pair figure{margin:0;min-width:0}
+.photo-stitch-pair figcaption{font-weight:700;margin-bottom:4px}
+.photo-stitch-pair canvas{display:block;width:100%;height:auto;border:1px solid #d4c7e3}
+#pairedStitches{image-rendering:pixelated}
+@media(max-width:650px){.photo-stitch-pair{grid-template-columns:minmax(0,1fr)}}
 .photo-crop-panel #cropPreview{display:block;width:100%;max-width:300px;height:auto;margin:0 auto;border-radius:9px;border:1px solid #d4c7e3;touch-action:none;cursor:crosshair;background:#f4eff8}
 .crop-sliders{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
 .crop-sliders input[type=range]{width:100%;accent-color:#7658ac}
@@ -182,16 +191,16 @@ body[data-studio-mode="create"] .inspector-section:not(.create-section):not(.alw
 .next-soft .pair{align-items:flex-end}
 .next-technique{display:block}.next-technique .pair{margin:8px 0}
 .section-workbar{margin:10px 0}.section-workbar select{max-width:230px}
-.gray-trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}
+.gray-trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr));gap:9px;margin:10px 0}
 .gray-card{display:flex;flex-direction:column;gap:6px;align-items:center;min-width:0;background:white;padding:8px;border-radius:9px;border:1px solid #e3d8ed}
-.gray-card strong{font-size:.67rem}.gray-card canvas{width:100%;max-height:150px;object-fit:contain;image-rendering:pixelated}
+.gray-card strong{font-size:.75rem;overflow-wrap:anywhere;text-align:center}.gray-card canvas{width:100%;max-height:180px;object-fit:contain;image-rendering:pixelated}
 .quality-nav{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0}.quality-nav button{font-size:.7rem}
 .dual-charts{grid-template-columns:minmax(0,var(--dorette-overview-share,1fr)) minmax(0,var(--dorette-working-share,1fr))}
 body.hide-settings .inspector{display:none!important}body.hide-projects .sidebar{display:none!important}
 body.hide-settings.hide-projects .layout{display:block}body.hide-settings .layout,body.hide-projects .layout{grid-template-columns: minmax(0,1fr)}
 body.unpinned-dock .crochet-dock{position:static}
 #gridResult,#colorAnalysis,#matchYarnResult{line-height:1.5;overflow-wrap:anywhere}
-@media(max-width:900px){.gray-trio{grid-template-columns:1fr 1fr}.section-workbar select{max-width:150px}}
+@media(max-width:900px){.gray-trio{grid-template-columns:repeat(auto-fit,minmax(min(100%,145px),1fr))}.section-workbar select{max-width:150px}}
 @media(max-width:650px){.gray-trio{grid-template-columns:1fr}.next-workspace-bar{align-items:flex-start}.next-workspace-bar label{flex-wrap:wrap}.section-workbar{flex-direction:column;align-items:stretch}.dual-charts{grid-template-columns:1fr}}
 @media(max-width:650px){.next-technique .pair{display:flex;flex-wrap:wrap}.next-technique .pair button{flex:1 1 150px;min-width:0;white-space:normal;font-size:.71rem}}
 @media(max-width:1500px){.gallery-item{display:grid;grid-template-columns:54px minmax(0,1fr)}.gallery-thumb{grid-column:1;grid-row:1}.gallery-choose{grid-column:1/-1;grid-row:2}.gallery-favorite{grid-column:2;grid-row:1;justify-self:end}}
@@ -449,3 +458,112 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
 }
 #crochetCenterMount{display:contents}
 .crochet-compact-actions .button{min-height:44px}
+
+.workspace-link{display:inline-flex;gap:6px;align-items:center;min-height:44px;padding:7px 11px;margin:3px;border:1px solid #c9bbde;border-radius:9px;background:#faf7ff;text-decoration:none;white-space:normal}.workspace-link.creator-link{background:#eee5fb;font-weight:650}.workspace-link:hover{border-color:#7752aa;background:#e4d7f8}.project-bin-row .gallery-thumb{flex:none;object-fit:contain}
+
+/* Build 26: adapt to the Projects panel's available width, including customized layouts. */
+.project-bin{container-name:recycle-bin;container-type:inline-size;min-width:0}
+.project-bin-row{display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:4px 8px;min-width:0}
+.project-bin-row>.gallery-thumb{grid-column:1;grid-row:1}
+.project-bin-info{grid-column:2;grid-row:1;min-width:0;overflow:hidden}
+.project-bin-info strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;word-break:normal;overflow-wrap:normal;line-height:1.35}
+.project-bin-info small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#706477;font-size:.8rem}
+.project-bin-row>.recycle-select-row{grid-column:2;grid-row:1;min-width:0;margin:0}
+.project-bin-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.project-bin-actions button{flex:1 1 96px;min-width:0;min-height:44px;padding:6px 4px;font-size:.8rem;white-space:normal;word-break:normal;overflow-wrap:normal}
+@container recycle-bin (max-width:190px){
+ .project-bin-row{grid-template-columns:34px minmax(0,1fr);gap:4px 6px}
+ .project-bin-row>.gallery-thumb{width:34px;height:34px}
+ .project-bin-info strong{display:block;white-space:nowrap;text-overflow:ellipsis}
+ .project-bin-actions{flex-direction:column}
+ .project-bin-actions button{flex:0 0 auto;width:100%}
+ .project-bin-row>.recycle-select-row{gap:4px}
+}
+@container recycle-bin (min-width:460px){
+ .project-bin-row{grid-template-columns:54px minmax(0,1fr) auto}
+ .project-bin-actions{grid-column:3;grid-row:1;flex-wrap:nowrap}
+ .project-bin-actions button{flex:0 1 auto}
+}
+.project-bin .button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:normal}
+
+/* Build 27: active Projects and selection controls follow their real panel width. */
+.sidebar{min-width:0;container-name:projects-panel;container-type:inline-size}
+#projectList{min-width:0;container-name:active-projects;container-type:inline-size}
+.project-group .gallery-item{min-width:0}
+.project-group .gallery-choose{min-height:44px;max-width:100%;overflow:hidden}
+.project-group .gallery-choose strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;max-width:100%;overflow:hidden;overflow-wrap:normal;word-break:normal;line-height:1.35}
+.project-group .gallery-choose small{max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.project-group .gallery-favorite,.project-group .project-menu summary{width:44px;min-width:44px;min-height:44px;padding:4px;justify-self:end}
+.project-group .project-menu-actions{min-width:0;max-width:100%}
+.project-group .project-menu-actions button{min-width:0;max-width:100%;min-height:44px;white-space:normal;overflow-wrap:normal}
+.sidebar>.panel-heading{min-width:0;gap:6px}
+.sidebar>.panel-heading #collapseProjects,#bulkProjectControls .button,#toggleBulkProjects{min-width:0;max-width:100%;min-height:44px;white-space:normal;overflow-wrap:normal}
+#bulkProjectControls{min-width:0;max-width:100%}
+#bulkProjectControls .pair{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+#bulkProjectControls .pair>.button{flex:1 1 130px}
+#bulkProjectControls label,#bulkProjectAction{min-width:0;max-width:100%}
+#bulkProjectAction{width:100%}
+.bulk-project-row{display:grid;grid-template-columns:24px 34px minmax(0,1fr);gap:4px 6px;min-width:0;margin:0}
+.bulk-project-row>input{grid-column:1;grid-row:1/3}
+.project-group .bulk-project-row>.gallery-thumb{grid-column:2;grid-row:1/3;width:34px;height:34px}
+.bulk-project-row>strong{grid-column:3;grid-row:1;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;overflow-wrap:normal}
+.bulk-project-row>small{grid-column:3;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@container active-projects (max-width:280px){
+ .project-group .gallery-item{grid-template-columns:34px minmax(0,1fr);gap:4px 6px}
+ .project-group .gallery-item>.gallery-thumb{width:34px;height:34px;grid-column:1;grid-row:1}
+ .project-group .gallery-choose{grid-column:2;grid-row:1}
+ .project-group .gallery-favorite{grid-column:1;grid-row:2;justify-self:start}
+ .project-group .project-menu{grid-column:2;grid-row:2;justify-self:end}
+ .project-group .project-menu[open]{grid-column:1/-1;grid-row:3;justify-self:stretch}
+ .project-group .project-menu[open]>summary{margin-left:auto}
+}
+@container active-projects (max-width:190px){
+ .project-group .gallery-choose strong{display:block;white-space:nowrap;text-overflow:ellipsis}
+ .bulk-project-row{grid-template-columns:24px minmax(0,1fr)}
+ .bulk-project-row>input{grid-column:1;grid-row:1}
+ .project-group .bulk-project-row>.gallery-thumb{grid-column:2;grid-row:1}
+ .bulk-project-row>strong{grid-column:1/-1;grid-row:2}
+ .bulk-project-row>small{grid-column:1/-1;grid-row:3}
+}
+@container projects-panel (max-width:260px){
+ .sidebar>.panel-heading{flex-wrap:wrap}
+ .sidebar>.panel-heading #collapseProjects{flex:1 1 100%;width:100%}
+}
+
+/* Dorette feedback: keep instructions outside stitch artwork and controls inside cards. */
+.chart-pane>.canvas-note{position:static;inset:auto;width:100%;max-width:100%;margin:6px 0 0;padding:8px 10px;line-height:1.45;font-size:.72rem;box-shadow:none;flex:none;border:1px solid #e2dbe7;pointer-events:auto}
+@supports(grid-template-rows:subgrid){@media(min-width:651px){body:not(.crochet-view) .dual-charts>.chart-pane:not([hidden]){grid-row:span 3}.chart-pane>.canvas-note{grid-row:3}}}
+.zoom-entry{display:inline-flex;align-items:center;gap:3px;flex:none;font-size:.8rem;font-weight:750}
+.zoom-entry #zoomValue{width:76px;min-height:44px;padding:7px 5px;text-align:center}
+.gray-card{overflow:hidden;align-items:stretch}.gray-card .button{white-space:normal;width:100%;max-width:100%;min-width:0;min-height:44px;overflow-wrap:anywhere;padding:8px;line-height:1.3}
+#grayAdjustments .gray-toggle{display:flex;flex-direction:row;align-items:center;gap:8px;font-weight:500;line-height:1.4}#grayAdjustments .gray-toggle input{width:20px;min-width:20px;height:20px}
+#compareGrayTrio,#compareGrays,#conversionPreview .button{white-space:normal;min-height:44px;max-width:100%;overflow-wrap:anywhere}#conversionPreview .pair{grid-template-columns:repeat(auto-fit,minmax(min(100%,120px),1fr))}
+
+/* Build 30: row tracking is the primary guide; stitch engine remains available. */
+body:not(.row-tracking) .row-only{display:none!important}
+.row-tracking .advanced-stitches,.row-tracking #guideNextRow,.row-tracking #dockStitch,.row-tracking #dockRun,.row-tracking #dockToggleStitch,.row-tracking .focus-row-nav{display:none!important}
+.tracking-picker{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}.tracking-picker select{min-height:44px;max-width:100%}
+.guide-buttons{flex-wrap:wrap}.guide-buttons .button{white-space:normal;min-height:44px;min-width:0;flex:1 1 145px}
+#crochetProgressControls .row-only{white-space:normal;min-height:44px;max-width:100%}
+#chartTools>summary{padding:.55rem .8rem;min-height:44px;font-weight:700;background:#f6effa;border:1px solid #e6dced;border-radius:.65rem}
+body:is([data-studio-mode="create"],[data-studio-mode="crochet"],.crochet-view) #chartTools{display:none}
+.personalized-x{position:absolute;top:.65rem;right:.65rem;min-width:44px;min-height:44px;font-size:1.2rem}
+#personalizedDialog h2{padding-right:3.4rem}
+#personalizedDialog .toggle{min-height:44px;gap:.6rem}
+.personalized-footer,.cartoon-actions,.cartoon-controls{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem}
+.personalized-footer{justify-content:flex-end;margin-top:1rem}
+.personalized-footer button,.cartoon-actions button,.cartoon-heading button,.cartoon-controls select{min-height:44px}
+#cartoonDialog{width:min(68rem,calc(100vw - 1.25rem));max-height:90dvh;box-sizing:border-box;padding:1rem;border:1px solid #d9cee1;border-radius:1rem;color:#30233b;background:#fff}
+#cartoonDialog::backdrop{background:#24182c99}
+.cartoon-heading{display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+.cartoon-controls label{display:grid;gap:.3rem;min-width:0}
+.cartoon-controls input{width:min(12rem,100%)}
+.cartoon-actions{margin:.7rem 0}
+.cartoon-previews{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}
+.cartoon-previews figure{min-width:0;margin:0}
+.cartoon-previews figcaption{font-weight:700;margin-bottom:.35rem}
+.cartoon-previews canvas{display:block;width:100%;height:auto;max-height:38rem;object-fit:contain;background:#f6f3f8;image-rendering:pixelated}
+#cartoonOriginal,#cartoonIllustration{image-rendering:auto}
+@media(max-width:700px){.cartoon-previews{grid-template-columns:1fr}.cartoon-previews canvas{max-height:30rem}}
+#personalizedDialog .personalized-footer{position:sticky;bottom:-1rem;background:#faf7fc;padding:.55rem .2rem;border-top:1px solid #e6dced}
+.cartoon-previews:has(#cartoonDirectChart:not([hidden])) figure:last-child{max-width:28rem}

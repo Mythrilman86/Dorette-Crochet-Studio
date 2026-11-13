@@ -1,7 +1,7 @@
 const {waitForBrowserPort} = require('./browser-port.cjs');
 const http = require('node:http'), fs = require('node:fs'), path = require('node:path');
 const cp = require('node:child_process'), assert = require('node:assert/strict');
-const types = {'.js':'application/javascript','.html':'text/html','.css':'text/css','.png':'image/png'};
+const types = {'.js':'application/javascript','.mjs':'text/javascript','.html':'text/html','.css':'text/css','.png':'image/png'};
 const server = http.createServer((req,res) => {
   const pathname = new URL(req.url,'http://localhost').pathname;
   const file = path.join(__dirname, '../dist', pathname === '/' ? 'index.html' : pathname);

@@ -1,0 +1,6 @@
+// Local-only preview. This origin has its own browser storage; restore an authoring backup explicitly.
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'../dist'),port=Number(process.env.STUDIO_PREVIEW_PORT||8787);
+const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.svg':'image/svg+xml','.pdf':'application/pdf','.wasm':'application/wasm'};
+if(!fs.existsSync(path.join(root,'pattern-publish.html')))throw Error('Build first: node scripts/build.mjs web');
+http.createServer((req,res)=>{let pathname;try{pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);}catch{res.writeHead(400).end();return;}const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404).end();return;}res.setHeader('Content-Type',types[path.extname(file)]||'application/octet-stream');res.setHeader('X-Content-Type-Options','nosniff');fs.createReadStream(file).pipe(res);}).listen(port,'127.0.0.1',()=>console.log('Private local preview: http://127.0.0.1:'+port+'/pattern-creator.html'));

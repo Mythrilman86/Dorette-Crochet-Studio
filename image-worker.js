@@ -1,5 +1,6 @@
 /* Dorette Crochet Studio v1.8.1 — offline conversion, grid analysis, cleanup worker.
    No network access. Cancel an operation by terminating this worker. */
+importScripts('./advanced.js?v=1.8.1');
 (()=>{'use strict';
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const rgbhex=a=>'#'+a.map(x=>Math.round(clamp(x,0,255)).toString(16).padStart(2,'0')).join('');
@@ -25,13 +26,13 @@ function quantize(values,n){
  const order=counts.map((count,i)=>({i,count})).filter(x=>x.count).sort((a,b)=>b.count-a.count),map=new Map(order.map((o,i)=>[o.i,i]));
  return {palette:order.map((x,i)=>({hex:rgbhex(centers[x.i]),name:'Yarn color '+(i+1),symbol:symbols[i]})),cells:cluster.map(i=>map.get(i))};
 }
-function convert({pixels,cols,rows,s,paletteSize,grayCount}){
+function convert({pixels,cols,rows,s,paletteSize,grayCount,grayOptions}){
  const multiple=6,values=[],printCells=[],coverage=multiple*multiple,minCoverage=clamp(.38-s.detail*.0028,.09,.38),minHue=clamp(.31-s.detail*.0018,.11,.31),width=cols*multiple;
  for(let row=0;row<rows;row++){
   for(let col=0;col<cols;col++){
    let rr=0,gg=0,bb=0;const frequency=[0,0,0,0];
    for(let dy=0;dy<multiple;dy++)for(let dx=0;dx<multiple;dx++){
-    const i=((row*multiple+dy)*width+(col*multiple+dx))*4,v=adjust(pixels[i],pixels[i+1],pixels[i+2],s);
+    const i=((row*multiple+dy)*width+(col*multiple+dx))*4,v=s.mode==='grayscale'?[pixels[i],pixels[i+1],pixels[i+2]]:adjust(pixels[i],pixels[i+1],pixels[i+2],s);
     rr+=v[0];gg+=v[1];bb+=v[2];if(s.mode==='print')frequency[printCat(v,s)]++;
    }
    const avg=[rr/coverage,gg/coverage,bb/coverage];values.push(avg);
@@ -55,8 +56,7 @@ function convert({pixels,cols,rows,s,paletteSize,grayCount}){
   return {palette:[{hex:'#221d25',name:'Dark background',symbol:'A'},{hex:'#f5f1e9',name:'Light lettering / stripes',symbol:'B'},{hex:'#da4852',name:'Flag red',symbol:'C'},{hex:'#303f86',name:'Flag blue',symbol:'D'}],cells};
  }
  if(s.mode==='grayscale'){
-  const n=clamp(grayCount||3,2,5),palette=Array.from({length:n},(_,i)=>{const v=Math.round(25+230*i/(n-1)),hex='#'+v.toString(16).padStart(2,'0').repeat(3);return {hex,name:i===0?'Black':i===n-1?'White':'Gray '+i,symbol:symbols[i]};});
-  return {palette,cells:values.map(rgb=>clamp(Math.round((weighted(rgb)-25)*(n-1)/230),0,n-1))};
+  return self.DoretteAdvanced.grayscale(values,grayCount,{...grayOptions,width:cols});
  }
  return quantize(values,clamp(paletteSize||6,2,12));
 }

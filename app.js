@@ -25,6 +25,7 @@ const refs = {};
 let db = null, memoryOnly = false, projects = new Map(), activeId = null, active = null;
 let selected = null, undoStack = [], redoStack = [], areaSelection = null, areaStart = null, stitchClipboard = null, patternRenderTimer = null, saveTimer = null, writeChain = Promise.resolve();
 let toastTimer = null, referenceImg = null, referenceSrc = '', canvasWidth = 800, canvasHeight = 480;
+let photoPreviewGeneration=0,cropProposal=null,cropUndo=null;
 let pendingConversion = null, cropPreviewRect = null, cropGesture = null, comparisonResults = null, textPreview = null;
 const view = {scale:1, x:0, y:0}, pointers = new Map();
 let gesture = {dragged:false,wasMulti:false,lastDist:0,totalTravel:0};
@@ -63,7 +64,12 @@ function currentCrop(p=active){
 }
 function discardPreview(redraw=true){
   const resized=!!pendingConversion && active && (pendingConversion.cols!==active.cols || pendingConversion.rows!==active.rows);
+  photoPreviewGeneration++;
   pendingConversion=null;comparisonResults=null;
+  if($('photoStitchPair')){
+    $('photoStitchPair').hidden=true;
+    $('framedPhoto').width=$('pairedStitches').width=1;
+  }
   const box=$('conversionPreview');if(box)box.hidden=true;
   if(active){updateSelection();updateLegend();updateChartSubtitle();}
   if(redraw){if(resized)fitChart();else requestDraw();}
@@ -380,21 +386,43 @@ function updateRecycleSelection(){
 function selectedRecycledProjects(){
   return [...recycledProjects.values()].filter(project=>recycleSelection.has(project.id));
 }
+let thumbnailObserver;const thumbnailDraws=new WeakMap();
+function projectThumbnail(p){const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';thumb.setAttribute('aria-label','Chart thumbnail');const draw=()=>{
+    const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
+    const s=Math.min(54/p.cols,54/p.rows),ox=(54-p.cols*s)/2,oy=(54-p.rows*s)/2;
+    const display=window.DoretteAdvanced.compose(p),usedW=p.cols*s,usedH=p.rows*s;
+    // Sample at thumbnail pixel resolution, not once per source stitch. Large charts remain responsive.
+    for(let y=Math.floor(oy);y<Math.ceil(oy+usedH);y++)for(let x=Math.floor(ox);x<Math.ceil(ox+usedW);x++){
+      const col=clamp(Math.floor((x-ox)/s),0,p.cols-1),row=clamp(Math.floor((y-oy)/s),0,p.rows-1);
+      const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
+    }
+
+};if('IntersectionObserver' in window){thumbnailObserver??=new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){thumbnailDraws.get(e.target)?.();thumbnailObserver.unobserve(e.target);}});thumbnailDraws.set(thumb,draw);thumbnailObserver.observe(thumb);}else draw();return thumb;}
+
 function renderRecycleBin(){
   updateRecycleSelection();
-  const list=$('projectBinList');list.replaceChildren();
+  const list=$('projectBinList');for(const old of list.querySelectorAll('canvas'))thumbnailObserver?.unobserve(old);list.replaceChildren();
   $('projectBinCount').textContent=recycledProjects.size;
   $('emptyProjectBin').disabled=!recycledProjects.size;
   for(const project of recycledProjects.values()){
     const row=document.createElement('div');row.className='project-bin-row';
+    row.append(projectThumbnail(project));
+    const info=document.createElement('div');info.className='project-bin-info';
     const name=document.createElement('strong');name.textContent=project.name;
+    name.title=project.name;
+    const meta=document.createElement('small');meta.textContent=project.cols+' × '+project.rows+' · '+project.category;
+    info.append(name,meta);
     if(selectingRecycled){
       const label=document.createElement('label'),box=document.createElement('input');
       label.className='recycle-select-row';box.type='checkbox';box.checked=recycleSelection.has(project.id);
       box.onchange=()=>{if(box.checked)recycleSelection.add(project.id);else recycleSelection.delete(project.id);updateRecycleSelection();};
-      label.append(box,name);row.append(label);
-    }else row.append(name,projectButton('Restore Project',()=>restoreRecycled(project)),
-      projectButton('Delete Permanently',()=>purgeRecycled([project])));
+      label.append(box,info);row.append(label);
+    }else {
+      const actions=document.createElement('div');actions.className='project-bin-actions';
+      actions.append(projectButton('Restore Project',()=>restoreRecycled(project)),
+        projectButton('Delete Permanently',()=>purgeRecycled([project])));
+      row.append(info,actions);
+    }
     list.append(row);
   }
 }
@@ -534,6 +562,7 @@ async function applyBulkProjectAction(){
   });
 }
 function refreshProjectList(){
+  thumbnailObserver?.disconnect();
   const list=$('projectList');list.replaceChildren();
   $('projectCount').textContent=projects.size;
   refreshCategorySelectors();
@@ -548,17 +577,10 @@ function refreshProjectList(){
   updateBulkProjectControls();
   visible.forEach(p=>{
     const item=document.createElement('div');item.className='gallery-item'+(p.id===activeId?' active':'');
-    const thumb=document.createElement('canvas');thumb.width=54;thumb.height=54;thumb.className='gallery-thumb';
-    const g=thumb.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,54,54);
-    const s=Math.min(54/p.cols,54/p.rows),ox=(54-p.cols*s)/2,oy=(54-p.rows*s)/2;
-    const display=window.DoretteAdvanced.compose(p),usedW=p.cols*s,usedH=p.rows*s;
-    // Sample at thumbnail pixel resolution, not once per source stitch. Large charts remain responsive.
-    for(let y=Math.floor(oy);y<Math.ceil(oy+usedH);y++)for(let x=Math.floor(ox);x<Math.ceil(ox+usedW);x++){
-      const col=clamp(Math.floor((x-ox)/s),0,p.cols-1),row=clamp(Math.floor((y-oy)/s),0,p.rows-1);
-      const color=p.palette[display[row*p.cols+col]];g.fillStyle=color?.hex||'#fff';g.fillRect(x,y,1,1);
-    }
+    const thumb=projectThumbnail(p);
     const choose=document.createElement('button');choose.type='button';choose.className='gallery-choose';
     const title=document.createElement('strong');title.textContent=(p.pinned?'📌 ':'')+p.name;
+    title.title=p.name;choose.title=p.name;
     const meta=document.createElement('small');meta.textContent=`${p.cols} × ${p.rows} · ${p.category||'Other'}`;
     choose.append(title,meta);choose.addEventListener('click',()=>selectProject(p.id));
     const fav=document.createElement('button');fav.type='button';fav.className='gallery-favorite';fav.textContent=p.favorite?'★':'☆';fav.title='Toggle favorite';fav.setAttribute('aria-label','Favorite '+p.name);
@@ -575,7 +597,7 @@ function refreshProjectList(){
 
 function selectProject(id) {
   if(!projects.has(id))return;
-  if(id!==active?.id)invalidatePreparedBackup();
+  if(id!==active?.id){invalidatePreparedBackup();cropProposal=cropUndo=null;}
   if(runningImageJob)cancelImageJob();
   invalidateChartCache();
   v16ShapeProposal=null;
@@ -867,7 +889,7 @@ function markStitch(){
 }
 function markRow(){
   if(pendingConversion||!selected||!active)return;
-  progressSnapshot();active.rowDone[selected.row-1]=active.rowDone[selected.row-1]?0:1;
+  if(studioReadOnly)return;progressSnapshot();setRowComplete(selected.row,!rowComplete(selected.row));
   scheduleSave();updateSelection();updateProgress();requestDraw();
 }
 function symmetricIndexes(col,row){
@@ -1062,8 +1084,9 @@ function syncImage(){
   const src=active?.referenceImage||'';
   if(src===referenceSrc)return;
   referenceSrc=src;referenceImg=null;
-  if(!src){drawCropPreview();requestDraw();return;}
-  const img=new Image();img.onload=()=>{if(referenceSrc===src){referenceImg=img;drawCropPreview();updateCropStats();requestDraw();}};
+  cropProposal=cropUndo=null;
+  if(!src){updateCropReview();requestDraw();return;}
+  const img=new Image();img.onload=()=>{if(referenceSrc===src){referenceImg=img;updateCropReview();requestDraw();}};
   img.onerror=()=>toast('Unable to load the reference image');img.src=src;
 }
 function imageContainRect(img, bx,by,bw,bh){
@@ -1073,8 +1096,8 @@ function imageContainRect(img, bx,by,bw,bh){
 function renderCroppedImage(target,img,x,y,w,h){
   const crop=currentCrop(),sx=crop.left*img.width,sy=crop.top*img.height;
   const sw=(crop.right-crop.left)*img.width,sh=(crop.bottom-crop.top)*img.height;
-  let dest={x,y,w,h};
-  if(active?.imagePlacement!=='stretch')dest=imageContainRect({width:sw,height:sh},x,y,w,h);
+  const placement=window.DoretteAdvanced.photoPlacement(sw,sh,w,h,active?.imagePlacement==='stretch');
+  const dest={...placement,x:x+placement.x,y:y+placement.y};
   target.save();
   if(active?.referenceMirrored){
     target.translate(2*dest.x+dest.w,0);
@@ -1087,7 +1110,7 @@ function renderCroppedImage(target,img,x,y,w,h){
 function updateCropControls(){
   const panel=$('photoCropPanel');if(!panel||!active)return;
   panel.hidden=!active.referenceImage;
-  const c=currentCrop();
+  const c=visiblePhotoCrop();
   for(const [id,value] of Object.entries({cropLeft:c.left,cropRight:1-c.right,cropTop:c.top,cropBottom:1-c.bottom})){
     const percent=String(Math.round(value*100));
     $(id).value=percent;
@@ -1095,16 +1118,30 @@ function updateCropControls(){
     if(document.activeElement!==$(id+'Number'))$(id+'Number').value=percent;
   }
   $('imagePlacement').value=active.imagePlacement==='stretch'?'stretch':'contain';
-  updateCropStats();drawCropPreview();
+  updateCropReview();
 }
+function photoTarget(){
+  return $('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
+}
+function visiblePhotoCrop(){return cropProposal?.crop||currentCrop();}
 function updateCropStats(){
   if(!active||!referenceImg)return;
-  const c=currentCrop(),w=(c.right-c.left)*referenceImg.width,h=(c.bottom-c.top)*referenceImg.height;
-  const chartRatio=active.cols/active.rows,cropRatio=w/h;
-  const delta=Math.round(Math.abs(1-chartRatio/cropRatio)*100);
-  $('cropStats').textContent=active.imagePlacement==='stretch'
-    ? `The cropped artwork will fill all ${active.cols} × ${active.rows} cells. Its shape may be stretched (${delta}% approximate aspect-ratio difference).`
-    : `Artwork proportions preserved. The chart may have blank margins (${delta}% approximate aspect-ratio difference).`;
+  const [cols,rows]=photoTarget(),c=visiblePhotoCrop();
+  const stretch=!cropProposal&&active.imagePlacement==='stretch';
+  const w=(c.right-c.left)*referenceImg.width,h=(c.bottom-c.top)*referenceImg.height;
+  const area=window.DoretteAdvanced.photoPlacement(w,h,cols,rows,stretch);
+  const blankRows=Math.round(rows-area.h),blankCols=Math.round(cols-area.w);
+  $('cropStats').textContent=`${cols} × ${rows} preview. Estimated placement margins: ${blankRows} rows, ${blankCols} columns in total.`+
+    (stretch?' Fill all cells may stretch the image.':blankRows||blankCols?' Crop to Fill can remove these margins without stretching.':' Photo proportions preserved.');
+}
+function updateCropReview(){
+  $('cropFillReview').hidden=!cropProposal;
+  $('undoPhotoCrop').disabled=!cropUndo;
+  updateCropStats();drawCropPreview();
+}
+function closeCropReview(){
+  if(!cropProposal)return;
+  cropProposal=null;updateCropControls();
 }
 function drawCropPreview(){
   const cv=$('cropPreview');if(!cv)return;
@@ -1113,7 +1150,7 @@ function drawCropPreview(){
   if(!referenceImg||!active?.referenceImage)return;
   const ir=imageContainRect(referenceImg,10,10,W-20,H-20);cropPreviewRect=ir;
   g.drawImage(referenceImg,ir.x,ir.y,ir.w,ir.h);
-  const c=currentCrop(),x=ir.x+c.left*ir.w,y=ir.y+c.top*ir.h,w=(c.right-c.left)*ir.w,h=(c.bottom-c.top)*ir.h;
+  const c=visiblePhotoCrop(),x=ir.x+c.left*ir.w,y=ir.y+c.top*ir.h,w=(c.right-c.left)*ir.w,h=(c.bottom-c.top)*ir.h;
   g.fillStyle='rgba(21,13,33,.57)';
   g.fillRect(ir.x,ir.y,ir.w,y-ir.y);g.fillRect(ir.x,y,x-ir.x,h);
   g.fillRect(x+w,y,(ir.x+ir.w)-(x+w),h);g.fillRect(ir.x,y+h,ir.w,(ir.y+ir.h)-(y+h));
@@ -1124,12 +1161,19 @@ function drawCropPreview(){
 }
 function setCropEdge(edge,value){
   if(!active)return;
-  const c=currentCrop();const min=.08;
+  const c={...visiblePhotoCrop()},min=.08;
   if(edge==='left')c.left=clamp(value,0,c.right-min);
   if(edge==='right')c.right=clamp(value,c.left+min,1);
   if(edge==='top')c.top=clamp(value,0,c.bottom-min);
   if(edge==='bottom')c.bottom=clamp(value,c.top+min,1);
-  active.photoCrop=c;discardPreview(false);scheduleSave();updateCropControls();requestDraw();
+  updatePhotoCrop(c);
+}
+function updatePhotoCrop(crop){
+  if(cropProposal)cropProposal.crop=crop;
+  else{
+    active.photoCrop=crop;discardPreview(false);scheduleSave();requestDraw();
+  }
+  updateCropControls();
 }
 function requestDraw(){if(!drawingPending){drawingPending=true;requestAnimationFrame(()=>{drawingPending=false;draw();});}}
 function resizeCanvas(){
@@ -1154,12 +1198,13 @@ function centerView(){
   updateZoomText();requestDraw();
 }
 function setZoom(scale,anchorX=canvasWidth/2,anchorY=canvasHeight/2){
+  if(!Number.isFinite(scale))return;
   scale=clamp(scale,.12,5);
   const worldX=(anchorX-view.x)/view.scale,worldY=(anchorY-view.y)/view.scale;
   view.scale=scale;view.x=anchorX-worldX*scale;view.y=anchorY-worldY*scale;
   updateZoomText();requestDraw();
 }
-function updateZoomText(){$('zoomValue').textContent=Math.round(view.scale*100)+'%';}
+function updateZoomText(){$('zoomValue').value=String(Math.round(view.scale*100));}
 function screenToStitch(sx,sy){
   if(!active)return null;
   if(pendingConversion)return null;
@@ -1503,6 +1548,7 @@ function drawScene(ctx,canvasWidth,canvasHeight,view){
     const {clip,col,row}=motifPreview;
     ctx.save();ctx.globalAlpha=.55;
     for(let y=0;y<clip.height&&row-y>=1;y++)for(let x=0;x<clip.width&&col+x<=cols;x++){
+      if(clip.transparentZero&&clip.colors[y*clip.width+x]===0)continue;
       ctx.fillStyle=clip.palette[clip.colors[y*clip.width+x]];
       ctx.fillRect(M+(col+x-1)*CELL+1,M+(rows-row+y)*CELL+1,CELL-2,CELL-2);
     }
@@ -1762,7 +1808,8 @@ function endPointer(ev){
 }
 canvas.addEventListener('pointerup',endPointer);
 canvas.addEventListener('pointercancel',ev=>{if(layerGesture&&layerGesture.id===ev.pointerId){layerGesture=null;layerDragPreview=null;requestDraw();return;}paintStroke=null;areaStart=null;pointers.delete(ev.pointerId);});
-canvas.addEventListener('wheel',ev=>{ev.preventDefault();const rect=canvas.getBoundingClientRect();setZoom(view.scale*(ev.deltaY<0?1.13:.885),ev.clientX-rect.left,ev.clientY-rect.top);},{passive:false});
+const wheelZoomState={};
+canvas.addEventListener('wheel',ev=>{ev.preventDefault();const step=window.DoretteAdvanced.wheelZoomStep(wheelZoomState,ev,performance.now());if(!step)return;const rect=canvas.getBoundingClientRect();setZoom((Math.round(view.scale*100)+step)/100,ev.clientX-rect.left,ev.clientY-rect.top);},{passive:false});
 canvas.addEventListener('keydown',ev=>{
   if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();ev.stopPropagation();ev.shiftKey?redo():undo();return;}
   if(!active)return;
@@ -1773,23 +1820,16 @@ canvas.addEventListener('keydown',ev=>{
 window.addEventListener('keydown',ev=>{if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'&&!['INPUT','TEXTAREA'].includes(document.activeElement.tagName)){ev.preventDefault();ev.shiftKey?redo():undo();}});
 
 async function normalizeImage(file){
-  if(!file.type.startsWith('image/'))throw new Error('Choose an image file.');
-  if(file.size>15*1024*1024)throw new Error('Image is too large (15 MB maximum).');
-  const url=URL.createObjectURL(file);
-  try{
-    const img=new Image();img.src=url;await img.decode();
-    const scale=Math.min(1,1800/Math.max(img.naturalWidth,img.naturalHeight));
-    const out=document.createElement('canvas');out.width=Math.max(1,Math.round(img.naturalWidth*scale));out.height=Math.max(1,Math.round(img.naturalHeight*scale));
-    const oc=out.getContext('2d');oc.fillStyle='#ffffff';oc.fillRect(0,0,out.width,out.height);oc.drawImage(img,0,0,out.width,out.height);
-    // PNG keeps crisp chart lines; photographic input is resized and compressed for manageable backups.
-    const usePng=file.type==='image/png'&&file.size<=2*1024*1024;
-    return out.toDataURL(usePng?'image/png':'image/jpeg',.88);
-  } finally {URL.revokeObjectURL(url);}
+ const {normalizeImageFile}=await import('./assets/image-import.mjs');const result=await normalizeImageFile(file,'chart');
+ return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('The prepared image could not be read.'));reader.readAsDataURL(result.file);});
 }
+
 async function importImage(file){
   if(!file||!active)return;
   const id=active.id;
   try{
+    if(runningImageJob)cancelImageJob();
+    discardPreview();
     status('Processing image…');const data=await normalizeImage(file);
     if(!projects.has(id)||active.id!==id){toast('Project changed; image import canceled.');return;}
     // Attaching or replacing a reference image is NON-DESTRUCTIVE.
@@ -1803,10 +1843,11 @@ async function importImage(file){
     toast(keptColors
       ? 'Source photo attached. Your existing stitch colors and progress were kept. Crop, then preview the new version.'
       : 'Image loaded. Crop the artwork before previewing stitches.');
-  }catch(e){globalThis.studioDiagnostics?.record('IMPORT_FAILED');toast('Image import failed: '+e.message);status('Image import failed',true);}
+  }catch(e){globalThis.studioDiagnostics?.record('IMPORT_FAILED');toast('Image import failed: '+e.message.replace(/^Photo import: /,''));status('Image import failed',true);}
 }
 function hexRGB(rgb){return '#'+rgb.map(v=>Math.round(clamp(v,0,255)).toString(16).padStart(2,'0')).join('');}
 function distSq(a,b){return (a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2;}
+function grayscaleOptions(cols){const s=conversionSettings();return {width:cols,brightness:s.brightness,contrast:s.contrast,autoBalance:$('grayAutoBalance').checked,shadows:Number($('grayShadows').value),midtones:Number($('grayMidtones').value),highlights:Number($('grayHighlights').value),smoothing:Number($('graySmoothing').value),edge:Number($('grayEdge').value),dither:$('grayDither').checked};}
 function updateConversionControls(){
   if(!active)return;
   const s=conversionSettings();
@@ -1823,7 +1864,7 @@ function updateConversionControls(){
   $('paletteHelp').textContent=s.mode==='print'
     ? 'Print cleanup uses 4 yarn colors: dark, off-white, red and blue. Choose Natural image palette to adjust the number.'
     : s.mode==='grayscale'
-      ? `Grayscale mode reduces the image to ${$('grayCount').value} shades between black and white.`
+      ? `Grayscale mode uses up to ${$('grayCount').value} shades between black and white.`
       : 'Natural palette mode uses your selected number of colors.';
 }
 function adjustRGB(r,g,b,s){
@@ -1869,7 +1910,7 @@ function rasterizeToCells(img,cols,rows,s){
     let rr=0,gg=0,bb=0;const frequency=[0,0,0,0];
     for(let dy=0;dy<multiple;dy++)for(let dx=0;dx<multiple;dx++){
       const i=((r*multiple+dy)*sampling.width+(c*multiple+dx))*4;
-      const v=adjustRGB(pixels[i],pixels[i+1],pixels[i+2],s);
+      const v=s.mode==='grayscale'?[pixels[i],pixels[i+1],pixels[i+2]]:adjustRGB(pixels[i],pixels[i+1],pixels[i+2],s);
       rr+=v[0];gg+=v[1];bb+=v[2];
       if(s.mode==='print')frequency[printCategory(v,s)]++;
     }
@@ -1920,7 +1961,7 @@ function buildConversion(cols,rows){
   const data=s.mode==='print'
     ?{palette:PRINT_PALETTE.map(c=>({...c})),cells:cleanPrintCells(raster.printCells,cols,rows,s)}
     :s.mode==='grayscale'
-      ?window.DoretteAdvanced.grayscale(raster.values,Number($('grayCount').value)||3)
+      ?window.DoretteAdvanced.grayscale(raster.values,Number($('grayCount').value)||6,grayscaleOptions(cols))
       :autoQuantize(raster.values,Number($('paletteSize').value));
   return {...data,cols,rows,projectId:active.id};
 }
@@ -1933,10 +1974,20 @@ function renderComparison(canvasEl,result){
     g.fillRect(col*scale,row*scale,scale,scale);
   }
 }
+function updateConversionPreviewHelp(){
+  if(!pendingConversion)return;
+  const resized=pendingConversion.cols!==active.cols||pendingConversion.rows!==active.rows;
+  $('conversionPreviewHelp').textContent='Preview only. '+
+    (safeEditsEnabled?'Apply creates a separate project copy.':resized
+      ?'Confirming Apply replaces the current chart and changes its dimensions.'
+      :'Confirming Apply replaces the current chart artwork and yarn palette.');
+}
 function previewResult(result){
   pendingConversion=result;
+  $('photoStitchPair').hidden=true;
   $('previewSummary').textContent=`Preview: ${result.cols} × ${result.rows} stitches · ${result.palette.length} colors`;
   $('applyConversion').textContent=safeEditsEnabled?'Apply to a separate copy':'Apply to current project';
+  updateConversionPreviewHelp();
   $('conversionPreview').hidden=false;
   updateLegend();updateSelection();updateChartSubtitle();fitChart();
   status('Preview only — no chart changes saved');
@@ -1959,7 +2010,7 @@ async function runImageJob(kind,data,fallback,label){
  const box=$('backgroundJob'),progress=$('backgroundJobProgress');
  box.hidden=false;progress.value=0;$('backgroundJobLabel').textContent=label;
  const initialId=active?.id,revision=renderRevision;
- const settings=()=>JSON.stringify([$('paletteSize').value,$('grayCount').value,$('previewDimensions').value,$('cleanupThreshold').value,$('protectArea').checked,areaSelection]);
+ const settings=()=>JSON.stringify([$('paletteSize').value,$('grayCount').value,$('previewDimensions').value,$('cleanupThreshold').value,$('protectArea').checked,areaSelection,grayscaleOptions(active?.cols||1)]);
  const initialSettings=settings();
  const outdated=()=>active?.id!==initialId||renderRevision!==revision||settings()!==initialSettings;
  const session={cancelled:false,worker:null,resolve:null};
@@ -1997,20 +2048,40 @@ async function runImageJob(kind,data,fallback,label){
  try{const answer=fallback();progress.value=100;return finish(answer);}
  catch(e){finish(null);throw e;}
 }
-async function buildConversionAsync(cols,rows){
+async function buildConversionAsync(cols,rows,pixels){
  if(!active||!referenceImg||!validDimensions(cols,rows))throw Error('Valid image and dimensions required.');
  const s=conversionSettings();
- const data={pixels:sampledPhotoPixels(cols,rows),cols,rows,s,paletteSize:Number($('paletteSize').value),grayCount:Number($('grayCount').value)};
+ const data={pixels:pixels||sampledPhotoPixels(cols,rows),cols,rows,s,paletteSize:Number($('paletteSize').value),grayCount:Number($('grayCount').value),grayOptions:grayscaleOptions(cols)};
  const result=await runImageJob('convert',data,()=>buildConversion(cols,rows),'Converting image to stitches…');
  return result?{...result,cols,rows,projectId:active.id}:null;
+}
+function directPhotoContext(){
+  return {photo:active.referenceImage,image:referenceImg,generation:photoPreviewGeneration,
+    key:JSON.stringify([active.id,active.cols,active.rows,photoTarget(),currentCrop(),
+      active.imagePlacement,!!active.referenceMirrored,conversionSettings(),
+      $('paletteSize').value,$('grayCount').value,grayscaleOptions(active.cols)])};
+}
+function matchesDirectPhoto(context){
+  if(!active)return false;
+  const now=directPhotoContext();
+  return context.photo===now.photo&&context.image===now.image&&context.generation===now.generation&&context.key===now.key;
 }
 async function convertImage(){
   if(!active?.referenceImage){requestSourcePhoto('preview a new stitch chart');return;}
   if(!referenceImg){toast('Source photo is loading. Try previewing again in a moment.');return;}
   try{
-    const [cols,rows]=$('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
-    const result=await buildConversionAsync(cols,rows);
-    if(result)previewResult(result);
+    closeCropReview();
+    discardPreview(false);requestDraw();
+    const [cols,rows]=photoTarget(),context=directPhotoContext();
+    const pixels=sampledPhotoPixels(cols,rows);
+    const result=await buildConversionAsync(cols,rows,pixels);
+    if(!result||!matchesDirectPhoto(context))return;
+    previewResult({...result,directPhotoContext:context});
+    const framed=$('framedPhoto');
+    framed.width=cols*6;framed.height=rows*6;
+    framed.getContext('2d').putImageData(new ImageData(pixels,framed.width,framed.height),0,0);
+    renderComparison($('pairedStitches'),result);
+    $('photoStitchPair').hidden=false;
   }catch(e){toast('Conversion failed: '+e.message);refreshSaveState();}
 }
 
@@ -2021,12 +2092,20 @@ async function compareSizes(){
     const small=await buildConversionAsync(79,117);if(!small)return;
     const large=await buildConversionAsync(120,165);if(!large)return;
     comparisonResults={small,large};
+    labelPhotoComparison(false);
     renderComparison($('compareSmallCanvas'),comparisonResults.small);
     renderComparison($('compareLargeCanvas'),comparisonResults.large);
     $('compareSmallLabel').textContent=`79 × 117 • 9,243 stitches • ${small.palette.length} colors`;
     $('compareLargeLabel').textContent=`120 × 165 • 19,800 stitches • ${large.palette.length} colors`;
     $('compareDialog').showModal();refreshSaveState();
   }catch(e){toast('Comparison failed: '+e.message);refreshSaveState();}
+}
+function labelPhotoComparison(gray){
+ const dialog=$('compareDialog');dialog.setAttribute('aria-label',gray?'Compare grayscale shades':'Compare crochet grid sizes');
+ dialog.querySelector('h2').textContent=gray?'Which grayscale keeps the detail?':'Which grid preserves the detail?';
+ dialog.querySelector('.compare-footnote').textContent=gray?'Both previews use the same chart size. More shades need more yarn colors. Previewing does not change saved stitches.':'The larger chart requires 10,557 more stitches. Review the fine details before applying.';
+ const titles=dialog.querySelectorAll('.compare-choice>strong');titles[0].textContent=gray?'2 grayscale shades':'Smaller chart';titles[1].textContent=gray?'4 grayscale shades':'More detail';
+ $('compareUseSmall').textContent=gray?'Preview 2 shades on chart':'Preview 79 × 117 on chart';$('compareUseLarge').textContent=gray?'Preview 4 shades on chart':'Preview 120 × 165 on chart';
 }
 
 // Portable ZIP implementation (STORE / method 0, with CRC-32). No CDN or network dependencies.
@@ -2153,7 +2232,7 @@ function sanitizeWorkspacePreferences(input){
   const strings=list=>Array.isArray(list)?[...new Set(list.filter(v=>typeof v==='string'&&v.length<=100))].slice(0,100):[];
   if(input.sections&&typeof input.sections==='object'&&!Array.isArray(input.sections)){
     const {order,collapsed,favorites}=input.sections;
-    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites),sort:['layout','az','favorites'].includes(input.sections.sort)?input.sections.sort:'layout',personalized:strings(input.sections.personalized),hiddenTools:strings(input.sections.hiddenTools),personalizedConfigured:input.sections.personalizedConfigured===true};
+    if([order,collapsed,favorites].every(Array.isArray))result.sections={order:strings(order),collapsed:strings(collapsed),favorites:strings(favorites),sort:['layout','az','favorites'].includes(input.sections.sort)?input.sections.sort:'layout',personalized:strings(input.sections.personalized),hiddenTools:strings(input.sections.hiddenTools),personalizedConfigured:input.sections.personalizedConfigured===true,...(Array.isArray(input.sections.hiddenSections)?{hiddenSections:strings(input.sections.hiddenSections)}:{}),...(Array.isArray(input.sections.personalizedKnown)?{personalizedKnown:strings(input.sections.personalizedKnown)}:{})};
   }
   if(input.tools&&typeof input.tools==='object'){
     const {favorites,recent}=input.tools;
@@ -2193,7 +2272,7 @@ const settingsBackupLimit=256*1024;
 const settingsCategories={
   sections:'Section order, expansion and favorites',tools:'Favorite and recent tools',
   panels:'Panel visibility',display:'Appearance and accessibility',chart:'Single or Dual Chart',
-  safeEdits:'Safe-copy editing default',phoneControls:'Phone Crochet View toolbar',
+  safeEdits:'Safe-copy editing default',phoneControls:'Crochet View controls (all layouts)',
   lettering:'Saved lettering styles',references:'Favorite reference shortcuts'
 };
 const standaloneKeys={...workspacePreferenceKeys,safeEdits:'dorette-safe-edits-opt-in',
@@ -2237,7 +2316,7 @@ function readStandaloneSettings(storage){
     if(raw===null)continue;
     try{data[key]=key==='chart'?raw:JSON.parse(raw);}catch{}
   }
-  return normalizeSettingsCategories({chart:'dual',safeEdits:false,phoneControls:false,...data}).values;
+  return normalizeSettingsCategories({chart:'dual',safeEdits:false,phoneControls:true,...data}).values;
 }
 async function settingsDigest(value){
   if(!globalThis.crypto?.subtle?.digest)throw Error('SHA-256 is unavailable in this environment. Open Studio in the installed app or a secure browser page.');
@@ -2465,7 +2544,7 @@ function renderRowSequence(){
     ? `At stitch ${clamp(step,0,active.cols-1)+1}, work ${currentRun.count-(clamp(step,0,active.cols-1)-currentRun.firstStep)} more stitch${currentRun.count-(clamp(step,0,active.cols-1)-currentRun.firstStep)===1?'':'es'} in ${active.palette[currentRun.color].symbol} (${active.palette[currentRun.color].name})${next?`, then change to ${next.count} × ${active.palette[next.color].symbol} (${active.palette[next.color].name}).`:'. No more color changes in this row.'}`
     : 'Select a stitch in this row or use Guided Crochet Mode to see the next color change.';
   $('rowPrev').disabled=row<=1;$('rowNext').disabled=row>=active.rows;
-  $('rowMarkDone').textContent=active.rowDone[row-1]?'↶ Unmark this row':'✓ Mark this row complete';
+  $('rowMarkDone').textContent=rowComplete(row)?'↶ Unmark this row':'✓ Mark this row complete';
 }
 function setInstructionRow(row){
   if(!active)return;
@@ -2572,6 +2651,7 @@ function renderFocusRowColors(){
 function renderGuide(){
   if(!active||($('guideDialog').hidden&&!document.body.classList.contains('crochet-view')))return;
   Pattern.ensure(active);
+  updateTrackingMode();
   renderFocusRowColors();
   const {guide:g}=active,row=g.row,pos=g.position;
   const dir=Pattern.direction(active,row),runs=Pattern.runs(compositeProject(active),row),col=Pattern.colAt(active,row,pos),idx=Pattern.physicalIndex(active,col,row),run=Pattern.runForPosition(compositeProject(active),row,pos);
@@ -2600,6 +2680,11 @@ function renderGuide(){
   phoneControl.setAttribute('aria-label',(phoneControl.getAttribute('aria-expanded')==='true'?'Collapse':'Expand')+' crochet controls · '+$('phoneCrochetSummary').textContent);
   $('guideRun').textContent=g.finished?'Color run complete':`Complete color run (${run.lastStep-pos+1})`;
   $('guidePrevRow').disabled=row===1;$('guideNextRow').disabled=row===active.rows;
+  $('dockPrevRow').disabled=row===1;
+  for(const id of ['guideCompleteRow','dockCompleteRow']){$(id).disabled=!!g.finished&&rowComplete(row);$(id).textContent=g.finished&&rowComplete(row)?'Chart complete':'Complete & next row';}
+  for(const id of ['guideUnmarkRow','dockUnmarkRow'])$(id).disabled=!rowComplete(row)&&!active.done.slice((active.rows-row)*active.cols,(active.rows-row+1)*active.cols).some(Boolean);
+  if(guideTracking==='row'&&active.technique!=='c2c'){$('guideStatus').textContent=`${rowComplete(row)?'Row complete':'Row in progress'} · ${active.cols} stitches${g.finished?' · CHART COMPLETE':''}`;$('guideCurrent').textContent=g.finished?'Chart complete':`Work Row ${row}`;$('dockStatus').textContent=g.finished?'Chart complete':`Row ${row} of ${active.rows}`;$('phoneCrochetSummary').textContent=$('dockStatus').textContent;}
+
 }
 function focusGuideCell(){
   const g=active.guide;
@@ -2608,6 +2693,19 @@ function focusGuideCell(){
   if(gx*view.scale+view.x<20||gx*view.scale+view.x>canvasWidth-20||gy*view.scale+view.y<20||gy*view.scale+view.y>canvasHeight-20){view.x=canvasWidth/2-gx*view.scale;view.y=canvasHeight/2-gy*view.scale;}
   $('instructionRow').value=g.row;updateSelection();requestDraw();renderRowSequence();renderGuide();
 }
+let guideTracking='row';
+try{guideTracking=localStorage.getItem('studio.guide.tracking.v1')==='stitch'?'stitch':'row';}catch{}
+function rowComplete(row){const offset=(active.rows-row)*active.cols;return !!active.rowDone[row-1]||active.done.slice(offset,offset+active.cols).every(Boolean);}
+function updateTrackingMode(){const rows=guideTracking==='row'&&active?.technique!=='c2c';document.body.classList.toggle('row-tracking',rows);for(const id of ['guideTracking','dockTracking'])$(id).value=guideTracking;}
+function setRowComplete(row,value){active.rowDone[row-1]=value?1:0;if(!value){active.done.fill(0,(active.rows-row)*active.cols,(active.rows-row+1)*active.cols);if(active.guide.row===row)active.guide.finished=false;}}
+function completeNextRow(){
+ if(!active||pendingConversion||(studioReadOnly||!Ops.canWrite()))return;
+ Pattern.ensure(active);const g=active.guide;if(g.finished&&rowComplete(g.row))return;
+ progressSnapshot();setRowComplete(g.row,true);
+ if(g.row<active.rows){g.row++;g.position=0;g.finished=false;}else{g.position=active.cols-1;g.finished=true;}
+ scheduleSave();updateProgress();focusGuideCell();
+}
+function unmarkGuideRow(){if(!active||pendingConversion||(studioReadOnly||!Ops.canWrite()))return;const row=active.guide.row;if(!rowComplete(row)&&!active.done.slice((active.rows-row)*active.cols,(active.rows-row+1)*active.cols).some(Boolean))return;progressSnapshot();setRowComplete(row,false);active.guide.finished=false;scheduleSave();updateProgress();focusGuideCell();}
 function guideNext(wholeRun=false){
   if(!active||pendingConversion)return;
   const g=active.guide;if(g.finished)return;
@@ -2630,7 +2728,7 @@ function guideBack(){
   scheduleSave();focusGuideCell();
 }
 function guideChangeRow(n){
-  if(!active||pendingConversion)return;
+  if(!active||pendingConversion||(studioReadOnly||!Ops.canWrite())||clamp(active.guide.row+n,1,active.rows)===active.guide.row)return;
   progressSnapshot();
   const g=active.guide;g.row=clamp(g.row+n,1,active.rows);g.position=0;g.finished=false;
   scheduleSave();focusGuideCell();
@@ -2766,7 +2864,7 @@ function moveMotifPreview(col,row){
   requestDraw();
 }
 function placeMotif(rotation=false,flip=false){
-  const m=chosenMotif();
+  const m=(rotation||flip)&&motifPreview?.clip.builtin?{clip:motifPreview.clip}:chosenMotif();
   if(!active||!m||pendingConversion||editBlocked('place a motif'))return;
   progressBrush=null;updateSelection();
   const clip=structuredClone(m.clip);
@@ -2776,13 +2874,14 @@ function placeMotif(rotation=false,flip=false){
       const x=i%width,y=Math.floor(i/width);
       return rotation?clip.colors[(clip.height-1-x)*clip.width+y]:clip.colors[y*clip.width+width-1-x];
     });
-    saveMotifs(motifs.map(item=>item.id===m.id?{...m,clip:{...clip,width,height,colors}}:item));
+    Object.assign(clip,{width,height,colors});
+    if(!clip.builtin)saveMotifs(motifs.map(item=>item.id===m.id?{...m,clip}:item));
     $('motifChoice').value=m.id;
   }
   const anchor=motifPreview||selected||{col:1,row:active.rows};
   clearTextPreview();
   setTool('select');
-  motifPreview={clip:structuredClone(chosenMotif().clip),col:anchor.col,row:anchor.row};
+  motifPreview={clip:structuredClone(clip),col:anchor.col,row:anchor.row};
   $('motifPreviewTools').hidden=false;
   moveMotifPreview(anchor.col,anchor.row);
   toast('Tap either chart to place the preview, then choose Apply motif.');
@@ -2889,7 +2988,7 @@ function hookPatternEvents(){
   $('rowPrev').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)-1));
   $('rowNext').addEventListener('click',()=>setInstructionRow(Number($('instructionRow').value)+1));
   $('rowMarkDone').addEventListener('click',()=>{
-    const row=Number($('instructionRow').value);progressSnapshot();active.rowDone[row-1]=active.rowDone[row-1]?0:1;
+    if(!active||pendingConversion||(studioReadOnly||!Ops.canWrite()))return;const row=Number($('instructionRow').value);progressSnapshot();setRowComplete(row,!rowComplete(row));
     scheduleSave();updateSelection();updateProgress();renderRowSequence();requestDraw();
   });
   $('openGuide').addEventListener('click',()=>{if(pendingConversion)return toast('Apply or discard the current chart preview first.');
@@ -2900,6 +2999,11 @@ function hookPatternEvents(){
   });
   $('guideNext').addEventListener('click',()=>guideNext());$('guideRun').addEventListener('click',()=>guideNext(true));$('guidePrev').addEventListener('click',guideBack);
   $('guidePrevRow').addEventListener('click',()=>guideChangeRow(-1));$('guideNextRow').addEventListener('click',()=>guideChangeRow(1));
+  $('dockPrevRow').onclick=()=>guideChangeRow(-1);
+  for(const id of ['guideCompleteRow','dockCompleteRow'])$(id).onclick=completeNextRow;
+  for(const id of ['guideUnmarkRow','dockUnmarkRow'])$(id).onclick=unmarkGuideRow;
+  for(const id of ['guideTracking','dockTracking'])$(id).onchange=ev=>{guideTracking=ev.target.value==='stitch'?'stitch':'row';try{localStorage.setItem('studio.guide.tracking.v1',guideTracking);}catch{}updateTrackingMode();renderGuide();};
+  updateTrackingMode();
   for(const [field,key,min,max] of [['gaugeStitches','swatchStitches',1,100000],['gaugeYards','swatchYards',0,100000],['gaugeOverage','overage',0,100]]){
     $(field).addEventListener('change',()=>{let value=Number($(field).value);if(!Number.isFinite(value))value=min;value=clamp(value,min,max);snapshot();active.gauge[key]=value;$(field).value=value;scheduleSave();renderInventoryEstimates();});
   }
@@ -3012,6 +3116,7 @@ function putTextOnLayer(){
  editingLayerId=null;lastText={config:{...previewTextConfig()},original:new Map()};$('editLastText').disabled=false;
  clearTextPreview();$('textColor').value='';updateTextControls();toast('Text saved as a separate editable layer.');
 }
+function previewBuiltinMotif(clip){if(!active||pendingConversion||editBlocked('preview a motif'))return;clearTextPreview();setTool('select');motifPreview={clip:structuredClone(clip),col:selected?.col||1,row:selected?.row||active.rows};$('motifPreviewTools').hidden=false;moveMotifPreview(motifPreview.col,motifPreview.row);}
 function applyMotifLayer(){
  if(!active||!motifPreview||pendingConversion||editBlocked('apply motif'))return;
  const {clip,col,row}=motifPreview;
@@ -3020,10 +3125,11 @@ function applyMotifLayer(){
  if(active.palette.length+missing.length>12)return toast('This motif needs more than the available 12 yarn colors.');
  snapshot();for(const hex of missing)active.palette.push({hex,name:'Motif yarn '+(active.palette.length+1),symbol:SYMBOLS[active.palette.length]});
  const entries=[];for(let dy=0;dy<clip.height;dy++)for(let dx=0;dx<clip.width;dx++){
+  if(clip.transparentZero&&clip.colors[dy*clip.width+dx]===0)continue;
   const hex=clip.palette?.[clip.colors[dy*clip.width+dx]],index=active.palette.findIndex(p=>p.hex.toLowerCase()===String(hex).toLowerCase());
   if(index>=0)entries.push([indexFor(col+dx,row-dy),index]);
  }
- const l={id:uid(),name:'Motif: '+(chosenMotif()?.name||'Saved motif'),type:'motif',visible:true,locked:false,entries,source:null};
+ const l={id:uid(),name:'Motif: '+(clip.builtin||chosenMotif()?.name||'Saved motif'),type:'motif',visible:true,locked:false,entries,source:null};
  active.layers.push(l);selectedLayerId=l.id;active.converted=true;clearMotifPreview();scheduleSave();refreshInspector();toast('Motif saved as editable layer.');
 }
 function advancedLetterPreviewTransform(mask,config){
@@ -3136,11 +3242,14 @@ function hookAdvanced(){
 
  for(const [mode,id] of [['create','modeCreate'],['edit','modeEdit'],['crochet','modeCrochet']])$(id).addEventListener('click',()=>setStudioMode(mode));
  $('spotlightMode').addEventListener('change',()=>requestDraw());
- $('grayCount').addEventListener('change',()=>{if(pendingConversion)discardPreview();updateConversionControls();});
+ const invalidateGray=()=>{cancelImageJob();discardPreview();$('grayTrio').replaceChildren();updateConversionControls();};
+ $('grayCount').addEventListener('change',invalidateGray);
+ for(const id of ['grayAutoBalance','grayShadows','grayMidtones','grayHighlights','graySmoothing','grayEdge','grayDither'])$(id).addEventListener('input',invalidateGray);
  $('compareGrays').addEventListener('click',()=>{
   if(!active?.referenceImage||!referenceImg)return toast('Import a photo first.');
-  const [cols,rows]=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],s=conversionSettings(),raster=rasterizeToCells(referenceImg,cols,rows,s);
-  comparisonResults={small:{...window.DoretteAdvanced.grayscale(raster.values,2),cols,rows,projectId:active.id},large:{...window.DoretteAdvanced.grayscale(raster.values,4),cols,rows,projectId:active.id}};
+  const [cols,rows]=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],s=conversionSettings(),raster=rasterizeToCells(referenceImg,cols,rows,{...s,mode:'grayscale'});
+  comparisonResults={small:{...window.DoretteAdvanced.grayscale(raster.values,2,grayscaleOptions(cols)),cols,rows,projectId:active.id},large:{...window.DoretteAdvanced.grayscale(raster.values,4,grayscaleOptions(cols)),cols,rows,projectId:active.id}};
+  labelPhotoComparison(true);
   renderComparison($('compareSmallCanvas'),comparisonResults.small);renderComparison($('compareLargeCanvas'),comparisonResults.large);
   $('compareSmallLabel').textContent='2 grayscale yarn colors';$('compareLargeLabel').textContent='4 grayscale yarn colors';
   $('compareDialog').showModal();
@@ -3433,16 +3542,16 @@ async function doAdvancedResize(){
 }
 function plotGrayTrio(){
  if(!referenceImg)return toast('Import a photo first.');
- const dims=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],raster=rasterizeToCells(referenceImg,dims[0],dims[1],conversionSettings());
- const host=$('grayTrio'),projectId=active.id,source=active.referenceImage;host.replaceChildren();
- for(const n of [2,3,4]){
-  const d=NF?window.DoretteAdvanced.grayscale(raster.values,n):null;
+ const dims=[$('previewDimensions').value==='large'?120:active.cols,$('previewDimensions').value==='large'?165:active.rows],raster=rasterizeToCells(referenceImg,dims[0],dims[1],{...conversionSettings(),mode:'grayscale'});
+ const host=$('grayTrio'),projectId=active.id,source=active.referenceImage,settingsKey=JSON.stringify([grayscaleOptions(dims[0]),active.photoCrop,active.cols,active.rows,$('previewDimensions').value]);host.replaceChildren();
+ for(const n of [2,3,4,6,8,12]){
+  const d=NF?window.DoretteAdvanced.grayscale(raster.values,n,grayscaleOptions(dims[0])):null;
   if(!d)continue;const wrapper=document.createElement('div');wrapper.className='gray-card';
-  const name=document.createElement('strong');name.textContent=`${n} grayscale yarns`;
+  const name=document.createElement('strong');name.textContent=`Up to ${n} gray shades`;
   const canvas=document.createElement('canvas');canvas.width=dims[0];canvas.height=dims[1];canvas.style.maxWidth='100%';
   const g=canvas.getContext('2d'),pixels=g.createImageData(canvas.width,canvas.height);
   d.cells.forEach((value,i)=>{const color=parseInt(d.palette[value].hex.slice(1,3),16);pixels.data.set([color,color,color,255],i*4);});g.putImageData(pixels,0,0);
-  const use=document.createElement('button');use.type='button';use.className='button ghost';use.textContent='Preview on chart';use.addEventListener('click',()=>{if(active.id!==projectId||active.referenceImage!==source)return toast('Run the comparison again for this photo.');previewResult({...d,cols:dims[0],rows:dims[1],projectId});});
+  const use=document.createElement('button');use.type='button';use.className='button ghost';use.textContent='Preview on chart';use.addEventListener('click',()=>{if(active.id!==projectId||active.referenceImage!==source||settingsKey!==JSON.stringify([grayscaleOptions(dims[0]),active.photoCrop,active.cols,active.rows,$('previewDimensions').value]))return toast('Run the comparison again after changing the photo or its settings.');previewResult({...d,cols:dims[0],rows:dims[1],projectId});});
   wrapper.append(name,canvas,use);host.append(wrapper);
  }
 }
@@ -4018,6 +4127,7 @@ function setupAppNavigation(){
     }
     if(inCrochetView()&&(node.closest('.inspector,.sidebar,.stitch-editor')||['undoButton','redoButton','editLastText','quickTextLayer','openChartStructure'].includes(id)))return toast('Exit Crochet View to use this command. Your crochet progress stays saved.');
     if(action){
+      if(node.closest('#chartTools'))$('chartTools').open=true;
       if(node.disabled){
         const reasons={undoButton:'There is no chart change to undo.',redoButton:'There is no chart change to redo.',
           editLastText:'Add and select an editable text layer first.',
@@ -4086,7 +4196,7 @@ function setupSettingsLayout(){
   const defaults=[];
   let order=[];
   function persist(){
-    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({...saved,order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
+    try{localStorage.setItem(settingsLayoutKey,JSON.stringify({...saved,...JSON.parse(localStorage.getItem(settingsLayoutKey)||'{}'),order,collapsed:[...collapsed],favorites:[...favorites]}));}catch{}
   }
   function navigate(section){
     revealSettingsSection(section);
@@ -4380,6 +4490,7 @@ function setupPolishTools(){
  $('safeEdits').checked=safeEditsEnabled;
    $('safeEdits').addEventListener('change',e=>{safeEditsEnabled=e.target.checked;try{localStorage.setItem(standaloneKeys.safeEdits,String(safeEditsEnabled));}catch{}
      if(pendingConversion)$('applyConversion').textContent=safeEditsEnabled?'Apply to a separate copy':'Apply to current project';
+     updateConversionPreviewHelp();
    });
  $('retryEditing').addEventListener('click',retryEditing);
  $('refreshStorage').addEventListener('click',updateStorageIndicator);
@@ -4587,6 +4698,12 @@ function setupServiceWorkerUpdates(){
    return;
  }
  let installingUpdate=false,registration=null;
+ const observedWorkers=new WeakSet();
+ navigator.serviceWorker.addEventListener('message',event=>{
+   if(event.data?.type!=='STUDIO_OFFLINE_DIAGNOSTIC')return;
+   if(!observedWorkers.has(event.source)&&![registration?.installing,registration?.waiting,registration?.active,navigator.serviceWorker.controller].includes(event.source))return;
+   globalThis.studioDiagnostics?.record('OFFLINE_INSTALL',event.data);
+ });
  let activeProbe=null;
  function checkOfflineReady(){
    const worker=navigator.serviceWorker.controller;
@@ -4653,11 +4770,13 @@ function setupServiceWorkerUpdates(){
    registration=reg;readyUpdate(reg);
    function watch(){
      const worker=reg.installing;if(!worker)return;
+     observedWorkers.add(worker);
      if(!navigator.serviceWorker.controller)offlineStatus.textContent='Preparing offline files. Keep this tab online.';
      worker.addEventListener('statechange',()=>{
        if(worker.state==='installed')readyUpdate(reg);
        if(worker.state==='activated')checkOfflineReady();
        if(worker.state==='redundant'&&!navigator.serviceWorker.controller){
+         globalThis.studioDiagnostics?.record('OFFLINE_INSTALL',{state:'failed',stage:'download',category:'TERMINATED_OR_ABORTED'});
          globalThis.studioDiagnostics?.record('OFFLINE_FAILED');
          registration=null;
          offlineStatus.textContent='Offline setup did not finish. Check your connection and choose Check for Studio updates to retry.';
@@ -4689,8 +4808,11 @@ function setupServiceWorkerUpdates(){
 
 function hookEvents(){
   hookNextEvents();
+  $('newProjectDetails').addEventListener('toggle',()=>{if($('newProjectDetails').open){const name=$('newName');name.focus();name.select();}});
+  const presets={portrait80x110:[80,110],square:[50,50],blanket:[120,165],border:[120,24],initials:[40,30]};
+  $('projectTemplate').addEventListener('change',()=>{const dims=presets[$('projectTemplate').value];if(dims){$('newCols').value=dims[0];$('newRows').value=dims[1];}});
   $('newProjectForm').addEventListener('submit',ev=>{
-    ev.preventDefault();const presets={square:[50,50],blanket:[120,165],border:[120,24],initials:[40,30]},dims=presets[$('projectTemplate').value]||[Number($('newCols').value),Number($('newRows').value)],cols=dims[0],rows=dims[1];
+    ev.preventDefault();const dims=presets[$('projectTemplate').value]||[Number($('newCols').value),Number($('newRows').value)],cols=dims[0],rows=dims[1];
     if(!validDimensions(cols,rows)){toast('Choose 1–200 columns and 1–300 rows.');return;}
     const p=blankProject($('newName').value,cols,rows);p.category=$('newProjectCategory').value||'Other';projects.set(p.id,p);queueWrite(p);selectProject(p.id);
     $('newProjectDetails').open=false;toast('New crochet project created.');
@@ -4702,7 +4824,9 @@ function hookEvents(){
   $('applyDimensions').addEventListener('click',editDimensions);
   $('confirmDimensions').onclick=()=>void confirmDimensions().catch(error=>toast(error.message));
   $('dimensionPreviewDialog').addEventListener('close',()=>{dimensionRequest=null;});
-  $('zoomIn').addEventListener('click',()=>setZoom(view.scale*1.27));$('zoomOut').addEventListener('click',()=>setZoom(view.scale/1.27));
+  $('zoomIn').addEventListener('click',()=>setZoom((Math.round(view.scale*100)+10)/100));$('zoomOut').addEventListener('click',()=>setZoom((Math.round(view.scale*100)-10)/100));
+  const commitZoom=()=>{const field=$('zoomValue'),value=Number(field.value);if(!field.value.trim()||!Number.isFinite(value)){updateZoomText();return toast('Enter a zoom percentage from 12 to 500.');}setZoom(clamp(value,12,500)/100);};
+  $('zoomValue').addEventListener('change',commitZoom);$('zoomValue').addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();commitZoom();}if(ev.key==='Escape')updateZoomText();});
   $('fitChart').addEventListener('click',fitChart);$('resetView').addEventListener('click',centerView);$('mirrorChart').addEventListener('click',mirrorChart);
   for(const [id,mode] of [['markStitch','mark'],['markRow','row']]){
     $(id).addEventListener('click',()=>{
@@ -4723,11 +4847,11 @@ function hookEvents(){
   $('paintColor').addEventListener('change',()=>selectPaintColor(Number($('paintColor').value)));
   $('undoButton').addEventListener('click',undo);$('undoButton').disabled=true;
   $('redoButton').addEventListener('click',redo);$('redoButton').disabled=true;
-  $('imageFile').addEventListener('change',ev=>{importImage(ev.target.files[0]);ev.target.value='';});
+  $('imageFile').addEventListener('change',async ev=>{const input=ev.currentTarget,file=input.files[0];await importImage(file);if(input.files[0]===file)input.value='';});
   for(const [id,edge,fromTrim] of [['cropLeft','left',false],['cropRight','right',true],['cropTop','top',false],['cropBottom','bottom',true]]){
     const slider=$(id),number=$(id+'Number');
     const updateFromPercent=pct=>setCropEdge(edge,fromTrim?1-pct/100:pct/100);
-    slider.addEventListener('pointerdown',()=>snapshot());
+    slider.addEventListener('pointerdown',()=>{if(!cropProposal)snapshot();});
     slider.addEventListener('input',ev=>updateFromPercent(Number(ev.target.value)));
     slider.addEventListener('change',ev=>updateFromPercent(Number(ev.target.value)));
     let snapshotted=false;
@@ -4737,7 +4861,7 @@ function hookEvents(){
       if(number.value.trim()==='')return;
       const pct=Number(number.value);
       if(!Number.isInteger(pct)||pct<0||pct>90)return;
-      if(!snapshotted){snapshot();snapshotted=true;}
+      if(!snapshotted&&!cropProposal){snapshot();snapshotted=true;}
       updateFromPercent(pct);
     });
     number.addEventListener('change',()=>{
@@ -4745,7 +4869,7 @@ function hookEvents(){
       if(typed!==''){
         const pct=Number(typed);
         if(Number.isFinite(pct)){
-          if(!snapshotted){snapshot();snapshotted=true;}
+          if(!snapshotted&&!cropProposal){snapshot();snapshotted=true;}
           updateFromPercent(Math.round(clamp(pct,0,90)));
         }
       }
@@ -4754,23 +4878,58 @@ function hookEvents(){
     });
     number.addEventListener('blur',()=>{number.value=slider.value;snapshotted=false;});
   }
-  $('resetCrop').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={...FULL_CROP};discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
-  $('shirtCropPreset').addEventListener('click',()=>{if(!active?.referenceImage)return;snapshot();active.photoCrop={left:.20,top:.34,right:.80,bottom:.96};discardPreview(false);scheduleSave();updateCropControls();requestDraw();toast('Starting crop applied. Adjust corners to capture all of the design.');});
-  $('imagePlacement').addEventListener('change',ev=>{if(!active)return;snapshot();active.imagePlacement=ev.target.value==='stretch'?'stretch':'contain';discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
+  $('cropToFill').addEventListener('click',()=>{
+    if(!active||!referenceImg)return;
+    const [cols,rows]=photoTarget();
+    const crop=window.DoretteAdvanced.cropToFill(currentCrop(),referenceImg.width,referenceImg.height,cols,rows);
+    if(!crop){
+      closeCropReview();
+      toast('This crop is too narrow for the selected grid. Widen it or reset the crop, then try again.');
+      return;
+    }
+    cropProposal={crop,context:directPhotoContext()};
+    updateCropControls();
+  });
+  $('cancelCropFill').addEventListener('click',closeCropReview);
+  $('confirmCropFill').addEventListener('click',()=>{
+    if(!cropProposal)return;
+    if(!matchesDirectPhoto(cropProposal.context)){closeCropReview();return;}
+    cropUndo={crop:currentCrop(),placement:active.imagePlacement};
+    active.photoCrop=cropProposal.crop;
+    active.imagePlacement='contain';cropProposal=null;
+    discardPreview(false);scheduleSave();updateCropControls();requestDraw();
+  });
+  $('undoPhotoCrop').addEventListener('click',()=>{
+    if(!active||!cropUndo)return;
+    active.photoCrop=cropUndo.crop;active.imagePlacement=cropUndo.placement;
+    cropProposal=cropUndo=null;
+    discardPreview(false);scheduleSave();updateCropControls();requestDraw();
+  });
+  $('previewDimensions').addEventListener('change',()=>{
+    closeCropReview();cancelImageJob();discardPreview();updateCropStats();
+  });
+  $('paletteSize').addEventListener('change',()=>{cancelImageJob();discardPreview();});
+  $('resetCrop').addEventListener('click',()=>{if(!active?.referenceImage)return;closeCropReview();snapshot();active.photoCrop={...FULL_CROP};discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
+  $('shirtCropPreset').addEventListener('click',()=>{if(!active?.referenceImage)return;closeCropReview();snapshot();active.photoCrop={left:.20,top:.34,right:.80,bottom:.96};discardPreview(false);scheduleSave();updateCropControls();requestDraw();toast('Starting crop applied. Adjust corners to capture all of the design.');});
+  $('imagePlacement').addEventListener('change',ev=>{if(!active)return;closeCropReview();snapshot();active.imagePlacement=ev.target.value==='stretch'?'stretch':'contain';discardPreview(false);scheduleSave();updateCropControls();requestDraw();});
   $('cropPreview').addEventListener('pointerdown',ev=>{
-    if(!active?.referenceImage||!cropPreviewRect)return;
+    if(!active?.referenceImage||!cropPreviewRect||cropGesture||ev.button!==0)return;
     const cv=$('cropPreview'),rect=cv.getBoundingClientRect();
     const x=(ev.clientX-rect.left)*cv.width/rect.width,y=(ev.clientY-rect.top)*cv.height/rect.height;
-    const ir=cropPreviewRect,c=currentCrop();
+    const ir=cropPreviewRect,c=visiblePhotoCrop();
     const edges=[[c.left,c.top,'tl'],[c.right,c.top,'tr'],[c.left,c.bottom,'bl'],[c.right,c.bottom,'br']];
     const nearest=edges.map(([fx,fy,mode])=>({mode,dist:Math.hypot(ir.x+fx*ir.w-x,ir.y+fy*ir.h-y)})).sort((a,b)=>a.dist-b.dist)[0];
     const inside=x>=ir.x+c.left*ir.w&&x<=ir.x+c.right*ir.w&&y>=ir.y+c.top*ir.h&&y<=ir.y+c.bottom*ir.h;
-    if(nearest.dist>25&&!inside)return;
-    cropGesture={mode:nearest.dist<=25?nearest.mode:'move',startX:x,startY:y,original:c};
-    snapshot();cv.setPointerCapture(ev.pointerId);ev.preventDefault();
+    const handleRadius=Math.min(25,(c.right-c.left)*ir.w/3,(c.bottom-c.top)*ir.h/3);
+    if(nearest.dist>handleRadius&&!inside)return;
+    cropGesture={mode:nearest.dist<=handleRadius?nearest.mode:'move',startX:x,startY:y,
+      original:c,pointerId:ev.pointerId,proposal:cropProposal,project:active,image:referenceImg};
+    if(!cropProposal)snapshot();
+    cv.setPointerCapture(ev.pointerId);ev.preventDefault();
   });
   $('cropPreview').addEventListener('pointermove',ev=>{
-    if(!cropGesture||!active?.referenceImage||!cropPreviewRect)return;
+    if(cropGesture?.pointerId!==ev.pointerId||cropGesture.proposal!==cropProposal||
+      cropGesture.project!==active||cropGesture.image!==referenceImg||!cropPreviewRect)return;
     const cv=$('cropPreview'),rect=cv.getBoundingClientRect(),ir=cropPreviewRect;
     const x=(ev.clientX-rect.left)*cv.width/rect.width,y=(ev.clientY-rect.top)*cv.height/rect.height;
     const g=cropGesture,c={...g.original},min=.08;
@@ -4784,14 +4943,18 @@ function hookEvents(){
       if(g.mode.includes('t'))c.top=clamp(c.top+dy,0,c.bottom-min);
       if(g.mode.includes('b'))c.bottom=clamp(c.bottom+dy,c.top+min,1);
     }
-    active.photoCrop=c;discardPreview(false);scheduleSave();updateCropControls();requestDraw();ev.preventDefault();
+    updatePhotoCrop(c);ev.preventDefault();
   });
-  const endCropGesture=()=>{cropGesture=null;};
+  const endCropGesture=ev=>{if(cropGesture?.pointerId===ev.pointerId)cropGesture=null;};
+  $('cropPreview').addEventListener('lostpointercapture',endCropGesture);
   $('cropPreview').addEventListener('pointerup',endCropGesture);
   $('cropPreview').addEventListener('pointercancel',endCropGesture);
   $('applyConversion').addEventListener('click',()=>{
     if(!active||pendingConversion?.projectId!==active.id||editBlocked("apply a photo conversion"))return;
     const result=pendingConversion;
+    if(result.directPhotoContext&&!matchesDirectPhoto(result.directPhotoContext)){
+      discardPreview();toast('Photo or settings changed. Preview stitches again before applying.');return;
+    }
     const resized=result.cols!==active.cols||result.rows!==active.rows;
     if(!confirm(safeEditsEnabled?'Apply the photo conversion to a new project copy? The current project will be kept.':
       `Replace the chart artwork and yarn palette in the current project with the ${result.cols} × ${result.rows} photo conversion? Editable layers and yarn inventory will be cleared.${resized?' Crochet progress and guide position will reset. Notes outside the new dimensions will move to the nearest stitch.':' Existing stitch progress will be kept.'} Undo is available.`))return;
@@ -4827,7 +4990,7 @@ function hookEvents(){
     $(id).addEventListener('click',()=>{
       if(!comparisonResults?.[key]||comparisonResults[key].projectId!==active.id)return;
       const result=comparisonResults[key];$('compareDialog').close();
-      $('previewDimensions').value=key==='large'?'large':'current';previewResult(result);
+      $('previewDimensions').value=result.cols===120&&result.rows===165?'large':'current';updateCropStats();previewResult(result);
     });
   }
   $('conversionMode').addEventListener('change',ev=>{
@@ -4944,7 +5107,163 @@ async function retryEditing(){
  }catch(e){Ops.release();toast('Could not reopen editing: '+e.message);}
  finally{reloadingProjects=false;setTabReadOnly(Ops.canWrite());}
 }
+function setupBuild31(){
+  const tools=$('chartTools');
+  tools.addEventListener('click',event=>{if(event.target.closest('summary'))event.stopPropagation();});
+  try{tools.open=localStorage.getItem('studio.chartTools.open')!=='false';}catch{}
+  tools.addEventListener('toggle',()=>{
+    try{localStorage.setItem('studio.chartTools.open',String(tools.open));}catch{}
+  });
+  const dialog=$('cartoonDialog'),open=$('openCartoon'),preview=$('cartoonPreview'),apply=$('cartoonApply');
+  const statusLine=$('cartoonStatus'),progress=$('cartoonProgress');
+  const sliders={outline:'cartoonOutline',detail:'cartoonDetail',range:'cartoonRange',cleanup:'cartoonCleanup'};
+  let job=null,candidate=null;
+  const dimensions=()=>$('previewDimensions').value==='large'?[120,165]:[active.cols,active.rows];
+  const sourceKey=()=>active&&{photo:active.referenceImage,context:JSON.stringify([active.id,currentCrop(),active.referenceMirrored,active.imagePlacement,dimensions()])};
+  const matches=key=>{const current=sourceKey();return current&&key.photo===current.photo&&key.context===current.context;};
+  function clear(message=''){
+    if(job){clearTimeout(job.timer);job.worker.terminate();job=null;}
+    candidate=null;apply.disabled=true;preview.disabled=false;preview.removeAttribute('aria-busy');progress.hidden=true;
+    for(const id of ['cartoonIllustration','cartoonChart','cartoonDirectChart']){$(id).width=1;$(id).closest('figure').hidden=true;}
+    $('cartoonCompareGray').disabled=true;$('cartoonCompareGray').removeAttribute('aria-busy');
+    statusLine.textContent=message;
+  }
+  function preset(){
+    const selected=$('cartoonPreset').value;
+    const defaults=window.StudioCartoon.options({preset:selected});
+    for(const [key,id] of Object.entries(sliders))$(id).value=defaults[key]*(key==='detail'||key==='outline'?100:1);
+    $('cartoonPresetHelp').textContent={
+      simple:'Broader shapes and stronger cleanup for fewer small regions.',
+      balanced:'Recommended for portraits and everyday designs.',
+      detailed:'Keeps more texture and small details. Expect more yarn changes in some photos.'
+    }[selected];
+  }
+  function sample(){
+    const [cols,rows]=dimensions();
+    const factor=Math.min(4,480/Math.max(cols,rows));
+    const canvas=$('cartoonOriginal');
+    canvas.width=Math.max(cols,Math.floor(cols*factor));
+    canvas.height=Math.max(rows,Math.floor(rows*factor));
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    renderCroppedImage(ctx,referenceImg,0,0,canvas.width,canvas.height);
+    return {cols,rows,width:canvas.width,height:canvas.height,pixels:ctx.getImageData(0,0,canvas.width,canvas.height).data};
+  }
+  function drawChart(result,canvas=$('cartoonChart')){
+    const {cols,rows,cells,palette}=result;
+    canvas.closest('figure').hidden=false;
+    const scale=Math.max(4,Math.min(15,Math.floor(900/Math.max(cols,rows))));
+    const margin=30;
+    canvas.width=cols*scale+margin*2;canvas.height=rows*scale+margin*2;
+    canvas.setAttribute('aria-label',cols+' columns by '+rows+' rows. Row 1 is at the bottom.');
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let i=0;i<cells.length;i++){
+      ctx.fillStyle=palette[cells[i]].hex;
+      ctx.fillRect(margin+(i%cols)*scale,margin+Math.floor(i/cols)*scale,scale,scale);
+    }
+    if($('cartoonGrid').checked){
+      ctx.strokeStyle='#33243a55';ctx.lineWidth=.6;ctx.beginPath();
+      for(let x=0;x<=cols;x++){ctx.moveTo(margin+x*scale,margin);ctx.lineTo(margin+x*scale,margin+rows*scale);}
+      for(let y=0;y<=rows;y++){ctx.moveTo(margin,margin+y*scale);ctx.lineTo(margin+cols*scale,margin+y*scale);}
+      ctx.stroke();
+    }
+    ctx.fillStyle='#30233b';ctx.font='12px sans-serif';
+    ctx.textAlign='right';ctx.textBaseline='middle';
+    for(let n=1;n<=rows;n++)if(n===1||n===rows||n%10===0)ctx.fillText(n,margin-4,margin+(rows-n+.5)*scale);
+    ctx.textAlign='center';ctx.textBaseline='top';
+    for(let n=1;n<=cols;n++)if(n===1||n===cols||n%10===0)ctx.fillText(n,margin+(n-.5)*scale,margin+rows*scale+4);
+  }
+  open.onclick=()=>{
+    if(!active?.referenceImage){requestSourcePhoto('create a cartoon chart');return;}
+    if(!referenceImg){toast('Wait for the attached photo to finish loading.');return;}
+    clear('Choose Preview to make a stitch chart.');
+    preset();sample();dialog.showModal();open.setAttribute('aria-expanded','true');
+  };
+  dialog.addEventListener('close',()=>{
+    clear();$('cartoonOriginal').width=1;open.setAttribute('aria-expanded','false');open.focus({preventScroll:true});
+  });
+  $('cartoonCancel').onclick=()=>dialog.close();
+  $('cartoonPreset').onchange=()=>{preset();clear('Preset changed. Choose Preview again.');};
+  $('cartoonReset').onclick=()=>{preset();$('cartoonColors').value='6';$('cartoonTone').value='color';clear('Preset defaults restored. Choose Preview again.');};
+  for(const id of [...Object.values(sliders),'cartoonColors','cartoonTone'])$(id).addEventListener('input',()=>clear('Settings changed. Choose Preview again.'));
+  $('cartoonGrid').onchange=()=>{if(candidate){drawChart(candidate.result);if(candidate.direct)drawChart(candidate.direct,$('cartoonDirectChart'));}};
+  preview.onclick=()=>{
+    clear('Preparing the cartoon chart…');
+    if(!active||!referenceImg){clear('Attach a photo first.');return;}
+    try{
+      const data=sample(),key=sourceKey();
+      const settings={preset:$('cartoonPreset').value,colors:Number($('cartoonColors').value),gray:$('cartoonTone').value==='gray'};
+      for(const [name,id] of Object.entries(sliders))settings[name]=Number($(id).value)/(name==='detail'||name==='outline'?100:1);
+      const worker=new Worker('./cartoon-worker.js');
+      const session={worker,timer:setTimeout(()=>clear('Preview timed out. Try a smaller chart.'),30000)};
+      job=session;preview.disabled=true;preview.setAttribute('aria-busy','true');progress.hidden=false;progress.value=0;
+      worker.onerror=()=>{if(job===session)clear('The cartoon preview could not start. Reopen Studio and try again.');};
+      worker.onmessage=({data:message})=>{
+        if(job!==session)return;
+        if(message.percent){progress.value=message.percent;return;}
+        if(message.error||!message.result){clear(message.error||'No preview was returned.');return;}
+        clear();
+        if(!matches(key)||!dialog.open){statusLine.textContent='The source changed. Choose Preview again.';return;}
+        const result=message.result;
+        const art=$('cartoonIllustration');
+        art.width=result.width;art.height=result.height;art.closest('figure').hidden=false;
+        art.getContext('2d').putImageData(new ImageData(result.preview,result.width,result.height),0,0);
+        drawChart(result);
+        const m=result.metrics;
+        statusLine.textContent=result.cols+' × '+result.rows+' stitches · '+result.palette.length+' yarn colors · '+m.isolated+' isolated stitches · '+m.tinyRegions+' small regions ('+m.tinyPercent.toFixed(1)+'% of stitches) · '+m.averageChanges.toFixed(1)+' color changes per row on average';
+        candidate={result,key};apply.disabled=false;$('cartoonCompareGray').disabled=false;
+      };
+      worker.postMessage({...data,settings},[data.pixels.buffer]);
+    }catch(error){clear('Preview could not start: '+error.message);}
+  };
+  $('cartoonCompareGray').onclick=()=>{
+    if(!candidate||!matches(candidate.key))return;
+    const request=candidate,button=$('cartoonCompareGray'),{cols,rows}=request.result;
+    button.disabled=true;button.setAttribute('aria-busy','true');
+    let worker;
+    try{
+      const pixels=sampledPhotoPixels(cols,rows);
+      worker=new Worker('./image-worker.js?v=1.8.1');
+      const finish=()=>{
+        clearTimeout(timer);worker.terminate();
+        if(job?.worker===worker)job=null;
+        button.disabled=!candidate;button.removeAttribute('aria-busy');
+      };
+      const timer=setTimeout(finish,30000);
+      job={worker,timer};
+      worker.onerror=finish;
+      worker.onmessage=({data})=>{
+        if(data.type==='progress')return;
+        finish();
+        if(candidate!==request||!matches(request.key)||!data.result)return;
+        request.direct={...data.result,cols,rows};
+        drawChart(request.direct,$('cartoonDirectChart'));
+      };
+      worker.postMessage({kind:'convert',pixels,cols,rows,s:{...conversionSettings(),mode:'grayscale'},grayCount:Number($('cartoonColors').value),grayOptions:grayscaleOptions(cols)},[pixels.buffer]);
+    }catch(error){
+      worker?.terminate();button.disabled=false;button.removeAttribute('aria-busy');
+      statusLine.textContent='Direct grayscale could not be prepared: '+error.message;
+    }
+  };
+  apply.onclick=()=>{
+    if(!candidate||!matches(candidate.key)){clear('The source changed. Choose Preview again.');return;}
+    const {cells,palette,cols,rows}=candidate.result;
+    dialog.close();
+    previewResult({cells,palette,cols,rows,projectId:active.id});
+    $('applyConversion').click();
+  };
+  for(const [buttonId,dialogId] of [['openStitchStudio','stitchStudio'],['openChartStructure','chartStructureDialog']]){
+    const button=$(buttonId),panel=$(dialogId);
+    if(!button||!panel)continue;
+    button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls',dialogId);button.setAttribute('aria-expanded','false');
+    button.addEventListener('click',()=>{if(panel.open)button.setAttribute('aria-expanded','true');});
+    panel.addEventListener('close',()=>button.setAttribute('aria-expanded','false'));
+  }
+}
+
 async function initialize(){
+  $('openPatternCreator').addEventListener('click',async ev=>{ev.preventDefault();if(await window.StudioBeforeUpdate())location.href='./pattern-creator.html';});
   document.body.classList.toggle('native-android',window.Capacitor?.getPlatform()==='android');
   await Ops.init(setTabReadOnly);
   hookEvents();v16Hook();
@@ -4966,8 +5285,9 @@ async function initialize(){
   setupServiceWorkerUpdates();
   setupSettingsLayout();
   setupPolishTools();
-  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,download,notify:toast});
+  window.StudioExperience.setup({prefs:v16Prefs,savePrefs:v16SavePrefs,applyPrefs:v16ApplyPrefs,draw:requestDraw,sections:settingsSections,renderTexture:v16DrawTexture,active:()=>active,motifs:()=>motifs,saveMotifs,renderMotifs,placeMotif,previewPreset:previewBuiltinMotif,download,notify:toast});
   setupAppNavigation();
+  setupBuild31();
   setupPhoneCrochetControls();
   setupStandaloneSettings();
   $('toggleBulkProjects').onclick=()=>{bulkMode=!bulkMode;bulkProjects.clear();refreshProjectList();};

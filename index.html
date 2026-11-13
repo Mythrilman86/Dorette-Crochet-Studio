@@ -10,11 +10,12 @@
   <link rel="stylesheet" href="./styles.css?v=1.8.1-chart-first">
   <title>Dorette Crochet Studio</title>
   <link rel="stylesheet" href="./stitch-studio.css">
+<link rel="stylesheet" href="./control-feedback.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><img class="brand-icon" src="./assets/header-icon.png" alt=""><span><strong>Dee’s</strong><small>CROCHET STUDIO</small></span></div>
-    <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button><a href="./written-pattern.html">Written Patterns</a></nav>
+    <nav class="app-navigation" id="appNavigation" aria-label="Studio menu"><button id="appMenuToggle" class="button ghost" type="button" aria-expanded="false" aria-controls="appMenuCategories">Menu</button><div id="appMenuCategories"></div><button id="headerFindTool" class="button ghost" type="button">Find a Tool</button><a class="workspace-link" href="./written-pattern.html" title="Follow and track imported patterns"><span aria-hidden="true">▤</span> Written Patterns</a><a id="openPatternCreator" class="workspace-link creator-link" href="./pattern-creator.html" title="Write original crochet patterns"><span aria-hidden="true">✎</span> Pattern Creator (Beta)</a></nav>
     <div class="header-right"><span id="saveStatus" class="save-status" role="status">Opening local storage…</span><button id="headerExport" aria-label="Back up all projects" class="button ghost">⇩ <span class="desktop-label">Back up all</span></button><button id="headerRestore" aria-label="Restore backup" class="button primary">↥ <span class="desktop-label">Restore backup</span></button></div>
   </header>
   <div id="tabLockBanner" class="reliability-alert conflict-alert" role="alert" hidden><strong>Read-only in this tab.</strong><span id="tabLockMessage">Another Studio tab is editing local projects. Close that tab to prevent overwrites.</span><button id="retryEditing" class="button secondary" type="button">Retry editing</button></div>
@@ -40,7 +41,7 @@
         <form id="newProjectForm" class="stack form-fields">
           <label>Category<select id="newProjectCategory"><option>Other</option></select></label><label>Project name<input id="newName" maxlength="70" value="New Crochet Chart" required></label>
           <div class="pair"><label>Columns<input id="newCols" type="number" min="1" max="200" value="79" required></label><label>Rows<input id="newRows" type="number" min="1" max="300" value="117" required></label></div>
-          <label>Starter template<select id="projectTemplate"><option value="custom">Custom dimensions</option><option value="square">Square design 50 × 50</option><option value="blanket">Blanket chart 120 × 165</option><option value="border">Border strip 120 × 24</option><option value="initials">Initials 40 × 30</option></select></label><button type="submit" class="button primary block">Create project</button>
+          <label>Starter template<select id="projectTemplate"><option value="custom">Custom dimensions</option><option value="portrait80x110">80 × 110</option><option value="square">Square design 50 × 50</option><option value="blanket">Blanket chart 120 × 165</option><option value="border">Border strip 120 × 24</option><option value="initials">Initials 40 × 30</option></select></label><button type="submit" class="button primary block">Create project</button>
         </form>
       </details>
       <div class="sidebar-note"><strong>Private by default</strong><p>Your charts are saved in this browser, not uploaded to a server. Make regular Google Drive backups.</p></div>
@@ -50,7 +51,7 @@
       <div class="workspace-top"><div><span class="eyebrow">INTERACTIVE GRID</span><h1 id="workspaceTitle">My First Chart</h1><p id="chartSubtitle" class="subheading">79 columns × 117 rows • Row 1 begins at the bottom</p></div><span class="pill" id="studioBuildBadge">Local workspace</span></div>
       <div class="crochet-view-actions"><button id="resumeCrochet" class="button primary" type="button">Resume crocheting</button> <button id="crochetView" class="button ghost" type="button" aria-pressed="false">Crochet View</button> <button id="focusGuideDetails" class="button ghost" type="button" aria-controls="guideDialog" aria-expanded="false" hidden>Guide details</button></div>
       <label class="toggle yarn-visibility"><input class="show-yarn-letters" type="checkbox" checked> Show yarn letters on chart</label>
-      <div class="stitch-editor" aria-label="Manual stitch color editor">
+      <details id="chartTools" open><summary>Chart Tools</summary><div class="stitch-editor" aria-label="Manual stitch color editor">
         <div class="editor-tools" role="group" aria-label="Stitch editing tool">
           <button id="toolSelect" class="edit-tool active" type="button" aria-pressed="true">▣ Select</button>
           <button id="toolPaint" class="edit-tool" type="button" aria-pressed="false">✎ Paint</button>
@@ -73,18 +74,19 @@
         </div>
         <p id="editorHint" class="editor-hint" aria-live="polite">Select to inspect stitches. Choose Paint or a color to draw; Erase restores the background. Pinch to zoom.</p>
       </div>
+      </details>
       <div class="dual-charts" id="chartViews"><section class="chart-pane" id="overviewPane"><h2>Overview <small>Tap to locate · dashed orange box = working view</small></h2><div class="overview-wrap"><canvas id="overviewCanvas" tabindex="0" aria-label="Full chart overview. Tap to select and center the working chart. Arrow keys move selection."></canvas></div></section><section class="chart-pane"><div class="working-chart-heading"><h2>Working chart <small>Zoom, select and edit here</small></h2><div class="chart-layout-switch" role="group" aria-label="Chart layout"><button id="singleChart" type="button" aria-pressed="false" aria-controls="chartViews">Single</button><button id="dualChart" type="button" aria-pressed="true" aria-controls="chartViews">Dual</button></div></div><div class="canvas-wrap" id="canvasWrap">
         <canvas id="chartCanvas" aria-label="Interactive crochet chart. Select a stitch by tapping; drag to pan. Row 1 is the bottom row, column 1 is the leftmost column." tabindex="0"></canvas>
-        <div class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</div>
       </div>
+      <p id="workingChartHelp" class="canvas-note">Grid lines extend to numbered edges · Paint/Erase: drag across stitches · Undo reverses a whole brush stroke</p>
       </section></div>
       <details id="focusRowColors" class="focus-row-colors" open><summary>Row Color Instructions <span id="focusRowSummary"></span></summary><div class="focus-row-body"><div id="focusRowRuns" class="focus-row-runs" aria-label="Complete color sequence"></div><p id="focusRowChange" class="muted"></p><div class="focus-row-nav"><button id="focusRowPrev" type="button" class="button ghost">Previous row</button><button id="focusRowNext" type="button" class="button ghost">Next row</button></div></div></details>
       <div class="crochet-compact-actions"><span id="crochetCenterMount"></span><label class="toggle"><input class="show-yarn-letters" type="checkbox" checked> Show yarn letters</label></div>
       <button id="phoneCrochetControls" type="button" aria-expanded="false" aria-controls="crochetProgressControls chartNavigationControls"><span id="phoneCrochetSummary">Crochet controls</span><span class="phone-crochet-chevron" aria-hidden="true"></span></button>
-      <div class="crochet-dock" id="crochetProgressControls" aria-label="Crochet progress controls"><div class="crochet-dock-summary"><strong id="dockStatus"></strong><span id="dockProgress" role="status"></span></div><button id="dockToggleStitch" class="button secondary" type="button">Mark stitch</button><button id="dockToggleRow" class="button secondary" type="button">Mark row</button><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
+      <div class="crochet-dock" id="crochetProgressControls" aria-label="Crochet progress controls"><div class="crochet-dock-summary"><strong id="dockStatus"></strong><span id="dockProgress" role="status"></span></div><label class="tracking-picker">Track by<select id="dockTracking"><option value="row">Rows</option><option value="stitch">Stitches (advanced)</option></select></label><button id="dockPrevRow" class="button ghost row-only" type="button">Previous row</button><button id="dockCompleteRow" class="button primary row-only" type="button">Complete &amp; next row</button><button id="dockUnmarkRow" class="button ghost row-only" type="button">Unmark current row</button><button id="dockToggleStitch" class="button secondary" type="button">Mark stitch</button><button id="dockToggleRow" class="button secondary" type="button">Mark row</button><button id="dockStitch" class="button primary" type="button">Complete stitch</button><button id="dockRun" class="button primary" type="button">Complete color run</button><button id="undoProgress" class="button ghost" type="button" disabled>Undo</button><button id="redoProgress" class="button ghost" type="button" disabled>Redo</button></div>
       <div class="toolbar" id="chartNavigationControls" aria-label="Chart tools">
         <button id="zoomOut" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
-        <span id="zoomValue" class="zoom-value">100%</span>
+        <label class="zoom-entry"><span class="visually-hidden">Chart zoom percentage</span><input id="zoomValue" type="number" min="12" max="500" step="1" value="100" inputmode="numeric" list="zoomPresets" aria-label="Chart zoom percentage"><span aria-hidden="true">%</span></label><datalist id="zoomPresets"><option value="25"><option value="50"><option value="75"><option value="100"><option value="125"><option value="150"><option value="200"><option value="300"><option value="500"></datalist>
         <button id="zoomIn" class="icon-button" title="Zoom in" aria-label="Zoom in">＋</button>
         <button id="fitChart" class="button ghost">Fit chart</button>
         <div class="toolbar-divider"></div>
@@ -116,9 +118,9 @@
       <label class="toggle"><input id="focusHighContrast" type="checkbox"> High contrast</label>
     </div>
     <label class="toggle"><input type="checkbox" id="spotlightMode"> Row spotlight <span class="muted">(dim other rows)</span></label>
-    <div class="guide-buttons"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
-    <div class="guide-buttons"><button id="guideRun" class="button primary" type="button">Complete color run</button></div><div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row →</button></div>
-    <p class="muted">Next stitch marks the current square complete and saves progress. Previous stitch only changes position; it does not erase completion.</p>
+    <label class="tracking-picker">Track by<select id="guideTracking"><option value="row">Rows</option><option value="stitch">Stitches (advanced)</option></select></label><p class="muted row-only">Finish the whole row, then choose Complete &amp; next row. Previous row only moves the guide. To correct a mistake, return to that row and choose Unmark current row, or Undo.</p><div class="guide-buttons advanced-stitches"><button id="guidePrev" class="button ghost" type="button">← Previous stitch</button><button id="guideNext" class="button primary" type="button">✓ Complete &amp; next stitch</button></div>
+    <div class="guide-buttons advanced-stitches"><button id="guideRun" class="button primary" type="button">Complete color run</button></div><div class="guide-buttons"><button id="guidePrevRow" class="button ghost" type="button">← Previous row</button><button id="guideNextRow" class="button secondary" type="button">Next row (without marking) →</button><button id="guideCompleteRow" class="button primary row-only" type="button">Complete &amp; next row</button><button id="guideUnmarkRow" class="button ghost row-only" type="button">Unmark current row</button></div>
+    <p class="muted advanced-stitches">Next stitch marks the current square complete and saves progress. Previous stitch only changes position; it does not erase completion.</p>
   </section>
       <div class="selection-bar">
         <div><span class="eyebrow">CURRENT SELECTION</span><strong id="selectedCell">Tap any square to begin</strong></div>
@@ -196,7 +198,7 @@
       <div class="inspector-section" data-settings-key="project-dashboard"><div class="section-title"><span class="eyebrow">PROJECT DASHBOARD</span><span class="count">LIVE</span></div><div class="dashboard-grid"><div class="dashboard-card"><span>Completed stitches</span><strong id="dashCompleted">0</strong></div><div class="dashboard-card"><span>Remaining stitches</span><strong id="dashRemaining">0</strong></div><div class="dashboard-card"><span>Completed rows</span><strong id="dashRows">0 / 0</strong></div><div class="dashboard-card"><span>Colors in palette</span><strong id="dashColors">1</strong></div><div class="dashboard-card"><span>Current selection</span><strong id="dashLastCell">None</strong></div><div class="dashboard-card"><span>Guide position</span><strong id="dashGuide">Row 1 · Stitch 1</strong></div></div><p class="muted">Useful for checking progress without leaving the editor.</p></div>
       <div class="section-divider"></div>
       <div class="inspector-section" data-settings-key="image-to-chart-"><span class="eyebrow">IMAGE TO CHART</span>
-        <label class="button secondary block upload-label" for="imageFile">▧ Import chart or photo</label><input id="imageFile" class="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp">
+        <p id="imageImportHelp" class="muted">JPEG/JFIF, PNG, WebP, AVIF, GIF and BMP are prepared locally. HEIC/HEIF needs a device decoder; otherwise export a JPEG/PNG copy in Photos or Gallery. Large photos are resized; animation uses the first still frame. Wait for Image loaded before previewing. Original photos and saved stitches stay unchanged.</p><label class="button secondary block upload-label" for="imageFile">▧ Import chart or photo</label><input id="imageFile" aria-describedby="imageImportHelp" class="visually-hidden" type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.heic,.heif,.avif,.gif,.bmp,image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif,image/gif,image/bmp">
         <p class="muted">For ordinary photos, crop away the surroundings before converting. For existing gridded charts, enter the known stitch dimensions.</p>
         <p id="sourcePhotoNotice" class="source-photo-notice" role="status" aria-live="polite" hidden></p><details class="next-soft"><summary>Detect existing chart grid &amp; clean photo background</summary><p class="muted">Grid detection estimates line spacing. Always verify actual square counts before creating the new chart.</p><button id="detectGrid" type="button" class="button ghost block">Analyze visible source grid</button><p id="gridResult" class="muted" role="status">Upload an image first.</p><div class="pair"><label>Columns<input id="gridCols" type="number" min="1" max="200" value="79"></label><label>Rows<input id="gridRows" type="number" min="1" max="300" value="117"></label></div><label>Rotation correction (°)<input id="gridRotation" type="range" min="-8" max="8" step="0.5" value="0"></label><span id="gridRotationValue" class="muted">0°</span><div class="pair"><button id="applyRotation" class="button ghost" type="button">Straighten source image</button><button id="useGrid" class="button secondary" type="button">Use verified grid size</button></div><p class="muted">Light or solid-color backgrounds can be removed using colors sampled from the image corners. Preview on a practice project.</p><label>Background tolerance<input id="bgTolerance" type="range" min="5" max="100" value="35"></label><button id="removeBackground" type="button" class="button ghost block">Remove similar background from edges</button><button id="isolateSubjectCrop" type="button" class="button ghost block">Keep selected rectangular subject crop</button><p class="muted">For a simple subject cutout, drag the existing photo crop box around the subject, then keep that rectangle. This is not automatic person/object segmentation.</p></details>
         <div id="photoCropPanel" class="photo-crop-panel" hidden>
@@ -217,6 +219,17 @@
               <option value="stretch">Fill all cells (may stretch artwork)</option>
             </select>
           </label>
+          <div class="photo-framing-actions">
+            <button id="cropToFill" class="button ghost" type="button">Crop to Fill</button>
+            <button id="undoPhotoCrop" class="button ghost" type="button" disabled>Undo Crop</button>
+          </div>
+          <div id="cropFillReview" hidden>
+            <p>Dimmed areas will be left out. Check the face, lettering and edges before using this crop.</p>
+            <div class="photo-framing-actions">
+              <button id="confirmCropFill" class="button primary" type="button">Use this crop</button>
+              <button id="cancelCropFill" class="button ghost" type="button">Cancel</button>
+            </div>
+          </div>
           <p class="muted" id="cropStats" aria-live="polite"></p>
         </div>
         <div class="photo-enhance-panel">
@@ -225,7 +238,7 @@
             <select id="conversionMode">
               <option value="print">Clean printed artwork (dark, white, red, blue)</option>
               <option value="auto">Natural image palette (automatic colors)</option>
-              <option value="grayscale">Grayscale (choose 2–5 gray shades)</option>
+              <option value="grayscale">Grayscale (2–12 gray shades)</option>
             </select>
           </label>
           <p class="muted">Clean printed artwork suppresses gray fabric shades and emphasizes light letters, the red stripes and the blue flag field.</p>
@@ -240,14 +253,18 @@
         </div>
         <label class="field">Reference image opacity<input id="imageOpacity" type="range" min="0" max="100" value="35"><span class="range-value" id="opacityText">35%</span></label>
         <div class="pair"><label class="field">Photo yarn colors<select id="paletteSize"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label><button id="convertPhoto" class="button primary" type="button">Preview stitches</button></div>
-        <p id="paletteHelp" class="muted"></p><label class="field">Grayscale yarn shades<select id="grayCount"><option>2</option><option selected>3</option><option>4</option><option>5</option></select></label><button id="compareGrays" class="button ghost block" type="button">Compare 2-color vs 4-color grayscale</button>
+        <p id="paletteHelp" class="muted"></p><label class="field">Grayscale yarn shades<select id="grayCount"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>8</option><option>10</option><option>12</option></select></label><details id="grayAdjustments" class="next-soft"><summary>Grayscale detail &amp; tone</summary><p class="muted">Start with 6 or 8 shades for photographs. More shades need more yarn colors. These extra adjustments affect previews only; saved stitches change only when you apply.</p><label class="gray-toggle"><input id="grayAutoBalance" type="checkbox" checked> Balance light and dark automatically</label><label>Lift shadow detail<input id="grayShadows" type="range" min="0" max="60" value="15"></label><label>Midtone brightness<input id="grayMidtones" type="range" min="-50" max="50" value="0"></label><label>Highlight balance<input id="grayHighlights" type="range" min="-50" max="50" value="0"></label><label>Soften speckles<select id="graySmoothing"><option value="0">Off — keep original detail</option><option value="1">Light, preserve edges</option><option value="2">More smoothing</option></select></label><label>Edge definition<input id="grayEdge" type="range" min="0" max="100" value="0"></label><label class="gray-toggle"><input id="grayDither" type="checkbox"> Dither (adds single-stitch texture)</label><p class="muted">Brightness and Contrast above also apply. Dithering is off by default to avoid extra yarn changes. No automatic cartoon filter is used.</p></details><button id="compareGrays" class="button ghost block" type="button">Compare 2-color vs 4-color grayscale</button>
         <label class="field">Preview grid size
           <select id="previewDimensions"><option value="current">Current project size (no resize)</option><option value="large">120 × 165 (19,800 stitches)</option></select>
         </label>
         <button id="compareSizes" class="button secondary block" type="button">Compare 79 × 117 vs 120 × 165</button>
-        <details class="next-soft"><summary>2 / 3 / 4 gray shade comparison</summary><button id="compareGrayTrio" class="button ghost block" type="button">Compare 2, 3 and 4 grays</button><div id="grayTrio" class="gray-trio"></div></details><div id="conversionPreview" class="conversion-preview" hidden>
+        <button id="openCartoon" class="button secondary" type="button" aria-haspopup="dialog" aria-controls="cartoonDialog" aria-expanded="false">Convert to Cartoon</button><details class="next-soft"><summary>Compare grayscale detail</summary><button id="compareGrayTrio" class="button ghost block" type="button">Compare 2, 3, 4, 6, 8 and 12 shades</button><div id="grayTrio" class="gray-trio"></div></details><div id="conversionPreview" class="conversion-preview" hidden>
           <strong id="previewSummary">Conversion preview</strong>
-          <p class="muted">This preview has NOT changed or erased saved stitches. Applying a different grid size creates a separate new project.</p>
+          <div id="photoStitchPair" class="photo-stitch-pair" hidden>
+            <figure><figcaption>Framed photograph</figcaption><canvas id="framedPhoto" aria-label="Photo sampled for this conversion"></canvas></figure>
+            <figure><figcaption>Actual crochet stitches</figcaption><canvas id="pairedStitches" aria-label="Stitch colors from the conversion"></canvas></figure>
+          </div>
+          <p class="muted" id="conversionPreviewHelp">Preview only. Saved stitches change when you confirm Apply.</p>
           <div class="pair"><button id="applyConversion" class="button primary" type="button">Apply chart</button><button id="cancelConversion" class="button ghost" type="button">Discard</button></div>
         </div>
         <p class="muted">Photo conversion reduces fine details to colored squares. Small lettering may require a larger grid and manual color corrections.</p>
@@ -439,10 +456,10 @@
     <option value="chart">Multi-symbol chart</option><option value="fabric">Fabric comparison (experimental)</option>
   </select></label>
   <section id="stitchPhoto" hidden>
-    <p>Offline scan · Photos stay on this device. For charts, dark symbols on a light background work best.</p>
+    <p>Photos stay on this device. Choose JPEG/JFIF, PNG, WebP, AVIF, GIF, BMP or supported HEIC/HEIF. If a photo will not open, save a JPEG or PNG copy. For charts, dark symbols on a light background work best.</p>
     <div class="stitch-controls">
-      <label>Open photo <input id="stitchFile" type="file" accept="image/*"></label>
-      <label>Take photo on phone <input id="stitchCapture" type="file" accept="image/*" capture="environment"></label>
+      <label>Open photo <input id="stitchFile" type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.heic,.heif,.avif,.gif,.bmp,image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif,image/gif,image/bmp"></label>
+      <label>Take photo on phone <input id="stitchCapture" type="file" accept=".jpg,.jpeg,.jfif,.png,.webp,.heic,.heif,.avif,.gif,.bmp,image/jpeg,image/png,image/webp,image/heic,image/heif,image/avif,image/gif,image/bmp" capture="environment"></label>
       <button id="stitchCamera" type="button">Open live camera</button>
     </div>
     <div id="stitchLive" hidden><video autoplay muted playsinline></video><button id="stitchSnap">Take photo</button> <button id="stitchStop">Stop camera</button></div>
@@ -519,5 +536,43 @@
   <script src="./stitch-studio.js" defer></script>
   <script src="./release-config.js" defer></script>
   <script src="./updates.js" defer></script>
+<dialog id="cartoonDialog" aria-labelledby="cartoonTitle">
+  <form method="dialog" class="cartoon-heading"><h2 id="cartoonTitle">Convert to Cartoon</h2><button aria-label="Close Cartoon preview" class="button ghost">×</button></form>
+  <p>Simplify the attached photo into a colorwork chart. Preview uses the crop and chart size chosen in Image to Chart.</p>
+  <div class="cartoon-controls">
+    <label>Preset <select id="cartoonPreset"><option value="balanced">Balanced</option><option value="simple">Simple &amp; Bold</option><option value="detailed">Detailed</option></select></label>
+    <label>Number of Yarn Colors <select id="cartoonColors"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option></select></label>
+    <label>Chart colors <select id="cartoonTone"><option value="color">Color</option><option value="gray">Grayscale</option></select></label>
+  </div>
+  <p id="cartoonPresetHelp"></p>
+  <details id="cartoonAdvanced"><summary>Advanced Settings</summary>
+    <div class="cartoon-controls">
+      <label>Outline Strength <input id="cartoonOutline" type="range" min="0" max="65" aria-describedby="cartoonAdvancedHelp"></label>
+      <label>Detail Preservation <input id="cartoonDetail" type="range" min="0" max="100" aria-describedby="cartoonAdvancedHelp"></label>
+      <label>Color Simplification <input id="cartoonRange" type="range" min="12" max="75" aria-describedby="cartoonAdvancedHelp"></label>
+      <label>Isolated-Stitch Cleanup <input id="cartoonCleanup" type="range" min="0" max="6" aria-describedby="cartoonAdvancedHelp"></label>
+    </div>
+    <p id="cartoonAdvancedHelp">Strengthen darker edges, retain small details, blend similar shades, or merge small color regions. Review eyes, glasses, and other small features before applying.</p>
+  </details>
+  <div class="cartoon-actions">
+    <button id="cartoonPreview" class="button primary" type="button">Preview</button>
+    <button id="cartoonReset" class="button ghost" type="button">Reset</button>
+    <button id="cartoonCompareGray" class="button ghost" type="button" disabled>Compare Direct Grayscale</button>
+    <label><input id="cartoonGrid" type="checkbox" checked> Show grid lines</label>
+  </div>
+  <progress id="cartoonProgress" max="100" value="0" aria-label="Cartoon progress" hidden></progress>
+  <p id="cartoonStatus" role="status"></p>
+  <div class="cartoon-previews">
+    <figure><figcaption>Original Photo · selected crop</figcaption><canvas id="cartoonOriginal" aria-label="Original cropped photograph"></canvas></figure>
+    <figure><figcaption>Cartoon Preview</figcaption><canvas id="cartoonIllustration" aria-label="Simplified photo preview"></canvas></figure>
+    <figure><figcaption>Crochet Chart Preview</figcaption><canvas id="cartoonChart" aria-label="Stitch chart preview"></canvas></figure>
+    <figure hidden><figcaption>Direct Grayscale · same yarn limit</figcaption><canvas id="cartoonDirectChart" aria-label="Direct grayscale stitch chart"></canvas></figure>
+  </div>
+  <div class="cartoon-actions">
+    <button id="cartoonCancel" class="button ghost" type="button">Cancel</button>
+    <button id="cartoonApply" class="button primary" type="button" disabled>Apply to Chart</button>
+  </div>
+</dialog>
+<script src="./cartoon.js" defer></script>
 </body>
 </html>

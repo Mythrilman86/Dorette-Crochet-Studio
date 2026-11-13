@@ -14,6 +14,7 @@
     PDF_FAILED: 'PDF operation did not complete.',
     UPDATE_FAILED: 'Update request did not complete.',
     OFFLINE_FAILED: 'Offline setup or verification did not complete.',
+    OFFLINE_INSTALL: 'Offline installation lifecycle observation.',
     STORAGE_FAILED: 'Local storage is unavailable.'
   };
   function clean(records, now) {
@@ -21,7 +22,7 @@
     return records
       .filter(
         (r) =>
-          r && messages[r.code] && Number.isFinite(r.time) && r.time <= now && r.time >= now - age
+          r && Object.hasOwn(messages,r.code) && Number.isFinite(r.time) && r.time <= now && r.time >= now - age
       )
       .slice(-limit)
       .map((r) => ({
@@ -30,38 +31,30 @@
         category: r.code.split('_')[0].toLowerCase(),
         version: /^\d+\.\d+\.\d+$/.test(r.version) ? r.version : 'unknown',
         platform: ['android', 'ios', 'web'].includes(r.platform) ? r.platform : 'web',
-        severity: 'error'
+        severity: r.code==='OFFLINE_INSTALL'?'info':'error',
+        ...(r.code==='OFFLINE_INSTALL'?offlineDetail(r.offline):{}),
+        count: Math.max(1,Math.min(1000,Math.floor(r.count)||1)),
+        id: typeof r.id==='string'&&/^[a-f0-9]{1,8}-\d{1,12}$/.test(r.id)?r.id:'legacy-'+r.time+'-'+r.code.toLowerCase().replaceAll('_','-')
       }));
+  }
+  function offlineDetail(value){
+    const v=value||{};
+    return {offline:{state:['started','complete','failed'].includes(v.state)?v.state:'failed',stage:['claim','download','verify','complete'].includes(v.stage)?v.stage:'claim',category:['none','CACHE_OWNERSHIP','CACHE_CONTENT_MISMATCH','NETWORK','QUOTA','FETCH_OR_WRITE','INCOMPLETE','STORAGE','TERMINATED_OR_ABORTED'].includes(v.category)?v.category:'STORAGE',elapsed:Math.min(600,Math.max(0,Math.floor(Number(v.elapsed)||0))),completed:Math.min(1000,Math.max(0,Math.floor(Number(v.completed)||0))),total:Math.min(1000,Math.max(0,Math.floor(Number(v.total)||0)))}};
   }
   function create(
     storage,
     clock = Date.now,
     info = () => ({ version: 'unknown', platform: 'web' })
   ) {
-    function read() {
-      try {
-        const raw = storage.getItem(key) || '[]';
-        if (raw.length > maxBytes) return [];
-        return clean(JSON.parse(raw), clock());
-      } catch {
-        return [];
-      }
-    }
-    function record(code) {
-      if (!messages[code]) return;
-      try {
-        const rows = clean([...read(), { time: clock(), code, ...info() }], clock());
-        while (rows.length && new TextEncoder().encode(JSON.stringify(rows)).length > maxBytes)
-          rows.shift();
-        storage.setItem(key, JSON.stringify(rows));
-      } catch {
-        /* Recording must never affect the originating operation. */
-      }
-    }
+    let memory=[],recording=false,reading=false,ignoreStorage=false,sequence=0;const session=Math.floor(Math.random()*0xffffffff).toString(16);
+    function read(){if(reading)return memory.slice();reading=true;try{let disk=[];try{const raw=ignoreStorage?'[]':storage.getItem(key)||'[]';if(raw.length<=maxBytes)disk=clean(JSON.parse(raw),clock());}catch{}const merged=new Map();for(const r of [...disk,...memory]){const old=merged.get(r.id);if(!old||r.count>=old.count)merged.set(r.id,r);}memory=clean([...merged.values()].sort((a,b)=>a.time-b.time),clock());return memory.slice();}finally{reading=false;}}
+    function record(code,details){if(recording||!Object.hasOwn(messages,code))return;recording=true;try{const now=clock(),rows=read(),meta=info();const previous=rows.findLast(r=>r.code===code&&now>=r.time&&now-r.time<10000&&(code!=='OFFLINE_INSTALL'||r.offline?.state===details?.state));if(previous){if(previous.count>=1000)return;previous.count++;}else rows.push({time:now,code,...meta,...(code==='OFFLINE_INSTALL'?offlineDetail(details):{}),id:session+'-'+(++sequence),count:1});while(rows.length>limit){const noise=rows.findIndex(r=>r.code==='APPLICATION_FAILED'||r.code==='OFFLINE_INSTALL');rows.splice(noise<0?0:noise,1);}memory=clean(rows,now);if(previous&&previous.count%25!==0)return;try{storage.setItem(key,JSON.stringify(memory));ignoreStorage=false;}catch{}}catch{}finally{recording=false;}}
+
     return {
       record,
       read,
       clear() {
+        memory=[];ignoreStorage=true;
         try {
           storage.removeItem(key);
         } catch {}

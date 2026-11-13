@@ -12,3 +12,7 @@ input[type=checkbox]{accent-color:#614398}
 button[aria-busy=true]{outline:2px dashed #7954ad;outline-offset:2px}
 #viewport{touch-action:pan-x pan-y}
 #patternLibrary{min-inline-size:0;margin:0;padding:0;border:0}
+/* Build 27: preserve link labels/destinations while separating touch navigation. */
+header{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem 1rem;min-width:0}
+header>a{display:inline-flex;align-items:center;min-height:44px;min-width:0;max-width:100%;padding:.55rem .8rem;border:1px solid #c9bbde;border-radius:.5rem;background:#fff;white-space:normal;overflow-wrap:normal;text-decoration:none}
+header>h1{flex-basis:100%;min-width:0;margin:.25rem 0;overflow-wrap:normal}

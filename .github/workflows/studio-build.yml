@@ -13,23 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/build.mjs web && node scripts/build.mjs mobile
-      - run: node --test tests/*.cjs
-      - name: Verify recovery and backup behavior in Chromium
-        if: github.event_name == 'pull_request'
-        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-protection-browser.cjs
-      - name: Test written patterns in Chromium
-        if: github.event_name == 'pull_request'
-        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-written-pattern-browser.cjs
-      - name: Verify interface and personalization in Chromium
-        if: github.event_name == 'pull_request'
-        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-experience-browser.cjs
-      - name: Verify structural-edit viewport preservation in Chromium
-        if: github.event_name == 'pull_request'
-        run: STUDIO_TEST_BROWSER="$(command -v google-chrome)" node scripts/test-editor-browser.cjs
+      - name: Install isolated browser test dependency
+        run: npm install --prefix "$RUNNER_TEMP/studio-browser" playwright@1.62.1
+      - run: python3 -m pip install pypdf==6.21.4
+      - name: Run complete browser regression suite
+        run: xvfb-run -a env NODE_PATH="$RUNNER_TEMP/studio-browser/node_modules" STUDIO_TEST_HEADFUL=1 STUDIO_TEST_BROWSER="$(command -v google-chrome)" STUDIO_BROWSER="$(command -v google-chrome)" node scripts/test-all.mjs
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").web.version) process.exit(1)'

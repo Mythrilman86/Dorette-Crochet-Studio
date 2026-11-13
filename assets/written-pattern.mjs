@@ -174,7 +174,7 @@ $('add').onclick=run(async()=>{
  let doc;
  try{doc=await loadPdf(new Uint8Array(await file.arrayBuffer()));}
  catch{throw Error('This PDF could not be opened. Check that it is valid and does not require a password.');}
- try{if(doc.numPages>300)throw Error('This prototype supports up to 300 PDF pages.');}
+ try{if(doc.numPages>300)throw Error('Written Pattern Companion supports up to 300 PDF pages.');}
  finally{await doc.loadingTask.destroy();}
  const entry={id:crypto.randomUUID(),name,instructions:[],current:null};
  await transaction(['patterns','documents'],'readwrite',tx=>{
@@ -215,7 +215,7 @@ function marker(existing){
   box:draft?.page===page?draft.box:null,note:existing?.note||'',done:existing?.done||false};
 }
 $('commit').onclick=run(async()=>{
- if(pattern.instructions.length>=300)throw Error('This prototype supports up to 300 instruction markers.');
+ if(pattern.instructions.length>=300)throw Error('Written Pattern Companion supports up to 300 instruction markers.');
  const row=marker();
  await save({...pattern,instructions:[...pattern.instructions,row]});
  $('instructions').value=row.id;

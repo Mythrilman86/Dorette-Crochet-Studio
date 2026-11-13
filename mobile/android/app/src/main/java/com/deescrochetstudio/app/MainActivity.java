@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle state) {
         registerPlugin(StudioFiles.class);
+        registerPlugin(StudioImageImport.class);
         registerPlugin(StudioUpdates.class);
         super.onCreate(state);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {

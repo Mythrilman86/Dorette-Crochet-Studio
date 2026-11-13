@@ -54,7 +54,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
   const url = 'http://127.0.0.1:' + server.address().port;
   const edge = cp.spawn(browser, [
-    '--headless=new','--disable-gpu','--no-first-run','--remote-debugging-port=0',
+    '--headless=new','--disable-extensions','--disable-gpu','--no-first-run','--remote-debugging-port=0',
     '--user-data-dir='+profile,'about:blank'
   ], {windowsHide:true});
   try {

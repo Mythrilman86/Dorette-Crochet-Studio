@@ -1,0 +1,8 @@
+Glasses: Grace Hopper, U.S. Navy public-domain photograph from Matplotlib sample data.
+https://commons.wikimedia.org/wiki/File:Grace_hopper.jpg
+https://github.com/matplotlib/matplotlib/blob/v3.10.0/lib/matplotlib/mpl-data/sample_data/grace_hopper.jpg
+
+Astronaut: NASA photograph of Eileen Collins, distributed as public-domain test data by scikit-image.
+https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut
+Shadows, busy-background, and low-resolution are crops/resizes of that photograph.
+Star is an original geometric test illustration.
