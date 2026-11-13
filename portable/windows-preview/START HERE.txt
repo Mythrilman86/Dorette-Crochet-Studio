@@ -1,5 +1,5 @@
 DEE'S CROCHET STUDIO - WINDOWS
-Version 2.7.0 Release Candidate 1 (Android version code 33).
+Version 2.7.1 preparation candidate (Android version code 34).
 
 UPDATING AFTER APPROVAL ONLY
 1. Wait for saved status, back up projects and workspace settings, and close the existing Studio tabs.

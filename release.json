@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.7.0",
-    "notes": "New 80 \u00d7 110 project preset, Crop to Fill and paired previews, row tracking and photo tools. Pattern Creator (Beta) and PDF Publisher (Beta) are included; publishing supports Graph / Colorwork."
+    "version": "2.7.1",
+    "notes": "Fixes narrow Recycle Bin action-label wrapping, including enlarged text and bulk selection. Retains the prepared v2.7.0 chart, photo, row-tracking, Pattern Creator (Beta) and PDF Publisher (Beta) features."
   },
   "ios": null,
-  "version": "2.7.0",
-  "notes": "New 80 \u00d7 110 project preset, Crop to Fill and paired previews, row tracking and photo tools. Pattern Creator (Beta) and PDF Publisher (Beta) are included; publishing supports Graph / Colorwork."
+  "version": "2.7.1",
+  "notes": "Fixes narrow Recycle Bin action-label wrapping, including enlarged text and bulk selection. Retains the prepared v2.7.0 chart, photo, row-tracking, Pattern Creator (Beta) and PDF Publisher (Beta) features."
 }

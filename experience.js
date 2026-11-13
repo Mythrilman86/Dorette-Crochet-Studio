@@ -182,11 +182,12 @@
     command('whatsNew', () => {
       news.content.replaceChildren();
       paragraph(news.content, `${version()} · ${platform()}`);
+      paragraph(news.content, '2.7.1 — Recycle Bin action labels wrap in narrow panels, including enlarged text and bulk selection. Includes the feature set prepared for the unpublished 2.7.0 candidate.');
       paragraph(
         news.content,
         '2.7.0 — New 80 × 110 project preset, movable Crop to Fill, framed-photo/stitch previews, improved grayscale and optional Cartoon preparation, row tracking, Pattern Creator (Beta) and PDF Publisher (Beta).'
       );
-      const releaseLink = document.createElement('a'); releaseLink.href='./release-notes.html'; releaseLink.textContent='Read v2.7.0 release notes and installation guidance'; news.content.append(releaseLink);
+      const releaseLink = document.createElement('a'); releaseLink.href='./release-notes.html'; releaseLink.textContent='Read v2.7.1 release notes and installation guidance'; news.content.append(releaseLink);
       paragraph(
         news.content,
         '2.6.0 — Personalized interface, clearer navigation, local diagnostics, enlarged crochet previews, original motifs and improved Crochet View controls.'
