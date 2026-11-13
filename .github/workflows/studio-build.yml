@@ -23,6 +23,16 @@ jobs:
       - run: python3 -m pip install pypdf==6.21.4
       - name: Run complete browser regression suite
         run: xvfb-run -a env NODE_PATH="$RUNNER_TEMP/studio-browser/node_modules" STUDIO_TEST_HEADFUL=1 STUDIO_TEST_BROWSER="$(command -v google-chrome)" STUDIO_BROWSER="$(command -v google-chrome)" node scripts/test-all.mjs
+      - name: Upload temporary Build 26 diagnostic evidence
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/validation/v2.7.0-build26-diagnostics' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: temporary-build26-diagnostics
+          path: |
+            publication-test-output/Build26-layout-measurements.json
+            publication-test-output/Build26-Recycle-*.png
+          retention-days: 3
+          if-no-files-found: warn
       - name: Verify release tag
         if: github.ref_type == 'tag'
         run: node -e 'if (process.env.GITHUB_REF_NAME !== "v" + require("./release.json").web.version) process.exit(1)'
