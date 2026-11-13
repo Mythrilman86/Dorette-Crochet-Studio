@@ -477,7 +477,6 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
  .project-bin-info strong{display:block;white-space:nowrap;text-overflow:ellipsis}
  .project-bin-actions{flex-direction:column}
  .project-bin-actions button{flex:0 0 auto;width:100%}
- .project-bin .project-bin-actions button,#recycleSelectionControls .button{overflow-wrap:anywhere}
  .project-bin-row>.recycle-select-row{gap:4px}
 }
 @container recycle-bin (min-width:460px){
@@ -486,6 +485,7 @@ input[type=checkbox],input[type=radio]{width:20px!important;min-width:20px;paddi
  .project-bin-actions button{flex:0 1 auto}
 }
 .project-bin .button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:normal}
+.project-bin .project-bin-actions button,#recycleSelectionControls .button{overflow-wrap:anywhere}
 
 /* Build 27: active Projects and selection controls follow their real panel width. */
 .sidebar{min-width:0;container-name:projects-panel;container-type:inline-size}
