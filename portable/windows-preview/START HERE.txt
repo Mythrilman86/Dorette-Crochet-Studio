@@ -1,60 +1,84 @@
 DEE'S CROCHET STUDIO - WINDOWS
-Version 2.7.1 preparation candidate (Android version code 34).
+Version 2.7.1 (Android version code 34).
 
-UPDATING AFTER APPROVAL ONLY
-1. Wait for saved status, back up projects and workspace settings, and close the existing Studio tabs.
-2. Use the old folder's Stop Dee's Studio.cmd. Keep that folder as a fallback.
-3. Extract this new ZIP into a separate permanent folder and run its Open launcher.
-4. Use the same regular browser profile and http://127.0.0.1:17828.
-5. If Studio charts opens with an update message, wait for the update to finish
-   preparing, then choose Save and update. Do not clear browser/site data.
-6. Pattern Creator (Beta) remains available from the navigation. Existing charts and
-   drafts remain in the same browser storage; copying the folder is not a backup.
+BEFORE YOU START
+Use the separately approved Windows package and its checksum. Keep your existing
+installation and external backups until you have checked your work in this version.
+
+BACK UP BEFORE UPDATING
+Wait for saved status. Export each kind of work you use:
+- Studio chart-library ZIP: editable charts and their progress.
+- Settings & Layout JSON: preferences and layout, not project contents.
+- Written Pattern .deewritten backups and their exact original PDFs.
+- Pattern Creator .deepattern backups: drafts, images, chart references and snapshots.
+Save these files outside browser storage. Do not overwrite your only backup.
+A finished PDF is for reading/printing; it is not an editable pattern backup.
+
+UPDATING AN EXISTING WINDOWS FOLDER
+These steps apply to an existing Windows installation, including private Build 32,
+when it uses the same Windows account, browser profile and address below.
+1. Save and back up your work, then close Studio tabs.
+2. Run the old folder's Stop Dee's Studio.cmd. Keep that folder as a recovery option.
+3. Extract the new ZIP to a separate permanent folder. Keep all files together.
+4. Run Open Dee's Studio.cmd using the same regular browser profile and
+   http://127.0.0.1:17828 (not localhost or another port).
+5. If Studio charts offers an update, wait for preparation, then choose Save and
+   update. Do not clear browser/site data. Allow offline setup to finish.
+6. Check saved charts, progress, Written Patterns and Creator drafts before continuing.
+   Copying the program folder is not a backup of those browser records.
+
+COMING FROM PUBLIC v2.6.0 OR ANOTHER DEVICE/BROWSER
+If your earlier Windows package already used the exact address/profile above,
+follow the Windows update steps. Otherwise export supported backups from the
+original installation and transfer them manually before restoring in this one.
+The public website, Android app, different browsers and different browser profiles
+have separate storage. Their data does not appear here automatically, even on the
+same laptop. There is no cloud account or automatic synchronization.
+Use the matching restore tool for chart ZIP, Settings/Layout JSON, .deewritten and
+.deepattern files. Where offered, Preview restore and Restore as copy create a new
+independent copy. Keep the original installation and backup until the copy is checked.
+Older public versions may not support every newer Creator or backup feature.
+Read Storage and Backups.txt for the exact format-specific instructions.
 
 FIRST SETUP
-1. Copy the ZIP to the laptop and choose Extract All.
-2. Put the extracted folder somewhere permanent, for example Documents\Dees Studio.
-   Do not run the launcher inside the ZIP. Keep all files together.
-3. Double-click Open Dee's Studio.cmd. A small window may appear briefly.
-   It starts a local helper and opens Pattern Creator (Beta) in Edge (or Chrome).
-4. After approval, use a disposable chart and a wide test photo. In Image to
-   Chart, choose Crop to Fill. Review the dimmed edges and use this crop.
-5. Drag the crop, then choose Preview stitches. Compare the framed photograph
-   with the stitch chart. Discard, then preview again. Apply only to the test
-   chart and confirm that it saves.
-
-ROLLBACK
-Keep the accepted Build 32 folder and the backups made before the upgrade.
-Stop this candidate with its Stop launcher. Open Build 32 from its original folder
-using the same address and browser profile. If Studio offers Save and update,
-wait for preparation and confirm so the earlier files can take control.
-Keep browser/site data in place. Check that your charts and drafts reopen.
+1. Choose Extract All on the ZIP. Do not run the launcher from inside the ZIP.
+2. Use a permanent folder, for example Documents\Dees Studio.
+3. Double-click Open Dee's Studio.cmd. It starts the local helper and opens the
+   browser compatibility check, then Pattern Creator (Beta), in Edge or Chrome.
+4. Studio charts and Written Patterns are available in the navigation. Restore
+   supported backups if needed, or create a new project.
+5. Wait for offline readiness and check reopening before relying on offline access.
 
 EVERYDAY USE
-Use the same regular browser and browser profile. Do not use InPrivate/Incognito.
-The fixed address is http://127.0.0.1:17828 (not localhost and not another port).
-Pattern Creator (Beta), Studio charts and Written Patterns are available in the header.
-The local helper does not need internet. All app files, PDF tools and fonts are included.
+Use the same Windows account, regular browser and profile. Avoid InPrivate/Incognito.
+The fixed address is http://127.0.0.1:17828. Edge and Chrome do not share project data.
+The local helper works without internet; app files, PDF tools and fonts are included.
+Optional external links and update checks require a connection. They do not sync work.
+Back up externally after important changes and before moving devices or browsers.
 
-FINISHING
-Wait until edits are saved. Close Studio tabs. Double-click Stop Dee's Studio.cmd.
-This stops only this local helper; it does not erase browser projects or backups.
-Closing the browser alone does not stop the helper. Repeated Open launches reuse it.
-Restart the helper with Open Dee's Studio.cmd whenever needed, even without internet.
+FINISHING AND RESTARTING
+Wait until edits are saved. Close Studio tabs and run Stop Dee's Studio.cmd.
+It stops this local helper without erasing projects or external backups. Closing the
+browser alone does not stop the helper. Repeated Open launches reuse the running helper.
+Use Open Dee's Studio.cmd to restart it, including while offline.
 
-BACK UP YOUR WORK
-At the end of each work session, prepare a complete .deepattern backup and save it
-outside Studio. Read Storage and Backups.txt for the exact steps.
-A finished PDF is for reading/printing. It is not an editable pattern backup.
+RECOVERY
+If saving or updating fails, keep the current tab/profile and all external backups.
+Do not clear browser/site data or uninstall a browser as a repair step.
+Keep your previous approved package folder, if you have one. Stop this helper
+normally before using another folder at the same fixed address.
+Changing folders does not guarantee that an older version understands newer drafts,
+settings or backups. Use backups supported by that version and preserve originals.
+Public website users can return to their original website/profile, but new Windows
+edits will not automatically appear there. Follow Storage and Backups.txt and
+Troubleshooting.txt before restoring copies or changing installations.
 
 REQUIREMENTS
 Windows 10 or 11 able to run a current supported Microsoft Edge or Chrome,
 Windows PowerShell 5.1 (included with normal Windows 10/11), and writable browser storage.
-No Node, Python, compiler, new executable or administrator access is needed.
+No Node, Python, compiler or administrator access is required by this package.
 Windows 7/8/8.1, Edge Legacy, Internet Explorer, Windows RT and restricted S-mode
 or organization-managed environments are not certified by this package.
-If PowerShell/scripts are blocked by policy, do not weaken the machine's policy;
-ask the laptop owner for help. See Troubleshooting.txt.
-
-This laptop's exact age, browser, memory and physical touchscreen have not been
-checked. Touch emulation is not proof of hardware compatibility.
+If scripts are blocked by policy, do not weaken the policy; ask the laptop owner
+for help. See Troubleshooting.txt. Compatibility varies by hardware and browser;
+software automation or touch emulation does not certify every physical laptop.

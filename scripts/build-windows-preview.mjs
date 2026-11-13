@@ -4,7 +4,7 @@ import {resolve,join,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 const baseline='791ea0f1be4faba1195bf694accc0f1f8b45e786';
 const out=resolve(process.argv[2]||'windows-preview-output');
-const allowed=name=>["service-worker.js", "styles.css", "experience.js", "release-config.js", "release.json", "release-notes.html", "mobile/package.json", "mobile/package-lock.json", "mobile/android/app/build.gradle", "mobile/ios/App/App.xcodeproj/project.pbxproj", "portable/windows-preview/START HERE.txt", "docs/release-2.7.1.md", "docs/release-2.7.1-installation.md", "scripts/build25-creator-scenario.txt", "scripts/test-build26-browser.cjs", "scripts/build-windows-preview.mjs", "tests/build27-preservation.test.cjs"].includes(name);
+const allowed=name=>["service-worker.js", "styles.css", "experience.js", "release-config.js", "release.json", "release-notes.html", "mobile/package.json", "mobile/package-lock.json", "mobile/android/app/build.gradle", "mobile/ios/App/App.xcodeproj/project.pbxproj", "portable/windows-preview/START HERE.txt", "docs/release-2.7.1.md", "docs/release-2.7.1-installation.md", "scripts/build25-creator-scenario.txt", "scripts/test-build26-browser.cjs", "scripts/build-windows-preview.mjs", "scripts/test-publisher-browser.cjs", "scripts/test-rc1-browser.cjs", "tests/build27-preservation.test.cjs"].includes(name);
 const changed=spawnSync('git',['diff','--name-only',baseline],{encoding:'utf8'});
 if(changed.status||changed.stdout.trim().split(/\r?\n/).filter(Boolean).some(name=>!allowed(name)))throw Error('Application source differs from the accepted sanitized v2.7.0 base and reviewed v2.7.1 scope; refusing to package unreviewed changes.');
 const untracked=spawnSync('git',['ls-files','--others'],{encoding:'utf8'});
