@@ -1,4 +1,4 @@
-# Updating safely to v2.7.2 — proposed, not yet published
+# Updating safely to v2.7.2
 
 1. Save your work. Keep external backups of every kind you use: chart-library ZIP; Settings & Layout JSON; Written Pattern .deewritten files AND their original PDFs; Pattern Creator .deepattern files. A finished PDF is not an editable project backup. Keep older backups too.
 2. Windows ONE-TIME transition from an older package: close saved Studio tabs, stop only the old Studio helper normally, retain its folder, and extract the verified new ZIP into a separate permanent folder. Open its Open Dee's Studio.cmd using the SAME Windows account and Edge/Chrome profile, at http://127.0.0.1:17828. Never substitute localhost or another port. Do not run old/new helpers together. File:// or production-website data are separate and require deliberate supported backup transfer; they will not automatically appear here.
