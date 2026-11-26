@@ -15,4 +15,66 @@ const accepted={
   "assets/publisher/contrast.mjs": "2f380d094f5e3554dc28d5f462edb985f8edfb329dbe4b27444864db3e4cef73",
   "experience.js": "7d338d0edb92b6e99dfac0dd6b79e26a7e16e8fe140e3182b895d5aa94ae70b4"
 };
-test('Build27 preserves accepted restore-as-copy, backup/schema, Companion and publisher modules with approved interface changes',()=>{for(const [file,hash] of Object.entries(accepted)){let content=fs.readFileSync(path.join(__dirname,'..',file),'utf8').replaceAll('\r\n','\n');for(const [current,previous] of approvedReleaseWording[file]||[])content=content.replace(current,previous);if(file==='pattern-creator.html')content=content.replace(/<h3>Authoring images<\/h3><p>[^<]*<\/p>/,"<h3>Authoring images</h3><p>PNG/JPEG only: 5 MiB and 16 megapixels per image; 50 MiB total including snapshot-retained originals. Oversized images are optimized locally. The optimized file becomes this draft’s authoring master; the Gallery original is unchanged. Unmodified imports keep their bytes. Future buyer exports must remove sensitive metadata.</p>").replace(/(<input id="photoFiles" type="file" accept=")[^"]+/,'$1image/png,image/jpeg');content=content.replace('<link rel="stylesheet" href="./control-feedback.css">\n','');assert.equal(crypto.createHash('sha256').update(content).digest('hex'),hash,file+' changed from accepted Build26');}});
+// Exact reviewed Report #220 update-safety additions. No historical hash is changed.
+// Everything outside these mandatory single-occurrence blocks remains fingerprinted.
+const approvedUpdateChanges = {
+  "assets/creator/ui.mjs": [
+    [
+      "\nwindow.StudioUpdateSafety?.register('creator',async()=>{if(busy)return false;await save();await chain;return !dirty&&!busy&&!pendingImages.size;});\n",
+      ""
+    ]
+  ],
+  "pattern-creator.html": [
+    [
+      "<head><script src=\"./update-safety.js\"></script>",
+      "<head>"
+    ]
+  ],
+  "assets/written-pattern.mjs": [
+    [
+      "\n// A retained marker is a saved selection, not necessarily an unsaved edit.\nlet pendingImportTitle=false;\n$('patternTitle').addEventListener('input',()=>{pendingImportTitle=true;});\nfunction writtenUnsaved(){\n const row=current(),selected=pattern?.instructions.find(entry=>entry.id===draft?.id);\n const changedMarker=!!draft&&(!selected||JSON.stringify(draft)!==JSON.stringify(selected));\n return pendingImportTitle||!!$('pdf').files?.length||changedMarker||\n   $('note').value!==(row?.note||'')||$('label').value!==(draft?.label||'');\n}\nwindow.StudioUpdateSafety?.register('companion',async()=>{\n if(!db||saving||operationPending||drag||writtenUnsaved())return false;\n await saveChain;return true;\n});\nwindow.addEventListener('beforeunload',event=>{\n if(saving||operationPending||writtenUnsaved()){event.preventDefault();event.returnValue='';}\n});\n",
+      ""
+    ],
+    [
+      " await openPattern(entry.id);await refreshLibrary();$('pdf').value='';pendingImportTitle=false;say('PDF imported successfully.');",
+      " await openPattern(entry.id);await refreshLibrary();$('pdf').value='';say('PDF imported successfully.');"
+    ]
+  ],
+  "assets/publisher/ui.mjs": [
+    [
+      "\nwindow.StudioUpdateSafety?.register('publisher',()=>false);\n",
+      ""
+    ]
+  ]
+};
+function normalizeApprovedUpdates(file, content) {
+  for (const [current, previous] of approvedUpdateChanges[file] || []) {
+    assert.equal(content.split(current).length - 1, 1,
+      file + ': approved update-safety block must occur exactly once');
+    content = content.replace(current, previous);
+  }
+  return content;
+}
+test('Build27 preserves accepted restore-as-copy, backup/schema, Companion and publisher modules with approved interface changes',()=>{for(const [file,hash] of Object.entries(accepted)){let content=fs.readFileSync(path.join(__dirname,'..',file),'utf8').replaceAll('\r\n','\n');content=normalizeApprovedUpdates(file,content);for(const [current,previous] of approvedReleaseWording[file]||[])content=content.replace(current,previous);if(file==='pattern-creator.html')content=content.replace(/<h3>Authoring images<\/h3><p>[^<]*<\/p>/,"<h3>Authoring images</h3><p>PNG/JPEG only: 5 MiB and 16 megapixels per image; 50 MiB total including snapshot-retained originals. Oversized images are optimized locally. The optimized file becomes this draft’s authoring master; the Gallery original is unchanged. Unmodified imports keep their bytes. Future buyer exports must remove sensitive metadata.</p>").replace(/(<input id="photoFiles" type="file" accept=")[^"]+/,'$1image/png,image/jpeg');content=content.replace('<link rel="stylesheet" href="./control-feedback.css">\n','');assert.equal(crypto.createHash('sha256').update(content).digest('hex'),hash,file+' changed from accepted Build26');}});
+
+test('approved update normalization rejects missing, changed and duplicated blocks', () => {
+  for (const [file, edits] of Object.entries(approvedUpdateChanges)) {
+    const original = fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replaceAll('\r\n', '\n');
+    for (const [current] of edits) {
+      for (const replacement of ['', current + current, current.replace(/[^\s]/, '!')]) {
+        const changed = original.replace(current, replacement);
+        assert.throws(() => normalizeApprovedUpdates(file, changed), /exactly once/, file);
+      }
+    }
+  }
+});
+
+test('normalization retains every byte outside the approved blocks', () => {
+  for (const file of Object.keys(approvedUpdateChanges)) {
+    const content = fs.readFileSync(path.join(__dirname, '..', file), 'utf8').replaceAll('\r\n', '\n');
+    const baseline = normalizeApprovedUpdates(file, content);
+    const changed = normalizeApprovedUpdates(file, content + '// unapproved unrelated change\n');
+    assert.notEqual(crypto.createHash('sha256').update(changed).digest('hex'),
+      crypto.createHash('sha256').update(baseline).digest('hex'), file);
+  }
+});

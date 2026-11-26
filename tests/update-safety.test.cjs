@@ -29,3 +29,40 @@ test('Companion new marker, unsaved note and renamed marker remain protected',()
 test('Companion pending import title/file remain protected',()=>{const h=companion();h.context.pendingImportTitle=true;assert.equal(h.dirty(),true);h.context.pendingImportTitle=false;h.elements.pdf.files=[{}];assert.equal(h.dirty(),true);});
 
 test('failed preference removal and transaction creation fail closed',async()=>{for(const kind of ['remove','transaction']){const h=safety();h.s.register('chart',()=>true);if(kind==='remove'){const s=new h.Storage();s.fail=true;assert.throws(()=>s.removeItem('layout'));}else{const db=new h.DB();db.fail=true;assert.throws(()=>db.transaction('projects','readwrite'));}assert.equal(await h.s.ready(),false);}});
+
+// Execute the actual shipped Creator registration with fictional state and controlled saves.
+function creatorGuard(overrides={}) {
+ const source=fs.readFileSync(path.join(root,'assets/creator/ui.mjs'),'utf8');
+ const lines=source.split('\n').filter(line=>line.startsWith("window.StudioUpdateSafety?.register('creator',"));
+ assert.equal(lines.length,1);
+ let guard,saveCalls=0;
+ const state={busy:false,dirty:false,pendingImages:new Map(),chain:Promise.resolve(),
+   save:async()=>{saveCalls++;},...overrides,
+   window:{StudioUpdateSafety:{register(name,fn){assert.equal(name,'creator');guard=fn;}}}};
+ vm.runInNewContext(lines[0],state);
+ assert.equal(typeof guard,'function');
+ return {state,guard,calls:()=>saveCalls};
+}
+test('actual Creator update guard refuses busy state without saving',async()=>{
+ const h=creatorGuard({busy:true});assert.equal(await h.guard(),false);assert.equal(h.calls(),0);
+});
+test('actual Creator update guard awaits both saving and its write chain',async()=>{
+ let saved,writeDone;const order=[];
+ const save=new Promise(r=>saved=r),chain=new Promise(r=>writeDone=r);
+ const h=creatorGuard({dirty:true,chain,save:async()=>{order.push('save');await save;h.state.dirty=false;}});
+ let settled=false;const ready=h.guard().then(value=>{settled=true;return value;});
+ await Promise.resolve();assert.deepEqual(order,['save']);assert.equal(settled,false);
+ saved();await new Promise(r=>setImmediate(r));assert.equal(settled,false);
+ writeDone();assert.equal(await ready,true);
+});
+test('actual Creator update guard rejects remaining dirty work, new busy state and pending images',async()=>{
+ for(const overrides of [{dirty:true},{pendingImages:new Map([['fictional',{}]])}]){
+  assert.equal(await creatorGuard(overrides).guard(),false);
+ }
+ const h=creatorGuard();h.state.save=async()=>{h.state.busy=true;};assert.equal(await h.guard(),false);
+});
+test('actual Creator update guard propagates save and write-chain errors',async()=>{
+ await assert.rejects(creatorGuard({save:async()=>{throw Error('fictional save failed');}}).guard(),/save failed/);
+ const h=creatorGuard({chain:Promise.resolve().then(()=>{throw Error('fictional write failed');})});
+ await assert.rejects(h.guard(),/write failed/);
+});
