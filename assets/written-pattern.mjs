@@ -180,7 +180,7 @@ $('add').onclick=run(async()=>{
  await transaction(['patterns','documents'],'readwrite',tx=>{
   tx.objectStore('patterns').add(entry);tx.objectStore('documents').add(file,entry.id);
  });
- await openPattern(entry.id);await refreshLibrary();$('pdf').value='';say('PDF imported successfully.');
+ await openPattern(entry.id);await refreshLibrary();$('pdf').value='';pendingImportTitle=false;say('PDF imported successfully.');
 },'Importing PDF…');
 $('open').onclick=run(()=>openPattern($('patterns').value),'Opening pattern…');
 $('remove').onclick=run(async()=>{
@@ -415,3 +415,20 @@ init.then(async database=>{
   if(id&&[...$('patterns').options].some(option=>option.value===id))await openPattern(id);
  }finally{$('patternLibrary').disabled=false;}
 }).catch(error=>say('Local pattern storage is unavailable: '+error.message));
+
+// A retained marker is a saved selection, not necessarily an unsaved edit.
+let pendingImportTitle=false;
+$('patternTitle').addEventListener('input',()=>{pendingImportTitle=true;});
+function writtenUnsaved(){
+ const row=current(),selected=pattern?.instructions.find(entry=>entry.id===draft?.id);
+ const changedMarker=!!draft&&(!selected||JSON.stringify(draft)!==JSON.stringify(selected));
+ return pendingImportTitle||!!$('pdf').files?.length||changedMarker||
+   $('note').value!==(row?.note||'')||$('label').value!==(draft?.label||'');
+}
+window.StudioUpdateSafety?.register('companion',async()=>{
+ if(!db||saving||operationPending||drag||writtenUnsaved())return false;
+ await saveChain;return true;
+});
+window.addEventListener('beforeunload',event=>{
+ if(saving||operationPending||writtenUnsaved()){event.preventDefault();event.returnValue='';}
+});

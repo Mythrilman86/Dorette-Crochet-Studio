@@ -1,7 +1,7 @@
 (() => {
   const config = window.StudioRelease;
   if (!config) return;
-  document.getElementById('studioBuildBadge').textContent = `v${config.version} · Local workspace`;
+  document.getElementById('studioBuildBadge').textContent = `v${config.version} · ${config.development ? "Update development" : "Local workspace"}`;
   const panel = document.getElementById('studioUpdates');
   panel.hidden = false;
   const button = panel.querySelector('button');

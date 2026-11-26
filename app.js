@@ -4688,7 +4688,11 @@ function setupReliabilityTools(){
 window.StudioBeforeUpdate = async () => {
  await flushSave();
  await writeChain;
- return !needsSave() && !memoryOnly;
+ return !!db && !!active && !pointers.size && ![...document.querySelectorAll('input[type=file]')].some(input=>input.files?.length) && !needsSave() && !memoryOnly && !studioReadOnly && !organizationBusy && !majorCopyPending && !reloadingProjects && !drawingPending && !pendingConversion && !cropProposal && !placingText && !pendingCleanup;
+};
+window.StudioUpdateSafety?.register('charts', () => window.StudioBeforeUpdate());
+window.StudioBeforeWebsiteUpdate = async () => {
+ return !!window.StudioUpdateSafety && await window.StudioUpdateSafety.ready();
 };
 function setupServiceWorkerUpdates(){
  const offlineStatus=$('offlineSetupStatus');
@@ -4755,15 +4759,16 @@ function setupServiceWorkerUpdates(){
    }
    probe(1);
  }
- navigator.serviceWorker.addEventListener('controllerchange',()=>{
+ navigator.serviceWorker.addEventListener('controllerchange',async()=>{
    checkOfflineReady();
-   if(installingUpdate&&!needsSave())location.reload();
+   if(installingUpdate&&await window.StudioBeforeWebsiteUpdate())location.reload();
    else if(installingUpdate)toast('Update installed. Finish saving, then reload to open it.');
    installingUpdate=false;
  });
  function readyUpdate(reg){if(!reg?.waiting||!navigator.serviceWorker.controller)return;
    $('updateAvailable').hidden=false;
-   $('updateAvailableText').textContent='A newer Studio version is ready. Save your changes before applying the update.';
+   $('updateAvailableText').textContent='Update Available. Save and close other Studio windows first. Your external backups remain separate.';
+   const waiting=reg.waiting;window.StudioDescribeUpdate?.(waiting).then(next=>{if(reg.waiting===waiting&&next.version)$('updateAvailableText').textContent='Update Available: '+next.version+'. '+next.notes.slice(0,240)+' Save and close other Studio windows first.';}).catch(()=>{});
  }
  async function registerOffline(){
    const reg=await navigator.serviceWorker.register('./service-worker.js');
@@ -4797,12 +4802,15 @@ function setupServiceWorkerUpdates(){
    try{await registration.update();readyUpdate(registration);checkOfflineReady();if(!registration.waiting)toast('Update check complete. No ready update detected.');}
    catch(e){globalThis.studioDiagnostics?.record('UPDATE_FAILED');toast('Update check failed: '+e.message);}
  });
+ $('deferWebsiteUpdate').addEventListener('click',()=>{$('updateAvailable').hidden=true;});
  $('installReadyUpdate').addEventListener('click',async()=>{
    if(!registration?.waiting)return toast('There is no update ready to install.');
-   flushSave();try{await writeChain;if(needsSave()){toast('Saving is still in progress. Try again.');return;}}
-   catch{toast('Save failed. Export a private project backup before updating.');return;}
-   if(memoryOnly||failedWrites.size)return toast('Save your projects before applying the update.');
-   installingUpdate=true;registration.waiting?.postMessage({type:'SKIP_WAITING'});
+   if(window.StudioPrepareWebsiteUpdate){
+     try{await window.StudioPrepareWebsiteUpdate(registration.waiting);}
+     catch(error){toast(error.message);}
+     return;
+   }
+   toast('Update safety checks are unavailable. Keep this window open and save external backups.');
  });
 }
 

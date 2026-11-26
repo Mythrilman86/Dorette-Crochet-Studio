@@ -1,5 +1,6 @@
 DEE'S CROCHET STUDIO - WINDOWS
-Version 2.7.1 (Android version code 34).
+Version 2.7.2 — Windows and website update improvements.
+The Android application remains a separate v2.7.1/code34 release.
 
 BEFORE YOU START
 Use the separately approved Windows package and its checksum. Keep your existing
@@ -82,3 +83,14 @@ or organization-managed environments are not certified by this package.
 If scripts are blocked by policy, do not weaken the policy; ask the laptop owner
 for help. See Troubleshooting.txt. Compatibility varies by hardware and browser;
 software automation or touch emulation does not certify every physical laptop.
+
+
+POWERSHELL LAUNCH DISCLOSURE
+Open Dee's Studio.cmd starts Windows PowerShell 5.1 with a temporary
+-ExecutionPolicy Bypass argument. Launcher.ps1 uses the same process-only option
+for the local helper. The Stop command also uses a temporary process option.
+These arguments suppress execution-policy warnings in those child processes;
+they do not change stored CurrentUser/LocalMachine policies and cannot override
+organization Group Policy. Use only the verified official package. If security
+software or organization policy blocks it, stop; do not disable protection,
+change persistent policy or run as administrator to work around the block.

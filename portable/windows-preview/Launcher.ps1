@@ -5,13 +5,14 @@ $package=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'preview-package.json
 function Health {
   try { return (Invoke-WebRequest -UseBasicParsing -Uri ($base+'/__preview_health') -TimeoutSec 2 -Proxy $null).Content | ConvertFrom-Json } catch { return $null }
 }
+$helperIdentity=(Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'UpdateCore.ps1') -Algorithm SHA256).Hash
 $mutex=New-Object Threading.Mutex($false,'Local\DeesStudioPreviewLauncher17828')
 $held=$false
 try {
   $held=$mutex.WaitOne(15000)
   if(-not $held){throw 'Another launcher is starting. Wait a moment and try again.'}
   $health=Health
-  if($health -and ($health.application -ne 'dees-private-windows-preview' -or $health.sourceCommit -ne $package.sourceCommit)){throw 'A different program or preview is using port 17828. Stop that program normally. The storage address will not be changed.'}
+  if($health -and ($health.application -ne 'dees-private-windows-preview' -or ($health.helperIdentity -cne $helperIdentity -or $health.updateProtocol -ne 1 -or $health.installationRoot -cne [IO.Path]::GetFullPath($PSScriptRoot).ToLowerInvariant()))){throw 'A different program or preview is using port 17828. Stop that program normally. The storage address will not be changed.'}
   if(-not $health){
     $probe=New-Object Net.Sockets.TcpClient
     try{$probe.Connect('127.0.0.1',17828);throw 'Port 17828 is already occupied. Nothing was stopped and no alternate port was chosen.'}catch [Net.Sockets.SocketException]{}finally{$probe.Close()}
@@ -26,7 +27,7 @@ try {
     }
     if(-not $health){throw 'The local server could not start. See Troubleshooting.txt and the log in LocalAppData\DeesCrochetStudioPreview. No browser data was cleared.'}
   }
-  if($health.application -ne 'dees-private-windows-preview' -or $health.sourceCommit -ne $package.sourceCommit){throw 'The local address is not this preview. Nothing was changed.'}
+  if($health.application -ne 'dees-private-windows-preview' -or ($health.helperIdentity -cne $helperIdentity -or $health.updateProtocol -ne 1 -or $health.installationRoot -cne [IO.Path]::GetFullPath($PSScriptRoot).ToLowerInvariant())){throw 'The local address is not this preview. Nothing was changed.'}
   Write-Output ('Studio is ready at '+$base)
   if(-not $NoBrowser){
     $folders=@(${env:ProgramFiles(x86)},$env:ProgramFiles,$env:LOCALAPPDATA) | Where-Object {$_}

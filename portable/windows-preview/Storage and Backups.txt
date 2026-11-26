@@ -63,3 +63,12 @@ HELPER STATE
 The helper's small process state and bounded startup/shutdown log live in
 %LOCALAPPDATA%\DeesCrochetStudioPreview. They are not your project database.
 Do not manually delete browser profile folders to troubleshoot the helper.
+
+UPDATER DEVELOPMENT CANDIDATE (NOT A RELEASE)
+The first updater-enabled version requires one reviewed manual package transition.
+Later compatible app-file updates use Updates > Save & Update at the same address.
+Save and close other Studio windows first. Current and previous program versions
+are retained; updates never clear browser storage or merge the four backup formats.
+Keep external backups outside this program folder. If an update fails, keep your
+work open and retain the evidence; do not delete browser data or retry blindly.
+Helper/launcher changes require a separately reviewed manual transition.

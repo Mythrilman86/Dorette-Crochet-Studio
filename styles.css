@@ -568,3 +568,8 @@ body:is([data-studio-mode="create"],[data-studio-mode="crochet"],.crochet-view) 
 @media(max-width:700px){.cartoon-previews{grid-template-columns:1fr}.cartoon-previews canvas{max-height:30rem}}
 #personalizedDialog .personalized-footer{position:sticky;bottom:-1rem;background:#faf7fc;padding:.55rem .2rem;border-top:1px solid #e6dced}
 .cartoon-previews:has(#cartoonDirectChart:not([hidden])) figure:last-child{max-width:28rem}
+
+/* Update notice uses existing styling and remains readable with enlarged phone text. */
+#studioUpdateProgress{margin:1rem;overflow-wrap:anywhere}#studioUpdateProgress .actions{display:flex;flex-wrap:wrap;gap:.6rem}#studioUpdateProgress button{white-space:normal;min-height:44px;max-width:100%}.windows-release-notes{white-space:pre-wrap}
+
+#studioBuildBadge{white-space:normal;overflow-wrap:anywhere;max-width:100%}#updateAvailable{overflow-wrap:anywhere}#updateAvailable button{white-space:normal;max-width:100%;min-height:44px}

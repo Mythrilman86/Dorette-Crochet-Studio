@@ -1,0 +1,50 @@
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),net=require('net'),{spawn,spawnSync}=require('child_process'),assert=require('node:assert/strict');
+const {chromium}=require('../../build32-test-deps/node_modules/playwright');
+const packageDir=path.resolve(process.argv[2]),out=path.resolve(process.argv[3]);
+const pwsh=process.env.STUDIO_TEST_POWERSHELL,python=process.env.STUDIO_TEST_PYTHON;
+if(!pwsh||!python)throw Error('Use existing approved local test runtimes');
+const results=[],hash=b=>crypto.createHash('sha256').update(b).digest('hex');let child,browser,owned=false;
+const record=(name,extra={})=>results.push({name,pass:true,...extra});
+const base='http://127.0.0.1:17828';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function api(action,{post=false,token,version,headers={}}={}){return fetch(base+'/__studio_update/'+action,{method:post?'POST':'GET',headers:{Origin:base,'X-Dees-Request':'1',...(post?{'X-Dees-Update':token,'X-Dees-Version':version}:{}),...headers}});}
+async function dump(page){return page.evaluate(async()=>{
+ const db=await new Promise((r,j)=>{const q=indexedDB.open('dorette-crochet-studio');q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});const result={};for(const s of db.objectStoreNames)result[s]=await new Promise((r,j)=>{const tx=db.transaction(s),req=tx.objectStore(s).getAll();tx.oncomplete=()=>r(req.result);tx.onabort=()=>j(tx.error);});db.close();return {result,prefs:localStorage.getItem('studio.settings.layout.v1')};
+});}
+(async()=>{try{
+ fs.mkdirSync(out,{recursive:false});
+ // Binding test only: never terminate or replace a preexisting server on the storage port.
+ const probe=net.createServer();await new Promise((r,j)=>{probe.once('error',j);probe.listen(17828,'127.0.0.1',r);});await new Promise(r=>probe.close(r));
+ const installed=path.join(out,'Installed'),next=path.join(out,'Future-Package');fs.cpSync(packageDir,installed,{recursive:true});fs.cpSync(packageDir,next,{recursive:true});
+ const mock=`\n# TEST COPY ONLY: public network adapters replaced by exact fictional files.\nfunction Get-StudioRelease { Get-Content -LiteralPath (Join-Path $PSScriptRoot '__fixture-release.json') -Raw | ConvertFrom-Json }\nfunction Save-StudioDownload($candidate,[string]$destination) { $source=Join-Path $PSScriptRoot '__fixture-update.zip'; if((Get-StudioHash $source) -cne $candidate.sha256 -or (Get-Item -LiteralPath $source).Length -ne $candidate.bytes){throw 'Fixture integrity mismatch'}; Copy-Item -LiteralPath $source -Destination $destination }\n`;
+ for(const dir of [installed,next]){const f=path.join(dir,'Server.ps1');let s=fs.readFileSync(f,'utf8');s=s.replace('$active=Get-StudioActive',mock+'\n$active=Get-StudioActive');fs.writeFileSync(f,s);}
+ const meta=JSON.parse(fs.readFileSync(path.join(next,'preview-package.json')));meta.version='2.7.2';meta.development=false;fs.writeFileSync(path.join(next,'preview-package.json'),JSON.stringify(meta));
+ const release=JSON.parse(fs.readFileSync(path.join(next,'www/release.json')));release.web.version='2.7.2';release.version='2.7.2';fs.writeFileSync(path.join(next,'www/release.json'),JSON.stringify(release));
+ const config=path.join(next,'www/release-config.js');fs.writeFileSync(config,fs.readFileSync(config,'utf8').replace("version: '2.7.1'","version: '2.7.2'"));
+ const worker=path.join(next,'www/service-worker.js');fs.writeFileSync(worker,fs.readFileSync(worker,'utf8').replace(/const CACHE = '[^']+';/,"const CACHE = 'dorette-crochet-fictional-windows-update-test';"));
+ // Test-only runtime probe for setting a genuine chart through its normal write queue.
+ for(const dir of [installed,next]){const f=path.join(dir,'www/app.js');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/^initialize\(\)\.catch/m,'window.__updateProbe=s=>eval(s);\ninitialize().catch'));}
+ function manifest(dir){const files=[];function walk(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){const p=path.join(d,e.name);if(e.isDirectory())walk(p);else if(e.name!=='PACKAGE-MANIFEST.json'){const b=fs.readFileSync(p);files.push({path:path.relative(dir,p).replaceAll('\\','/'),bytes:b.length,sha256:hash(b)});}}}walk(dir);fs.writeFileSync(path.join(dir,'PACKAGE-MANIFEST.json'),JSON.stringify({schema:1,applicationSourceCommit:meta.sourceCommit,files}));}
+ manifest(next);
+ const zip=path.join(installed,'__fixture-update.zip');const zipRun=spawnSync(python,['-B','-c','import sys,zipfile,pathlib\np=pathlib.Path(sys.argv[1])\nwith zipfile.ZipFile(sys.argv[2],"x",zipfile.ZIP_DEFLATED) as z:\n for f in p.rglob("*"):\n  if f.is_file():z.write(f,f.relative_to(p).as_posix())',next,zip],{encoding:'utf8'});if(zipRun.status)throw Error(zipRun.stderr);
+ const b=fs.readFileSync(zip),official='https://github.com/Mythrilman86/Dorette-Crochet-Studio/releases/download/v2.7.2/Dees-Crochet-Studio-2.7.2-Windows.zip';
+ fs.writeFileSync(path.join(installed,'__fixture-release.json'),JSON.stringify({draft:false,prerelease:false,tag_name:'v2.7.2',body:'Fictional reviewed update fixture',assets:[{name:'Dees-Crochet-Studio-2.7.2-Windows.zip',browser_download_url:official,state:'uploaded',digest:'sha256:'+hash(b),size:b.length}]}));
+ const local=path.join(out,'Isolated-LocalAppData');fs.mkdirSync(local);child=spawn(pwsh,['-NoLogo','-NoProfile','-File',path.join(installed,'Server.ps1')],{env:{...process.env,LOCALAPPDATA:local},windowsHide:true,stdio:['ignore','pipe','pipe']});let log='';child.stderr.on('data',b=>log+=b.toString().slice(0,1000));child.stdout.on('data',()=>{});
+ let health;for(let i=0;i<100;i++){if(child.exitCode!==null)throw Error('Isolated helper stopped: '+log);try{health=await(await fetch(base+'/__preview_health')).json();break;}catch{await sleep(100);}}
+ assert.equal(health?.updateProtocol,1);const statePath=path.join(local,'DeesCrochetStudioPreview/server.json'),state=JSON.parse(fs.readFileSync(statePath));assert.equal(state.pid,child.pid);assert.equal(state.instance,health.instance);owned=true;record('isolated production loopback helper starts with no policy override',{runtime:'PowerShell7, not WindowsPowerShell5.1'});
+ assert.equal((await api('session',{headers:{Origin:'https://unrelated.invalid'}})).status,403);assert.equal((await api('prepare',{post:true,token:'wrong',version:'2.7.2'})).status,403);assert.equal((await fetch(base+'/__studio_update/session')).status,403);record('real HTTP cross-origin, missing authorization and simple navigation rejected');
+ const session=await(await api('session')).json();const check=await(await api('check')).json();assert.equal(check.candidate.version,'2.7.2');record('real HTTP discovers fixture update via unchanged production selection logic');
+ browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});const ctx=await browser.newContext(),page=await ctx.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(base+'/');await page.waitForFunction(()=>!!window.__updateProbe&&__updateProbe('!!active&&savePhase==="saved"'));
+ await page.evaluate(async()=>{await __updateProbe("(async()=>{active.notes='Fictional Windows updater preservation';active.done[0]=1;await queueWrite(active);})()");localStorage.setItem('studio.settings.layout.v1','{"fictional":"keep"}');});const before=await dump(page);
+ await page.waitForFunction(()=>document.querySelector('#studioUpdateProgress [data-apply]')?.hidden===false,{},{timeout:20000});await page.waitForFunction(()=>document.querySelector('#offlineSetupStatus').textContent.startsWith('Ready for offline'),{},{timeout:90000});
+ await page.locator('#studioUpdateProgress [data-apply]').click();await page.waitForFunction(()=>document.querySelector('#studioBuildBadge').textContent.startsWith('v2.7.2'),{},{timeout:120000});await page.waitForFunction(()=>document.querySelector('#studioUpdateProgress [role=status]')?.textContent.startsWith('Update Complete.'),{},{timeout:15000});assert.deepEqual(await dump(page),before);record('in-app Save & Update downloads verifies stages switches and reloads without manual extraction');
+ const updated=await(await fetch(base+'/__preview_health')).json();assert.equal(updated.version,'2.7.2');assert.equal(updated.instance,state.instance);assert.equal(updated.helperIdentity,health.helperIdentity);record('helper continues same instance, port and origin; executable files not replaced');
+ await page.waitForFunction(()=>document.querySelector('#offlineSetupStatus').textContent.startsWith('Ready for offline'),{},{timeout:60000});await ctx.setOffline(true);await page.reload();await page.waitForFunction(()=>StudioUpdateSafety.ready());assert.deepEqual(await dump(page),before);record('Windows updated shell opens offline with exact fictional chart/progress/preferences');await ctx.setOffline(false);
+ const noUpdate=await(await api('check')).json();assert.equal(noUpdate.candidate,null);assert.equal(noUpdate.current,'2.7.2');record('no update available after switch');
+ assert.ok(fs.existsSync(path.join(installed,'www/index.html')));assert.equal(errors.length,0);record('original application files retained and no browser errors');await ctx.close();
+ }catch(e){results.push({name:'Windows HTTP integration',pass:false,error:e.stack});process.exitCode=1;}
+ finally{if(browser)await browser.close();if(owned&&child){try{const local=path.join(out,'Isolated-LocalAppData/DeesCrochetStudioPreview/server.json'),state=JSON.parse(fs.readFileSync(local)),health=await(await fetch(base+'/__preview_health')).json();if(state.pid===child.pid&&state.instance===health.instance)await fetch(base+'/__preview_stop',{method:'POST',headers:{'X-Dees-Stop':state.token}});}catch{}}
+ if(child&&child.exitCode===null)await Promise.race([new Promise(r=>child.once('exit',r)),sleep(5000)]);
+ fs.writeFileSync(path.join(out,'Windows-HTTP-Tests.json'),JSON.stringify({results,publicNetworkMocked:true,noOwnerBrowserProfile:true},null,2));console.log(JSON.stringify(results));}
+})();
+

@@ -55,3 +55,14 @@ backup. Keep the original downloaded filenames/extensions when transferring back
 SHUTDOWN
 Wait for saved status, close Studio tabs, then use Stop Dee's Studio.cmd. Shutdown is
 token-protected and does not clear site data. If already stopped, nothing is removed.
+
+
+POWERSHELL LAUNCH DISCLOSURE
+Open Dee's Studio.cmd starts Windows PowerShell 5.1 with a temporary
+-ExecutionPolicy Bypass argument. Launcher.ps1 uses the same process-only option
+for the local helper. The Stop command also uses a temporary process option.
+These arguments suppress execution-policy warnings in those child processes;
+they do not change stored CurrentUser/LocalMachine policies and cannot override
+organization Group Policy. Use only the verified official package. If security
+software or organization policy blocks it, stop; do not disable protection,
+change persistent policy or run as administrator to work around the block.

@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "web": {
-    "version": "2.7.1",
-    "notes": "Fixes narrow Recycle Bin action-label wrapping, including enlarged text and bulk selection. Retains the prepared v2.7.0 chart, photo, row-tracking, Pattern Creator (Beta) and PDF Publisher (Beta) features."
+    "version": "2.7.2",
+    "notes": "Windows and website update improvements: save checks before applying updates, verified Windows staging, clearer update notices and offline-ready reopening. Back up each kind of work before updating."
   },
   "ios": null,
-  "version": "2.7.1",
-  "notes": "Fixes narrow Recycle Bin action-label wrapping, including enlarged text and bulk selection. Retains the prepared v2.7.0 chart, photo, row-tracking, Pattern Creator (Beta) and PDF Publisher (Beta) features."
+  "version": "2.7.2",
+  "notes": "Windows and website update improvements: save checks before applying updates, verified Windows staging, clearer update notices and offline-ready reopening. Back up each kind of work before updating."
 }

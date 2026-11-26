@@ -1,6 +1,6 @@
 importScripts('./assets/pdfjs/offline-files.js');
-const CACHE = 'dorette-crochet-v2.7.1-stage-a-b34-8779e83e5e6e685f25f2';
-const FILES = ['./release-notes.html','./cartoon.js','./cartoon-worker.js','./control-feedback.css','./assets/image-formats.mjs','./assets/image-import.mjs','./assets/image-import-worker.mjs','./assets/publisher/contrast.mjs',"./pattern-publish.html","./assets/publisher/layout.mjs","./assets/publisher/images.mjs","./assets/publisher/ui.mjs","./assets/publisher/worker.js","./assets/publisher/publish.css","./assets/publisher/vendor/pdfmake.min.js","./assets/publisher/fonts/vfs_fonts.js","./assets/publisher/fonts/coverage.json",'./assets/creator/polish.mjs','./assets/creator/optimize.mjs','./assets/creator/optimize-worker.mjs','./pattern-creator.html','./pattern-creator.css','./assets/creator/model.mjs','./assets/creator/store.mjs','./assets/creator/backup.mjs','./assets/creator/ui.mjs','./diagnostics.js','./experience.js','./assets/header-icon.png',...self.writtenPdfFiles,'./written-pattern.html','./written-pattern.css','./assets/written-pattern.mjs','./assets/written-backup.mjs','./updates.js','./release-config.js','./stitch-studio.css','./stitch-library.js','./stitch-match.js','./stitch-studio.js','./','./index.html','./styles.css?v=1.8.1-chart-first','./app.js?v=1.8.1','./pattern-tools.js?v=1.8.1','./advanced.js?v=1.8.1','./next-features.js?v=1.8.1','./pdf-export.js?v=1.8.1','./help.js?v=1.8.1','./reliability.js?v=1.8.1','./pdf-worker.js?v=1.8.1','./image-worker.js?v=1.8.1','./studio-ops.js?v=1.8.1','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
+const CACHE = 'dorette-crochet-v2.7.2-stage-a-b34-d2e97e0f1cd4a281408e';
+const FILES = ['./release.json','./update-safety.js','./website-updates.js','./windows-updates.js','./release-notes.html','./cartoon.js','./cartoon-worker.js','./control-feedback.css','./assets/image-formats.mjs','./assets/image-import.mjs','./assets/image-import-worker.mjs','./assets/publisher/contrast.mjs',"./pattern-publish.html","./assets/publisher/layout.mjs","./assets/publisher/images.mjs","./assets/publisher/ui.mjs","./assets/publisher/worker.js","./assets/publisher/publish.css","./assets/publisher/vendor/pdfmake.min.js","./assets/publisher/fonts/vfs_fonts.js","./assets/publisher/fonts/coverage.json",'./assets/creator/polish.mjs','./assets/creator/optimize.mjs','./assets/creator/optimize-worker.mjs','./pattern-creator.html','./pattern-creator.css','./assets/creator/model.mjs','./assets/creator/store.mjs','./assets/creator/backup.mjs','./assets/creator/ui.mjs','./diagnostics.js','./experience.js','./assets/header-icon.png',...self.writtenPdfFiles,'./written-pattern.html','./written-pattern.css','./assets/written-pattern.mjs','./assets/written-backup.mjs','./updates.js','./release-config.js','./stitch-studio.css','./stitch-library.js','./stitch-match.js','./stitch-studio.js','./','./index.html','./styles.css?v=1.8.1-chart-first','./app.js?v=1.8.1','./pattern-tools.js?v=1.8.1','./advanced.js?v=1.8.1','./next-features.js?v=1.8.1','./pdf-export.js?v=1.8.1','./help.js?v=1.8.1','./reliability.js?v=1.8.1','./pdf-worker.js?v=1.8.1','./image-worker.js?v=1.8.1','./studio-ops.js?v=1.8.1','./Dorette-Crochet-Studio-User-Guide.pdf','./manifest.webmanifest','./assets/icon.svg','./assets/icon-192.png','./assets/icon-512.png'];
 async function installOfflineFiles(){
   // Origin-wide lock: scopes can share CacheStorage. Never claim a live legacy cache.
   if(!self.navigator?.locks)throw Error('Offline installation requires safe cache locking');
@@ -66,10 +66,11 @@ async function installOfflineFiles(){
 }
 self.addEventListener('install',event=>event.waitUntil(installOfflineFiles()));
 self.addEventListener('activate', event => {
-  event.waitUntil(Promise.all([caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('dorette-crochet-') && k !== CACHE).map(k => caches.delete(k)))), self.clients.claim()]));
+  event.waitUntil(self.clients.claim()); // Retain previous caches; never remove user data or another scope's cache.
 });
 self.addEventListener('fetch', event => {
   if(event.request.method!=='GET'||new URL(event.request.url).origin!==self.location.origin)return;
+  if(event.request.cache==='no-store'&&new URL(event.request.url).pathname.endsWith('/release.json'))return;
   // Serve a consistent release while a newer service worker waits for approval.
   const url=new URL(event.request.url);
   const scope=new URL(self.registration.scope);
@@ -84,7 +85,25 @@ self.addEventListener('fetch', event => {
 });
 
 self.addEventListener('message',event=>{
-  if(event.data?.type==='SKIP_WAITING')self.skipWaiting();
+  if(event.data?.type==='STUDIO_RELEASE'&&event.ports[0])event.waitUntil((async()=>{
+    const cached=await (await caches.open(CACHE)).match('./release.json');
+    const release=cached&&await cached.json();const next=release?.web;
+    event.ports[0].postMessage(next&&/^\d+\.\d+\.\d+$/.test(next.version)?{version:next.version,notes:String(next.notes||'').slice(0,1000)}:{});
+  })().catch(()=>event.ports[0].postMessage({})));
+
+  if(event.data?.type==='STUDIO_CLIENTS'&&event.ports[0])event.waitUntil((async()=>{
+    const clients=await self.clients.matchAll({type:'window',includeUncontrolled:true});
+    const relevant=clients.filter(client=>client.url.startsWith(self.registration.scope));
+    event.ports[0].postMessage({count:relevant.length,sourceKnown:relevant.some(client=>client.id===event.source?.id)});
+  })());
+  if(['STUDIO_ACTIVATE','SKIP_WAITING'].includes(event.data?.type))event.waitUntil((async()=>{
+    const clients=(await self.clients.matchAll({type:'window',includeUncontrolled:true})).filter(client=>client.url.startsWith(self.registration.scope));
+    const cache=await caches.open(CACHE),urls=new Set((await cache.keys()).map(request=>request.url));
+    const safe=clients.length===1&&clients[0].id===event.source?.id&&FILES.every(file=>urls.has(new URL(file,self.registration.scope).href));
+    // SKIP_WAITING is the one-time bridge from v2.7.1's existing user-click/save guard.
+    if(safe)await self.skipWaiting();
+    event.ports?.[0]?.postMessage({activated:safe});
+  })());
   if(event.data?.type==='CHECK_OFFLINE'&&event.ports[0]){
     event.waitUntil((async()=>{
       const cache=await caches.open(CACHE);
